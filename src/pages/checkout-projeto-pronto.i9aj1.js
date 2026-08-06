@@ -581,6 +581,25 @@ function dadosTelefone(
   };
 }
 
+function whatsappPrimeiroPasso() {
+  return normalizarWhatsappBrasil(
+    contexto.whatsappE164 ||
+    contexto.whatsapp
+  );
+}
+
+function whatsappConfereComPrimeiroPasso(
+  whatsapp
+) {
+  const anterior =
+    whatsappPrimeiroPasso();
+
+  return (
+    !anterior ||
+    anterior === whatsapp
+  );
+}
+
 
 // ======================================================
 // COMUNICAÇÃO COM O HTML
@@ -1939,6 +1958,40 @@ async function consultarCliente(
 
         error:
           "WhatsApp não informado."
+      });
+
+      return;
+    }
+
+    if (
+      !whatsappConfereComPrimeiroPasso(
+        telefone.whatsapp
+      )
+    ) {
+      enviarParaHtml({
+        type:
+          "CUSTOMER_RESULT",
+
+        ok:
+          false,
+
+        exists:
+          false,
+
+        needsName:
+          false,
+
+        needsEmail:
+          false,
+
+        needsCpfCnpj:
+          false,
+
+        needsCustomerData:
+          false,
+
+        error:
+          "O WhatsApp digitado não confere com o informado na etapa anterior."
       });
 
       return;

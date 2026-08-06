@@ -1,0 +1,45 @@
+name: Publicar automaticamente no Wix
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: wix-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar dependências
+        run: npm install --ignore-scripts
+
+      - name: Autenticar no Wix
+        run: npx wix login --api-key "$WIX_API_KEY"
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+
+      - name: Sincronizar tipos do Wix
+        run: npm run postinstall
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Publicar no Wix
+        run: npx wix publish --source remote --approve-preview

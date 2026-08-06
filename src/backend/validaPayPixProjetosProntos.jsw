@@ -1,6 +1,11 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import {
+  formatarCodigoCheckout,
+  normalizarWhatsappBrasil,
+  tituloProdutoComCodigoCheckout
+} from "backend/projetosProntosNormalizacao";
 
 // backend/validaPayPixProjetosProntos.jsw
 // R12 — PIX TRANSPARENTE COM RECUPERAÇÃO AUTOMÁTICA DE 504
@@ -26,8 +31,20 @@ const SCOPES = [
 ].join(" ");
 
 const CREATE_ATTEMPTS = 3;
-const READY_ATTEMPTS = 8;
-const READY_DELAY_MS = 450;
+const READY_ATTEMPTS = 3;
+const READY_DELAY_MS = 300;
+
+const TOKEN_SAFETY_MS =
+  60000;
+
+let accessTokenCache =
+  "";
+
+let accessTokenExpiresAt =
+  0;
+
+let accessTokenPromise =
+  null;
 
 
 // ======================================================
@@ -650,7 +667,7 @@ function transientError(error) {
 // AUTENTICAÇÃO
 // ======================================================
 
-async function getAccessToken() {
+async function requestAccessToken() {
   const clientId =
     safe(
       await getSecret(
@@ -710,11 +727,14 @@ async function getAccessToken() {
       response
     );
 
+  const token =
+    safe(
+      data?.access_token
+    );
+
   if (
     !response.ok ||
-    !safe(
-      data?.access_token
-    )
+    !token
   ) {
     throw createApiError(
       data,
@@ -723,11 +743,67 @@ async function getAccessToken() {
     );
   }
 
-  return safe(
-    data.access_token
-  );
+  return {
+    token,
+
+    expiresIn:
+      Number(
+        data?.expires_in ||
+        data?.expiresIn ||
+        300
+      )
+  };
 }
 
+
+async function getAccessToken() {
+  const now =
+    Date.now();
+
+  if (
+    accessTokenCache &&
+    now <
+      accessTokenExpiresAt -
+      TOKEN_SAFETY_MS
+  ) {
+    return accessTokenCache;
+  }
+
+  if (accessTokenPromise) {
+    return accessTokenPromise;
+  }
+
+  accessTokenPromise =
+    requestAccessToken()
+      .then(
+        (
+          {
+            token,
+            expiresIn
+          }
+        ) => {
+          accessTokenCache =
+            token;
+
+          accessTokenExpiresAt =
+            Date.now() +
+            Math.max(
+              120,
+              expiresIn
+            ) * 1000;
+
+          return accessTokenCache;
+        }
+      )
+      .finally(
+        () => {
+          accessTokenPromise =
+            null;
+        }
+      );
+
+  return accessTokenPromise;
+}
 
 async function requestValidaPay({
   path,
@@ -814,11 +890,42 @@ async function upsertSession(
 
   const item = {
     ...(existing || {}),
-    ...patch,
+    ...(patch || {}),
 
     checkoutId:
       safe(checkoutId)
   };
+
+  const whatsapp =
+    normalizarWhatsappBrasil(
+      item.whatsapp ||
+      item.whatsappE164 ||
+      item.whatsApp
+    );
+
+  if (whatsapp) {
+    item.whatsapp = whatsapp;
+  }
+
+  delete item.whatsApp;
+  delete item.whatsappE164;
+
+  const codigoCheckout =
+    formatarCodigoCheckout(
+      item.codigoCheckout
+    );
+
+  if (codigoCheckout) {
+    item.codigoCheckout = codigoCheckout;
+  }
+
+  if (item.produto) {
+    item.produto =
+      tituloProdutoComCodigoCheckout(
+        item.produto,
+        item.codigoCheckout
+      );
+  }
 
   return existing
     ? wixData.update(
@@ -1518,7 +1625,8 @@ async function createChargeWithRecovery(
 
         const details =
           await fetchChargeReady(
-            chargeId
+            chargeId,
+            2
           );
 
         return mergeCharge(
@@ -1560,7 +1668,8 @@ async function createChargeWithRecovery(
 
         const details =
           await fetchChargeReady(
-            recoveredId
+            recoveredId,
+            2
           );
 
         return mergeCharge(
@@ -1860,9 +1969,12 @@ async function notifyApprovedSale(
       ),
 
     produto:
-      productTitle(
-        session.produto,
-        session.codigoProjeto
+      tituloProdutoComCodigoCheckout(
+        productTitle(
+          session.produto,
+          session.codigoProjeto
+        ),
+        session.codigoCheckout
       ),
 
     etapa:
@@ -2009,16 +2121,19 @@ export async function criarCobrancaPixTransparente(
       );
 
     const name =
-      productTitle(
-        first(
-          input.produto,
-          ctx.produto,
-          ctx.titulo,
-          ctx.name,
-          "Projeto Pronto"
-        ),
+      tituloProdutoComCodigoCheckout(
+        productTitle(
+          first(
+            input.produto,
+            ctx.produto,
+            ctx.titulo,
+            ctx.name,
+            "Projeto Pronto"
+          ),
 
-        projectCode
+          projectCode
+        ),
+        checkoutCode
       );
 
     const sku =
@@ -2447,25 +2562,10 @@ export async function criarCobrancaPixTransparente(
       throw error;
     }
 
-    if (
-      !extractEmv(
-        response
-      )
-    ) {
-      const details =
-        await fetchChargeReady(
-          chargeId
-        );
-
-      response =
-        mergeCharge(
-          response,
-          {
-            ...details,
-            chargeId
-          }
-        );
-    }
+    /*
+      Se o EMV ainda não chegou, devolve "processing" imediatamente.
+      O frontend continua consultando pelo chargeId sem travar o comprador.
+    */
 
     await upsertSession(
       checkoutId,

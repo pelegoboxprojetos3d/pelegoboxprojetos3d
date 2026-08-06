@@ -1,6 +1,11 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import {
+  formatarCodigoCheckout,
+  normalizarWhatsappBrasil,
+  tituloProdutoComCodigoCheckout
+} from "backend/projetosProntosNormalizacao";
 
 // backend/validaPayProjetosProntos.jsw
 // R6 — REUTILIZA PRODUTO/PREÇO
@@ -1029,26 +1034,54 @@ async function upsertSession(
       checkoutId
     );
 
-  if (existing) {
-    return wixData.update(
-      SESSIONS_COLLECTION,
-      {
-        ...existing,
-        ...patch,
-        checkoutId
-      },
-      DB_OPTS
+  const item = {
+    ...(existing || {}),
+    ...(patch || {}),
+    checkoutId
+  };
+
+  const whatsapp =
+    normalizarWhatsappBrasil(
+      item.whatsapp ||
+      item.whatsappE164 ||
+      item.whatsApp
     );
+
+  if (whatsapp) {
+    item.whatsapp = whatsapp;
   }
 
-  return wixData.insert(
-    SESSIONS_COLLECTION,
-    {
-      checkoutId,
-      ...patch
-    },
-    DB_OPTS
-  );
+  delete item.whatsApp;
+  delete item.whatsappE164;
+
+  const codigoCheckout =
+    formatarCodigoCheckout(
+      item.codigoCheckout
+    );
+
+  if (codigoCheckout) {
+    item.codigoCheckout = codigoCheckout;
+  }
+
+  if (item.produto) {
+    item.produto =
+      tituloProdutoComCodigoCheckout(
+        item.produto,
+        item.codigoCheckout
+      );
+  }
+
+  return existing
+    ? wixData.update(
+      SESSIONS_COLLECTION,
+      item,
+      DB_OPTS
+    )
+    : wixData.insert(
+      SESSIONS_COLLECTION,
+      item,
+      DB_OPTS
+    );
 }
 
 
@@ -1560,12 +1593,15 @@ export async function createCheckoutProPreference(
     }
 
     const productName =
-      buildProductName({
-        produto:
-          originalProductTitle,
+      tituloProdutoComCodigoCheckout(
+        buildProductName({
+          produto:
+            originalProductTitle,
 
-        codigoProjeto
-      });
+          codigoProjeto
+        }),
+        codigoCheckout
+      );
 
     const priceTitle =
       stageLabel(

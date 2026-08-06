@@ -1,0 +1,68 @@
+// ===============================
+// MP SESSIONS API
+// PADRÃO FIFA R1
+// ===============================
+
+import wixData from "wix-data";
+
+const COLLECTION = "MpSessions";
+
+const DB_OPTS = {
+    suppressAuth: true
+};
+
+
+// ===============================
+// SAFE STRING
+// ===============================
+
+function safeStr(v){
+
+    return String(
+        v === undefined || v === null
+            ? ""
+            : v
+    );
+
+}
+
+
+// ===============================
+// GET SESSION
+// ===============================
+
+export async function getMpSession({ checkoutId, paymentId }) {
+
+    const cid = safeStr(checkoutId).trim();
+    const pid = safeStr(paymentId).trim();
+
+    let q = wixData.query(COLLECTION);
+
+    if (pid) {
+
+        q = q.eq("paymentId", pid);
+
+    } else if (cid) {
+
+        q = q.eq("checkoutId", cid);
+
+    } else {
+
+        return {
+            ok: false,
+            error: "checkoutId/paymentId ausentes"
+        };
+
+    }
+
+    const r = await q
+        .descending("created_at_date")
+        .limit(1)
+        .find(DB_OPTS);
+
+    return {
+        ok: true,
+        session: r.items?.[0] || null
+    };
+
+}

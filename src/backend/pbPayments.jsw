@@ -1,0 +1,18 @@
+import mercadopago from "mercadopago";
+
+mercadopago.configure({
+  access_token: "APP_USR-7437048711057231-011817-8830474fc21ca985c7338b62e48776a7-3141373526"
+});
+
+export async function criarPagamento(valor) {
+
+  const payment = await mercadopago.payment.create({
+    transaction_amount: valor,
+    payment_method_id: "pix",
+    payer: {
+      email: "teste@pelegobox.com"
+    }
+  });
+
+  return payment.body;
+}

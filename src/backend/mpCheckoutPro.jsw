@@ -1,0 +1,242 @@
+import wixData from "wix-data";
+import { fetch } from "wix-fetch";
+import { getSecret } from "wix-secrets-backend";
+
+const MP_API = "https://api.mercadopago.com";
+const SITE_BASE = "https://www.pelegobox.com.br";
+
+const WEBHOOK_PATH = "/_functions/mercadoPagoWebhook";
+const NOTIFICATION_URL = `${SITE_BASE}${WEBHOOK_PATH}`;
+
+const COLLECTION = "MpSessions";
+const DB_OPTS = { suppressAuth: true };
+
+function safe(v){
+  return String(v ?? "");
+}
+
+function onlyDigits(v){
+  return safe(v).replace(/[^\d]/g, "");
+}
+
+function now(){
+  return new Date();
+}
+
+function generateCheckoutId(){
+  return `ck_${Date.now()}_${Math.random().toString(16).slice(2,10)}`;
+}
+
+function parseBRL(v){
+
+  if(v === undefined || v === null) return 0;
+
+  if(typeof v === "number") return v;
+
+  return Number(
+    String(v)
+      .replace("R$","")
+      .replace(/\s/g,"")
+      .replace(/\./g,"")
+      .replace(",",".")
+  ) || 0;
+
+}
+
+function buildWhatsappE164({ ddi, whatsapp, whatsappE164 }){
+  const explicit = safe(whatsappE164).trim();
+  if(explicit){
+    if(explicit.startsWith("+")) return explicit.replace(/\s+/g, "");
+    const cleaned = explicit.replace(/[^\d+]/g, "");
+    return cleaned.startsWith("+") ? cleaned : `+${cleaned.replace(/[^\d]/g, "")}`;
+  }
+
+  const w = safe(whatsapp).trim();
+  if(w.startsWith("+")) return w.replace(/\s+/g, "");
+
+  const d = onlyDigits(ddi);
+  const n = onlyDigits(w);
+
+  if(d && n){
+    return `+${d}${n}`;
+  }
+
+  if(n){
+    return `+${n}`;
+  }
+
+  return w;
+}
+
+async function upsertSession(checkoutId, patch){
+
+  const r = await wixData.query(COLLECTION)
+    .eq("checkoutId", checkoutId)
+    .limit(1)
+    .find(DB_OPTS);
+
+  if(r.items.length){
+
+    const updated = { ...r.items[0], ...patch };
+
+    return wixData.update(COLLECTION, updated, DB_OPTS);
+
+  }
+
+  return wixData.insert(COLLECTION, patch, DB_OPTS);
+
+}
+
+export async function createCheckoutProPreference(input){
+
+  let checkoutId = safe(input?.checkoutId).trim();
+
+  if(!checkoutId){
+    checkoutId = generateCheckoutId();
+  }
+
+  const token = await getSecret("MP_ACCESS_TOKEN");
+
+  if(!token){
+    return { ok:false, error:"MP_ACCESS_TOKEN ausente" };
+  }
+
+  const ctx = input?.ctx || {};
+
+  const produto = safe(ctx.produto || ctx.name || "Produto");
+  const sku = safe(ctx.sku || "-");
+  const img = safe(ctx.img || "");
+  const productId = safe(ctx.productId || "");
+
+  const valor = parseBRL(ctx.valor ?? ctx.price);
+
+  const whatsappDigits = onlyDigits(input?.whatsapp);
+  const ddi = onlyDigits(input?.ddi || ctx.ddi || "55");
+  const country = safe(input?.country || ctx.country || "br");
+  const whatsapp = buildWhatsappE164({
+    ddi,
+    whatsapp: input?.whatsapp,
+    whatsappE164: input?.whatsappE164
+  });
+
+  const productPageUrl = safe(ctx.returnUrl || input?.returnUrl || SITE_BASE);
+
+  const t = now();
+
+  await upsertSession(checkoutId,{
+
+    checkoutId,
+    whatsapp,
+    whatsappDigits,
+    ddi,
+    country,
+
+    status:"pending",
+
+    produto,
+    sku,
+    img,
+    productId,
+
+    valor: valor > 0 ? valor : 1,
+
+    returnUrl: productPageUrl,
+
+    saleSent:false,
+    abandonSent:false,
+
+    created_at_date:t,
+    updated_at_date:t,
+    updated_at_time:t
+
+  });
+
+  const waitingUrl =
+  `${SITE_BASE}/pix-aguardando?checkout_id=${checkoutId}`;
+
+  const preference = {
+
+    external_reference: checkoutId,
+
+    notification_url: NOTIFICATION_URL,
+
+    back_urls:{
+      success: waitingUrl,
+      pending: productPageUrl,
+      failure: productPageUrl
+    },
+
+    items:[
+      {
+        title: produto,
+        quantity: 1,
+        currency_id: "BRL",
+        unit_price: valor > 0 ? valor : 1,
+        description: sku ? `SKU: ${sku}` : undefined,
+        picture_url: img || undefined
+      }
+    ],
+
+    metadata:{
+      checkoutId,
+      whatsapp,
+      whatsappDigits,
+      ddi,
+      country,
+      sku,
+      produto,
+      productId,
+      img,
+      valor: valor > 0 ? valor : 1
+    }
+
+  };
+
+  const r = await fetch(`${MP_API}/checkout/preferences`,{
+
+    method:"post",
+
+    headers:{
+      "Content-Type":"application/json",
+      Authorization:`Bearer ${token}`
+    },
+
+    body:JSON.stringify(preference)
+
+  });
+
+  const data = await r.json();
+
+  if(!r.ok){
+
+    return {
+      ok:false,
+      error:"MP preference falhou",
+      details:data
+    };
+
+  }
+
+  await upsertSession(checkoutId,{
+
+    checkoutId,
+    preferenceId:safe(data?.id),
+
+    updated_at_date:now(),
+    updated_at_time:now()
+
+  });
+
+  return {
+
+    ok:true,
+
+    checkoutId,
+
+    preferenceId:safe(data?.id),
+
+    init_point:safe(data?.init_point)
+
+  };
+
+}

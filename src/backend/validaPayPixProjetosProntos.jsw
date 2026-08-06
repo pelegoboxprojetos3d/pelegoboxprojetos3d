@@ -1,0 +1,2680 @@
+import wixData from "wix-data";
+import { fetch } from "wix-fetch";
+import { getSecret } from "wix-secrets-backend";
+
+// backend/validaPayPixProjetosProntos.jsw
+// R12 — PIX TRANSPARENTE COM RECUPERAÇÃO AUTOMÁTICA DE 504
+
+const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
+const API_BASE = "https://api.validapay.com.br";
+const SESSIONS = "SessoesProjetosProntos2";
+const PRODUCT_TEMPLATE = "PP_VALIDAPAY_R8";
+const MAKE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
+const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";
+const SITE_BASE = "https://www.pelegobox.com.br";
+
+const DB_OPTS = {
+  suppressAuth: true
+};
+
+const SCOPES = [
+  "pix.cob/read",
+  "checkouts/read",
+  "checkouts/write",
+  "products/read",
+  "products/write"
+].join(" ");
+
+const CREATE_ATTEMPTS = 3;
+const READY_ATTEMPTS = 8;
+const READY_DELAY_MS = 450;
+
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+function safe(value) {
+  return String(value ?? "").trim();
+}
+
+
+function digits(value) {
+  return safe(value).replace(/\D/g, "");
+}
+
+
+function first(...values) {
+  for (const value of values) {
+    if (safe(value)) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+
+function normalizeEmail(value) {
+  return safe(value).toLowerCase();
+}
+
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(
+    normalizeEmail(value)
+  );
+}
+
+
+function normalizeCpfCnpj(value) {
+  const document = digits(value);
+
+  return (
+    document.length === 11 ||
+    document.length === 14
+  )
+    ? document
+    : "";
+}
+
+
+// ======================================================
+// CPF/CNPJ
+// ======================================================
+
+function validCpf(value) {
+  const cpf = digits(value);
+
+  if (
+    cpf.length !== 11 ||
+    /^(\d)\1{10}$/.test(cpf)
+  ) {
+    return false;
+  }
+
+  let sum = 0;
+
+  for (
+    let index = 0;
+    index < 9;
+    index += 1
+  ) {
+    sum +=
+      Number(cpf[index]) *
+      (10 - index);
+  }
+
+  let digit =
+    (sum * 10) % 11;
+
+  if (digit === 10) {
+    digit = 0;
+  }
+
+  if (
+    digit !==
+    Number(cpf[9])
+  ) {
+    return false;
+  }
+
+  sum = 0;
+
+  for (
+    let index = 0;
+    index < 10;
+    index += 1
+  ) {
+    sum +=
+      Number(cpf[index]) *
+      (11 - index);
+  }
+
+  digit =
+    (sum * 10) % 11;
+
+  if (digit === 10) {
+    digit = 0;
+  }
+
+  return (
+    digit ===
+    Number(cpf[10])
+  );
+}
+
+
+function cnpjDigit(
+  base,
+  weights
+) {
+  let sum = 0;
+
+  for (
+    let index = 0;
+    index < weights.length;
+    index += 1
+  ) {
+    sum +=
+      Number(base[index]) *
+      weights[index];
+  }
+
+  const remainder =
+    sum % 11;
+
+  return remainder < 2
+    ? 0
+    : 11 - remainder;
+}
+
+
+function validCnpj(value) {
+  const cnpj = digits(value);
+
+  if (
+    cnpj.length !== 14 ||
+    /^(\d)\1{13}$/.test(cnpj)
+  ) {
+    return false;
+  }
+
+  const base =
+    cnpj.slice(0, 12);
+
+  const digit1 =
+    cnpjDigit(
+      base,
+      [
+        5, 4, 3, 2,
+        9, 8, 7, 6,
+        5, 4, 3, 2
+      ]
+    );
+
+  const digit2 =
+    cnpjDigit(
+      base + digit1,
+      [
+        6, 5, 4, 3, 2,
+        9, 8, 7, 6,
+        5, 4, 3, 2
+      ]
+    );
+
+  return (
+    cnpj ===
+    `${base}${digit1}${digit2}`
+  );
+}
+
+
+function validCpfCnpj(value) {
+  const document =
+    normalizeCpfCnpj(value);
+
+  if (document.length === 11) {
+    return validCpf(document);
+  }
+
+  if (document.length === 14) {
+    return validCnpj(document);
+  }
+
+  return false;
+}
+
+
+// ======================================================
+// WHATSAPP
+// ======================================================
+
+function normalizePhone(value) {
+  let number = digits(value);
+
+  if (
+    number.startsWith("55") &&
+    (
+      number.length === 12 ||
+      number.length === 13
+    )
+  ) {
+    number =
+      number.slice(2);
+  }
+
+  if (
+    number.length !== 10 &&
+    number.length !== 11
+  ) {
+    return "";
+  }
+
+  return `+55${number}`;
+}
+
+
+function nationalPhone(value) {
+  const e164 =
+    normalizePhone(value);
+
+  return e164
+    ? digits(e164).slice(2)
+    : "";
+}
+
+
+// ======================================================
+// PRODUTO E VALORES
+// ======================================================
+
+function parseMoney(value) {
+  if (
+    typeof value === "number"
+  ) {
+    return Number.isFinite(value)
+      ? Number(value.toFixed(2))
+      : 0;
+  }
+
+  let text =
+    safe(value)
+      .replace(
+        /[^\d,.-]/g,
+        ""
+      );
+
+  if (
+    text.includes(",") &&
+    text.includes(".")
+  ) {
+    text =
+      text
+        .replace(/\./g, "")
+        .replace(",", ".");
+
+  } else if (
+    text.includes(",")
+  ) {
+    text =
+      text.replace(",", ".");
+  }
+
+  const number =
+    Number(text);
+
+  return Number.isFinite(number)
+    ? Number(number.toFixed(2))
+    : 0;
+}
+
+
+function sameMoney(
+  left,
+  right
+) {
+  return (
+    Math.abs(
+      parseMoney(left) -
+      parseMoney(right)
+    ) <= 0.01
+  );
+}
+
+
+function normalizeType(value) {
+  const type =
+    safe(value)
+      .normalize("NFD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .toUpperCase()
+      .replace(
+        /[\s-]+/g,
+        "_"
+      );
+
+  return [
+    "MEDIDAS",
+    "GRAFICOS",
+    "PROJETO_COMPLETO"
+  ].includes(type)
+    ? type
+    : "MEDIDAS";
+}
+
+
+function stageLabel(type) {
+  if (
+    type === "GRAFICOS"
+  ) {
+    return "Análises Gráficas";
+  }
+
+  if (
+    type === "PROJETO_COMPLETO"
+  ) {
+    return "Projeto Completo";
+  }
+
+  return "Medidas";
+}
+
+
+function publicCode(value) {
+  const code =
+    digits(value);
+
+  if (!code) {
+    return "";
+  }
+
+  return code.length < 3
+    ? code.padStart(3, "0")
+    : code;
+}
+
+
+function projectSku(
+  projectCode,
+  informedSku = ""
+) {
+  const code =
+    digits(projectCode) ||
+    digits(informedSku);
+
+  return code
+    ? `PP-${code.padStart(4, "0")}`
+    : safe(informedSku) || "PP";
+}
+
+
+function decodeText(value) {
+  return safe(value)
+    .replace(
+      /&amp;quot;/gi,
+      '"'
+    )
+    .replace(
+      /&quot;|&#34;|&#x22;/gi,
+      '"'
+    )
+    .replace(
+      /&apos;|&#39;/gi,
+      "'"
+    )
+    .replace(
+      /&amp;/gi,
+      "&"
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+
+function productTitle(
+  value,
+  projectCode
+) {
+  const base =
+    decodeText(value)
+      .replace(
+        /^\s*#\s*\d+\s*[-–—:]?\s*/i,
+        ""
+      )
+      .trim() ||
+    "Projeto Pronto";
+
+  const code =
+    publicCode(projectCode);
+
+  return code
+    ? `#${code} ${base}`
+    : base;
+}
+
+
+function normalizeStatus(value) {
+  const status =
+    safe(value)
+      .toUpperCase();
+
+  if (
+    [
+      "PAID",
+      "APPROVED",
+      "CONFIRMED"
+    ].includes(status)
+  ) {
+    return "approved";
+  }
+
+  if (
+    [
+      "FAILED",
+      "REJECTED",
+      "DECLINED"
+    ].includes(status)
+  ) {
+    return "rejected";
+  }
+
+  if (
+    [
+      "CANCELED",
+      "CANCELLED"
+    ].includes(status)
+  ) {
+    return "cancelled";
+  }
+
+  if (
+    status === "EXPIRED"
+  ) {
+    return "expired";
+  }
+
+  return "pending";
+}
+
+
+function generateCheckoutId() {
+  return (
+    `ckpro_${Date.now().toString(36)}_` +
+    Math.random()
+      .toString(16)
+      .slice(2, 12)
+  );
+}
+
+
+/*
+  O mesmo checkout sempre gera o mesmo externalTxid.
+
+  Uma nova entrada gera outro externalTxid, evitando
+  misturar cobranças anteriores do mesmo projeto.
+*/
+function externalTxid({
+  checkoutId,
+  projectCode,
+  type,
+  amount
+}) {
+  const stage =
+    type === "GRAFICOS"
+      ? "G"
+      : (
+        type === "PROJETO_COMPLETO"
+          ? "P"
+          : "M"
+      );
+
+  const cents =
+    Math.round(
+      parseMoney(amount) * 100
+    );
+
+  const suffix =
+    safe(checkoutId)
+      .replace(
+        /[^a-z0-9]/gi,
+        ""
+      )
+      .slice(-8)
+      .toUpperCase();
+
+  return (
+    `PP-${digits(projectCode)}-` +
+    `${stage}-${cents}-${suffix}`
+  ).slice(0, 35);
+}
+
+
+// ======================================================
+// RESPOSTAS DA API
+// ======================================================
+
+async function readResponse(response) {
+  const text =
+    await response.text();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+
+  } catch (_) {
+    return {
+      raw: text
+    };
+  }
+}
+
+
+function apiMessage(
+  data,
+  status
+) {
+  return safe(
+    data?.error?.message ||
+    data?.error_description ||
+    data?.message ||
+    (
+      typeof data?.error === "string"
+        ? data.error
+        : ""
+    ) ||
+    data?.code ||
+    data?.raw
+  ) || `ValidaPay respondeu HTTP ${status}.`;
+}
+
+
+function createApiError(
+  data,
+  status,
+  path
+) {
+  const error =
+    new Error(
+      apiMessage(
+        data,
+        status
+      )
+    );
+
+  error.status =
+    Number(status || 0);
+
+  error.data =
+    data;
+
+  error.path =
+    path;
+
+  return error;
+}
+
+
+function transientError(error) {
+  const status =
+    Number(
+      error?.status ||
+      0
+    );
+
+  if (
+    [
+      408,
+      425,
+      429,
+      500,
+      502,
+      503,
+      504
+    ].includes(status)
+  ) {
+    return true;
+  }
+
+  const message =
+    safe(
+      error?.message
+    ).toLowerCase();
+
+  return (
+    status === 0 &&
+    /timeout|timed out|network|fetch|504/.test(
+      message
+    )
+  );
+}
+
+
+// ======================================================
+// AUTENTICAÇÃO
+// ======================================================
+
+async function getAccessToken() {
+  const clientId =
+    safe(
+      await getSecret(
+        "VALIDAPAY_CLIENT_ID"
+      )
+    );
+
+  const clientSecret =
+    safe(
+      await getSecret(
+        "VALIDAPAY_CLIENT_SECRET"
+      )
+    );
+
+  if (
+    !clientId ||
+    !clientSecret
+  ) {
+    throw new Error(
+      "Credenciais da ValidaPay não encontradas."
+    );
+  }
+
+  const body = [
+    "grant_type=client_credentials",
+
+    `client_id=${encodeURIComponent(
+      clientId
+    )}`,
+
+    `client_secret=${encodeURIComponent(
+      clientSecret
+    )}`,
+
+    `scope=${encodeURIComponent(
+      SCOPES
+    )}`
+  ].join("&");
+
+  const response =
+    await fetch(
+      AUTH_URL,
+      {
+        method: "post",
+
+        headers: {
+          "Content-Type":
+            "application/x-www-form-urlencoded"
+        },
+
+        body
+      }
+    );
+
+  const data =
+    await readResponse(
+      response
+    );
+
+  if (
+    !response.ok ||
+    !safe(
+      data?.access_token
+    )
+  ) {
+    throw createApiError(
+      data,
+      response.status,
+      AUTH_URL
+    );
+  }
+
+  return safe(
+    data.access_token
+  );
+}
+
+
+async function requestValidaPay({
+  path,
+  method = "get",
+  body
+}) {
+  const token =
+    await getAccessToken();
+
+  const options = {
+    method,
+
+    headers: {
+      Authorization:
+        `Bearer ${token}`,
+
+      "Content-Type":
+        "application/json"
+    }
+  };
+
+  if (
+    body !== undefined
+  ) {
+    options.body =
+      JSON.stringify(body);
+  }
+
+  const response =
+    await fetch(
+      `${API_BASE}${path}`,
+      options
+    );
+
+  const data =
+    await readResponse(
+      response
+    );
+
+  if (!response.ok) {
+    throw createApiError(
+      data,
+      response.status,
+      path
+    );
+  }
+
+  return data;
+}
+
+
+// ======================================================
+// SESSÕES WIX
+// ======================================================
+
+async function findSession(
+  checkoutId
+) {
+  const result =
+    await wixData
+      .query(SESSIONS)
+      .eq(
+        "checkoutId",
+        safe(checkoutId)
+      )
+      .limit(1)
+      .find(DB_OPTS);
+
+  return (
+    result.items[0] ||
+    null
+  );
+}
+
+
+async function upsertSession(
+  checkoutId,
+  patch
+) {
+  const existing =
+    await findSession(
+      checkoutId
+    );
+
+  const item = {
+    ...(existing || {}),
+    ...patch,
+
+    checkoutId:
+      safe(checkoutId)
+  };
+
+  return existing
+    ? wixData.update(
+      SESSIONS,
+      item,
+      DB_OPTS
+    )
+    : wixData.insert(
+      SESSIONS,
+      item,
+      DB_OPTS
+    );
+}
+
+
+// ======================================================
+// PRODUTOS VALIDAPAY
+// ======================================================
+
+function productIdFrom(data) {
+  return safe(
+    data?.productId ||
+    data?.id ||
+    data?.product?.productId ||
+    data?.product?.id
+  );
+}
+
+
+function pricesFrom(data) {
+  if (
+    Array.isArray(
+      data?.prices
+    )
+  ) {
+    return data.prices;
+  }
+
+  if (
+    Array.isArray(
+      data?.product?.prices
+    )
+  ) {
+    return data.product.prices;
+  }
+
+  return [];
+}
+
+
+function priceIdFrom(price) {
+  return safe(
+    price?.priceId ||
+    price?.id
+  );
+}
+
+
+function validReusableProduct(
+  data,
+  expectedName,
+  expectedSku,
+  amount
+) {
+  const name =
+    safe(
+      data?.name ||
+      data?.product?.name
+    );
+
+  const template =
+    safe(
+      data?.metadata
+        ?.checkoutTemplate ||
+      data?.product
+        ?.metadata
+        ?.checkoutTemplate
+    );
+
+  const sku =
+    safe(
+      data?.metadata?.sku ||
+      data?.product
+        ?.metadata
+        ?.sku
+    );
+
+  const price =
+    pricesFrom(data)
+      .find(
+        (item) =>
+          priceIdFrom(item) &&
+          sameMoney(
+            item?.amount,
+            amount
+          )
+      );
+
+  return (
+    template ===
+      PRODUCT_TEMPLATE &&
+    name.toLowerCase() ===
+      expectedName.toLowerCase() &&
+    sku === expectedSku &&
+    Boolean(price)
+  );
+}
+
+
+async function fetchProduct(
+  productId
+) {
+  return requestValidaPay({
+    path:
+      `/v1/products/${encodeURIComponent(
+        productId
+      )}`,
+
+    method:
+      "get"
+  });
+}
+
+
+async function createProduct({
+  name,
+  sku,
+  projectCode,
+  checkoutCode,
+  type,
+  amount,
+  image
+}) {
+  const data =
+    await requestValidaPay({
+      path:
+        "/v1/products",
+
+      method:
+        "post",
+
+      body: {
+        name,
+
+        description:
+          stageLabel(type),
+
+        type:
+          "ONE_TIME",
+
+        isActive:
+          true,
+
+        metadata: {
+          origem:
+            "PELEGO_BOX_PROJETOS_PRONTOS",
+
+          checkoutTemplate:
+            PRODUCT_TEMPLATE,
+
+          sku,
+
+          codigoProjeto:
+            projectCode,
+
+          codigoCheckout:
+            checkoutCode,
+
+          tipoProduto:
+            type,
+
+          etapa:
+            stageLabel(type),
+
+          imagem:
+            image
+        },
+
+        prices: [
+          {
+            title:
+              stageLabel(type),
+
+            amount,
+
+            currency:
+              "BRL",
+
+            recurrenceType:
+              "ONE_TIME",
+
+            recurrenceInterval:
+              1
+          }
+        ]
+      }
+    });
+
+  const productId =
+    productIdFrom(data);
+
+  const price =
+    pricesFrom(data)
+      .find(
+        (item) =>
+          sameMoney(
+            item?.amount,
+            amount
+          )
+      ) ||
+    pricesFrom(data)[0];
+
+  const priceId =
+    priceIdFrom(price);
+
+  if (
+    !productId ||
+    !priceId
+  ) {
+    throw new Error(
+      "A ValidaPay não devolveu productId e priceId."
+    );
+  }
+
+  return {
+    productId,
+    priceId,
+    reused: false
+  };
+}
+
+
+async function findReusableProduct(
+  name,
+  sku,
+  amount
+) {
+  const data =
+    await requestValidaPay({
+      path:
+        "/v1/products" +
+        "?limit=50" +
+        "&status=active" +
+        `&search=${encodeURIComponent(name)}`,
+
+      method:
+        "get"
+    });
+
+  const items =
+    Array.isArray(
+      data?.items
+    )
+      ? data.items
+      : [];
+
+  for (const item of items) {
+    const productId =
+      productIdFrom(item);
+
+    if (
+      !productId ||
+      safe(item?.name)
+        .toLowerCase() !==
+        name.toLowerCase()
+    ) {
+      continue;
+    }
+
+    try {
+      const details =
+        await fetchProduct(
+          productId
+        );
+
+      if (
+        !validReusableProduct(
+          details,
+          name,
+          sku,
+          amount
+        )
+      ) {
+        continue;
+      }
+
+      const price =
+        pricesFrom(details)
+          .find(
+            (entry) =>
+              sameMoney(
+                entry?.amount,
+                amount
+              )
+          );
+
+      return {
+        productId,
+
+        priceId:
+          priceIdFrom(price),
+
+        reused: true
+      };
+
+    } catch (error) {
+      console.warn(
+        "Produto ValidaPay não pôde ser reutilizado:",
+        error?.message ||
+        error
+      );
+    }
+  }
+
+  return null;
+}
+
+
+async function ensureProduct({
+  session,
+  name,
+  sku,
+  projectCode,
+  checkoutCode,
+  type,
+  amount,
+  image
+}) {
+  const savedProductId =
+    safe(
+      session
+        ?.validaPayProductId
+    );
+
+  const savedPriceId =
+    safe(
+      session
+        ?.validaPayPriceId
+    );
+
+  if (
+    savedProductId &&
+    savedPriceId
+  ) {
+    try {
+      const details =
+        await fetchProduct(
+          savedProductId
+        );
+
+      if (
+        validReusableProduct(
+          details,
+          name,
+          sku,
+          amount
+        )
+      ) {
+        const price =
+          pricesFrom(details)
+            .find(
+              (entry) =>
+                sameMoney(
+                  entry?.amount,
+                  amount
+                )
+            );
+
+        if (
+          priceIdFrom(price) ===
+          savedPriceId
+        ) {
+          return {
+            productId:
+              savedProductId,
+
+            priceId:
+              savedPriceId,
+
+            reused: true
+          };
+        }
+      }
+
+    } catch (error) {
+      console.warn(
+        "Produto salvo não pôde ser validado:",
+        error?.message ||
+        error
+      );
+    }
+  }
+
+  const reusable =
+    await findReusableProduct(
+      name,
+      sku,
+      amount
+    );
+
+  if (reusable) {
+    return reusable;
+  }
+
+  return createProduct({
+    name,
+    sku,
+    projectCode,
+    checkoutCode,
+    type,
+    amount,
+    image
+  });
+}
+
+
+// ======================================================
+// COBRANÇAS VALIDAPAY
+// ======================================================
+
+function extractChargeId(
+  data = {}
+) {
+  return safe(
+    first(
+      data?.chargeId,
+      data?.id,
+      data?.charge?.id,
+      data?.payment?.chargeId,
+      data?.error
+        ?.details
+        ?.chargeId,
+      data?.details
+        ?.chargeId
+    )
+  );
+}
+
+
+function extractEmv(
+  data = {}
+) {
+  return safe(
+    first(
+      data?.pix?.emv,
+      data?.emv,
+      data?.payment
+        ?.pix
+        ?.emv,
+      data?.charge
+        ?.pix
+        ?.emv,
+      data?.pix?.copyPaste,
+      data?.copyPaste
+    )
+  );
+}
+
+
+function extractQrCode(
+  data = {}
+) {
+  return safe(
+    first(
+      data?.pix?.qrCode,
+      data?.qrCode,
+      data?.payment
+        ?.pix
+        ?.qrCode,
+      data?.charge
+        ?.pix
+        ?.qrCode
+    )
+  );
+}
+
+
+function extractAmount(
+  data = {}
+) {
+  return parseMoney(
+    first(
+      data?.amount,
+      data?.value,
+      data?.total,
+      data?.charge?.amount,
+      data?.payment?.amount
+    )
+  );
+}
+
+
+function duplicateChargeId(error) {
+  return safe(
+    first(
+      error?.data
+        ?.error
+        ?.details
+        ?.chargeId,
+
+      error?.data
+        ?.details
+        ?.chargeId,
+
+      error?.data
+        ?.chargeId,
+
+      error?.data
+        ?.error
+        ?.chargeId
+    )
+  );
+}
+
+
+function mergeCharge(
+  previous = {},
+  current = {}
+) {
+  return {
+    ...previous,
+    ...current,
+
+    pix: {
+      ...(previous?.pix || {}),
+      ...(current?.pix || {})
+    },
+
+    charge: {
+      ...(previous?.charge || {}),
+      ...(current?.charge || {})
+    },
+
+    payment: {
+      ...(previous?.payment || {}),
+      ...(current?.payment || {})
+    }
+  };
+}
+
+
+async function fetchCharge(
+  chargeId
+) {
+  return requestValidaPay({
+    path:
+      `/v1/charges/${encodeURIComponent(
+        chargeId
+      )}`,
+
+    method:
+      "get"
+  });
+}
+
+
+async function fetchChargeReady(
+  chargeId,
+  attempts = READY_ATTEMPTS
+) {
+  let latest = {};
+  let lastError = null;
+
+  for (
+    let attempt = 1;
+    attempt <= attempts;
+    attempt += 1
+  ) {
+    try {
+      latest =
+        await fetchCharge(
+          chargeId
+        );
+
+      lastError =
+        null;
+
+      if (
+        extractEmv(latest)
+      ) {
+        return latest;
+      }
+
+    } catch (error) {
+      lastError =
+        error;
+
+      if (
+        !transientError(
+          error
+        )
+      ) {
+        throw error;
+      }
+    }
+
+    if (
+      attempt < attempts
+    ) {
+      await sleep(
+        READY_DELAY_MS
+      );
+    }
+  }
+
+  if (
+    Object.keys(latest).length
+  ) {
+    return latest;
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  return {};
+}
+
+
+/*
+  Primeira tentativa:
+  cria normalmente.
+
+  Em 504/502/503:
+  repete usando o mesmo externalId e externalTxid.
+
+  Quando a ValidaPay responde 409:
+  recupera o chargeId já criado e consulta o PIX.
+
+  Assim o botão "tentar novamente" deixa de ser necessário
+  para concluir o trabalho que o servidor deveria fazer.
+*/
+async function createChargeWithRecovery(
+  body,
+  checkoutId
+) {
+  let merged = {};
+  let lastError = null;
+
+  for (
+    let attempt = 1;
+    attempt <= CREATE_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      const response =
+        await requestValidaPay({
+          path:
+            "/v1/charges",
+
+          method:
+            "post",
+
+          body
+        });
+
+      merged =
+        mergeCharge(
+          merged,
+          response
+        );
+
+      const chargeId =
+        extractChargeId(
+          merged
+        );
+
+      if (chargeId) {
+        /*
+          Salva imediatamente.
+
+          Mesmo que o EMV demore, uma nova chamada
+          continuará consultando a mesma cobrança.
+        */
+        await upsertSession(
+          checkoutId,
+          {
+            preferenceId:
+              chargeId,
+
+            validaPayChargeId:
+              chargeId,
+
+            status:
+              "pending",
+
+            updatedAtDate:
+              new Date()
+          }
+        );
+
+        if (
+          extractEmv(merged)
+        ) {
+          return merged;
+        }
+
+        const details =
+          await fetchChargeReady(
+            chargeId
+          );
+
+        return mergeCharge(
+          merged,
+          {
+            ...details,
+            chargeId
+          }
+        );
+      }
+
+    } catch (error) {
+      const recoveredId =
+        duplicateChargeId(
+          error
+        );
+
+      if (
+        Number(error?.status) ===
+          409 &&
+        recoveredId
+      ) {
+        await upsertSession(
+          checkoutId,
+          {
+            preferenceId:
+              recoveredId,
+
+            validaPayChargeId:
+              recoveredId,
+
+            status:
+              "pending",
+
+            updatedAtDate:
+              new Date()
+          }
+        );
+
+        const details =
+          await fetchChargeReady(
+            recoveredId
+          );
+
+        return mergeCharge(
+          merged,
+          {
+            ...details,
+
+            chargeId:
+              recoveredId
+          }
+        );
+      }
+
+      if (
+        !transientError(
+          error
+        )
+      ) {
+        throw error;
+      }
+
+      lastError =
+        error;
+
+      console.warn(
+        "PIX ainda sendo criado. Recuperação automática:",
+        {
+          attempt,
+
+          status:
+            Number(
+              error?.status ||
+              0
+            ),
+
+          message:
+            error?.message ||
+            error
+        }
+      );
+    }
+
+    if (
+      attempt < CREATE_ATTEMPTS
+    ) {
+      await sleep(
+        350 * attempt
+      );
+    }
+  }
+
+  const error =
+    new Error(
+      "A ValidaPay ainda está finalizando o PIX. Aguarde alguns segundos nesta página."
+    );
+
+  error.status =
+    Number(
+      lastError?.status ||
+      504
+    );
+
+  error.data =
+    lastError?.data ||
+    merged;
+
+  error.recoverable =
+    true;
+
+  throw error;
+}
+
+
+function publicCharge({
+  checkoutId,
+  chargeId,
+  data,
+  fallbackAmount = 0
+}) {
+  const status =
+    normalizeStatus(
+      first(
+        data?.status,
+        data?.charge?.status,
+        data?.payment?.status
+      )
+    );
+
+  const emv =
+    extractEmv(data);
+
+  return {
+    ok: true,
+
+    /*
+      Quando existe chargeId mas o EMV ainda está sendo
+      finalizado, não devolve falso erro.
+    */
+    processing:
+      !emv,
+
+    recoverable:
+      !emv,
+
+    provider:
+      "VALIDAPAY",
+
+    paymentMethod:
+      "PIX",
+
+    checkoutId:
+      safe(checkoutId),
+
+    chargeId:
+      safe(chargeId),
+
+    customerId:
+      safe(
+        first(
+          data?.customerId,
+          data?.customer?.id
+        )
+      ),
+
+    status,
+
+    approved:
+      status === "approved",
+
+    amount:
+      extractAmount(data) ||
+      parseMoney(fallbackAmount),
+
+    emv,
+
+    qrCode:
+      extractQrCode(data),
+
+    paidAt:
+      safe(
+        first(
+          data?.paidAt,
+          data?.payment?.paidAt
+        )
+      ),
+
+    createdAt:
+      safe(
+        first(
+          data?.createdAt,
+          data?.charge?.createdAt
+        )
+      )
+  };
+}
+
+
+// ======================================================
+// NOTIFICAÇÕES DE VENDA
+// ======================================================
+
+function deliveryUrl(checkoutId) {
+  return (
+    `${SITE_BASE}/entregaprojetosprontos` +
+    `?checkout_id=${encodeURIComponent(
+      checkoutId
+    )}`
+  );
+}
+
+
+function moneyBR(value) {
+  return Number(
+    value ||
+    0
+  ).toLocaleString(
+    "pt-BR",
+    {
+      style:
+        "currency",
+
+      currency:
+        "BRL"
+    }
+  );
+}
+
+
+async function getOptionalSecret(name) {
+  try {
+    return safe(
+      await getSecret(name)
+    );
+
+  } catch (_) {
+    return "";
+  }
+}
+
+
+async function postJson(
+  url,
+  payload
+) {
+  const response =
+    await fetch(
+      url,
+      {
+        method:
+          "post",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body:
+          JSON.stringify(payload)
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      `Webhook respondeu HTTP ${response.status}.`
+    );
+  }
+}
+
+
+async function notifyApprovedSale(
+  checkoutId,
+  chargeId,
+  charge
+) {
+  const session =
+    await findSession(
+      checkoutId
+    );
+
+  if (!session) {
+    return;
+  }
+
+  const type =
+    normalizeType(
+      session.tipoProduto
+    );
+
+  const amount =
+    Number(
+      session.valor ||
+      extractAmount(charge) ||
+      0
+    );
+
+  const payload = {
+    event:
+      "venda_aprovada_PROJETOS_PRONTOS",
+
+    origem:
+      "PELEGO_BOX_PROJETOS_PRONTOS",
+
+    provider:
+      "VALIDAPAY",
+
+    paymentMethod:
+      "PIX",
+
+    status:
+      "approved",
+
+    dataISO:
+      new Date().toISOString(),
+
+    checkoutId,
+    chargeId,
+
+    clienteId:
+      safe(session.clienteId),
+
+    nome:
+      safe(session.nomeCliente),
+
+    email:
+      normalizeEmail(
+        session.email
+      ),
+
+    whatsapp:
+      normalizePhone(
+        session.whatsapp
+      ),
+
+    cpfCnpj:
+      normalizeCpfCnpj(
+        session.cpfCnpj
+      ),
+
+    produto:
+      productTitle(
+        session.produto,
+        session.codigoProjeto
+      ),
+
+    etapa:
+      stageLabel(type),
+
+    tipoProduto:
+      type,
+
+    codigoProjeto:
+      safe(session.codigoProjeto),
+
+    codigoCheckout:
+      safe(session.codigoCheckout),
+
+    sku:
+      safe(session.sku),
+
+    img:
+      safe(session.img),
+
+    valor:
+      amount,
+
+    valorFormatado:
+      moneyBR(amount),
+
+    deliveryUrl:
+      deliveryUrl(checkoutId)
+  };
+
+  const patch = {
+    updatedAtDate:
+      new Date()
+  };
+
+  if (
+    !session.emailEnviadoEm
+  ) {
+    const makeUrl =
+      await getOptionalSecret(
+        MAKE_SECRET
+      );
+
+    if (makeUrl) {
+      try {
+        await postJson(
+          makeUrl,
+          payload
+        );
+
+        patch.emailEnviadoEm =
+          new Date();
+
+      } catch (error) {
+        console.error(
+          "Falha no webhook do Make:",
+          error?.message ||
+          error
+        );
+      }
+    }
+  }
+
+  if (
+    session.chatbotVendaEnviado !==
+    true
+  ) {
+    const chatbotUrl =
+      await getOptionalSecret(
+        CHATBOT_SECRET
+      );
+
+    if (chatbotUrl) {
+      try {
+        await postJson(
+          chatbotUrl,
+          payload
+        );
+
+        patch.chatbotVendaEnviado =
+          true;
+
+      } catch (error) {
+        console.error(
+          "Falha no webhook do Chatbot:",
+          error?.message ||
+          error
+        );
+      }
+    }
+  }
+
+  if (
+    patch.emailEnviadoEm ||
+    patch.chatbotVendaEnviado === true
+  ) {
+    await upsertSession(
+      checkoutId,
+      patch
+    );
+  }
+}
+
+
+// ======================================================
+// CRIAR PIX
+// ======================================================
+
+export async function criarCobrancaPixTransparente(
+  input = {}
+) {
+  const checkoutId =
+    safe(input.checkoutId) ||
+    generateCheckoutId();
+
+  try {
+    const ctx =
+      input.ctx ||
+      {};
+
+    const projectCode =
+      digits(
+        first(
+          input.codigoProjeto,
+          ctx.codigoProjeto
+        )
+      );
+
+    const checkoutCode =
+      safe(
+        first(
+          input.codigoCheckout,
+          ctx.codigoCheckout,
+          ctx.productId
+        )
+      );
+
+    const type =
+      normalizeType(
+        first(
+          input.tipoProduto,
+          ctx.tipoProduto
+        )
+      );
+
+    const name =
+      productTitle(
+        first(
+          input.produto,
+          ctx.produto,
+          ctx.titulo,
+          ctx.name,
+          "Projeto Pronto"
+        ),
+
+        projectCode
+      );
+
+    const sku =
+      projectSku(
+        projectCode,
+
+        first(
+          input.sku,
+          ctx.sku
+        )
+      );
+
+    const image =
+      safe(
+        first(
+          input.img,
+          input.imagem,
+          ctx.img,
+          ctx.imagem
+        )
+      );
+
+    const amount =
+      parseMoney(
+        input.valor ??
+        ctx.valor ??
+        ctx.price
+      );
+
+    const clienteId =
+      safe(
+        first(
+          input.clienteId,
+          ctx.clienteId
+        )
+      );
+
+    const nomeCliente =
+      decodeText(
+        first(
+          input.nomeCliente,
+          input.nome,
+          ctx.nomeCliente,
+          ctx.nome
+        )
+      );
+
+    const email =
+      normalizeEmail(
+        first(
+          input.email,
+          ctx.email
+        )
+      );
+
+    const cpfCnpj =
+      normalizeCpfCnpj(
+        first(
+          input.cpfCnpj,
+          input.cpf,
+          input.cnpj,
+          ctx.cpfCnpj,
+          ctx.cpf,
+          ctx.cnpj
+        )
+      );
+
+    const whatsapp =
+      normalizePhone(
+        first(
+          input.whatsappE164,
+          ctx.whatsappE164,
+          input.whatsapp,
+          ctx.whatsapp
+        )
+      );
+
+    const phone =
+      nationalPhone(
+        whatsapp
+      );
+
+    const returnUrl =
+      safe(
+        first(
+          input.returnUrl,
+          ctx.returnUrl
+        )
+      );
+
+    if (!projectCode) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "Código do projeto não informado."
+      };
+    }
+
+    if (!checkoutCode) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "Código do checkout não informado."
+      };
+    }
+
+    if (!(amount > 0)) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "Valor inválido para gerar o PIX."
+      };
+    }
+
+    if (!clienteId) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "Cliente não identificado."
+      };
+    }
+
+    if (
+      nomeCliente.length < 3
+    ) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "Nome do cliente não informado."
+      };
+    }
+
+    if (!validEmail(email)) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "E-mail do cliente inválido."
+      };
+    }
+
+    if (
+      !validCpfCnpj(
+        cpfCnpj
+      )
+    ) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "CPF/CNPJ do cliente inválido."
+      };
+    }
+
+    if (
+      !whatsapp ||
+      !phone
+    ) {
+      return {
+        ok: false,
+        checkoutId,
+        error:
+          "WhatsApp do cliente inválido."
+      };
+    }
+
+    const existing =
+      await findSession(
+        checkoutId
+      );
+
+    const existingChargeId =
+      safe(
+        existing
+          ?.validaPayChargeId
+      );
+
+    /*
+      Voltar e tentar novamente com o mesmo checkout
+      consulta a cobrança existente. Não cria outra.
+    */
+    if (existingChargeId) {
+      const charge =
+        await fetchChargeReady(
+          existingChargeId
+        );
+
+      return publicCharge({
+        checkoutId,
+
+        chargeId:
+          existingChargeId,
+
+        data:
+          charge,
+
+        fallbackAmount:
+          amount
+      });
+    }
+
+    const now =
+      new Date();
+
+    await upsertSession(
+      checkoutId,
+      {
+        preferenceId:
+          "",
+
+        paymentId:
+          "",
+
+        status:
+          "pending",
+
+        clienteId,
+        nomeCliente,
+        whatsapp,
+        email,
+        cpfCnpj,
+
+        codigoProjeto:
+          projectCode,
+
+        codigoCheckout:
+          checkoutCode,
+
+        sku,
+
+        tipoProduto:
+          type,
+
+        produto:
+          name,
+
+        img:
+          image,
+
+        valor:
+          amount,
+
+        returnUrl,
+
+        compraRegistrada:
+          false,
+
+        emailEnviadoEm:
+          existing
+            ?.emailEnviadoEm ||
+          null,
+
+        chatbotVendaEnviado:
+          existing
+            ?.chatbotVendaEnviado ===
+          true,
+
+        abandonSent:
+          existing
+            ?.abandonSent ===
+          true,
+
+        abandonSentAt:
+          existing
+            ?.abandonSentAt ||
+          null,
+
+        tokenEntrega:
+          safe(
+            existing
+              ?.tokenEntrega
+          ),
+
+        validaPayProductId:
+          safe(
+            existing
+              ?.validaPayProductId
+          ),
+
+        validaPayPriceId:
+          safe(
+            existing
+              ?.validaPayPriceId
+          ),
+
+        validaPayChargeId:
+          "",
+
+        createdAtDate:
+          existing
+            ?.createdAtDate ||
+          now,
+
+        updatedAtDate:
+          now
+      }
+    );
+
+    const product =
+      await ensureProduct({
+        session:
+          existing,
+
+        name,
+        sku,
+        projectCode,
+        checkoutCode,
+        type,
+        amount,
+        image
+      });
+
+    await upsertSession(
+      checkoutId,
+      {
+        validaPayProductId:
+          product.productId,
+
+        validaPayPriceId:
+          product.priceId,
+
+        updatedAtDate:
+          new Date()
+      }
+    );
+
+    const chargeBody = {
+      paymentMethod:
+        "pix",
+
+      externalId:
+        checkoutId,
+
+      externalTxid:
+        externalTxid({
+          checkoutId,
+          projectCode,
+          type,
+          amount
+        }),
+
+      customer: {
+        name:
+          nomeCliente,
+
+        email,
+
+        phone,
+
+        documentNumber:
+          cpfCnpj
+      },
+
+      items: [
+        {
+          priceId:
+            product.priceId,
+
+          quantity:
+            1
+        }
+      ],
+
+      metadata: {
+        origem:
+          "PELEGO_BOX_PROJETOS_PRONTOS",
+
+        checkoutId,
+        clienteId,
+
+        codigoProjeto:
+          projectCode,
+
+        codigoCheckout:
+          checkoutCode,
+
+        sku,
+
+        tipoProduto:
+          type,
+
+        etapa:
+          stageLabel(type),
+
+        produto:
+          name,
+
+        cpfCnpj,
+        whatsapp,
+
+        telefoneValidaPay:
+          phone,
+
+        imagem:
+          image,
+
+        returnUrl
+      }
+    };
+
+    let response =
+      await createChargeWithRecovery(
+        chargeBody,
+        checkoutId
+      );
+
+    const chargeId =
+      extractChargeId(
+        response
+      );
+
+    if (!chargeId) {
+      const error =
+        new Error(
+          "A ValidaPay ainda está finalizando o PIX."
+        );
+
+      error.recoverable =
+        true;
+
+      throw error;
+    }
+
+    if (
+      !extractEmv(
+        response
+      )
+    ) {
+      const details =
+        await fetchChargeReady(
+          chargeId
+        );
+
+      response =
+        mergeCharge(
+          response,
+          {
+            ...details,
+            chargeId
+          }
+        );
+    }
+
+    await upsertSession(
+      checkoutId,
+      {
+        preferenceId:
+          chargeId,
+
+        validaPayChargeId:
+          chargeId,
+
+        status:
+          "pending",
+
+        updatedAtDate:
+          new Date()
+      }
+    );
+
+    return publicCharge({
+      checkoutId,
+      chargeId,
+
+      data:
+        response,
+
+      fallbackAmount:
+        amount
+    });
+
+  } catch (error) {
+    console.error(
+      "ERRO PIX TRANSPARENTE VALIDAPAY:",
+      error?.message ||
+      error,
+      error
+    );
+
+    const recoverable =
+      error?.recoverable === true ||
+      transientError(error);
+
+    try {
+      await upsertSession(
+        checkoutId,
+        {
+          status:
+            recoverable
+              ? "pending"
+              : "error",
+
+          updatedAtDate:
+            new Date()
+        }
+      );
+
+    } catch (_) {
+      /*
+        Preserva o erro principal.
+      */
+    }
+
+    return {
+      ok: false,
+
+      recoverable,
+
+      processing:
+        recoverable,
+
+      checkoutId,
+
+      error:
+        recoverable
+          ? "A ValidaPay ainda está finalizando o PIX. Aguarde alguns segundos nesta página."
+          : (
+            error?.message ||
+            "Não foi possível gerar o PIX."
+          )
+    };
+  }
+}
+
+
+// ======================================================
+// CONSULTAR PIX
+// ======================================================
+
+export async function consultarCobrancaPix(
+  input = {}
+) {
+  try {
+    const checkoutId =
+      safe(
+        input.checkoutId
+      );
+
+    let chargeId =
+      safe(
+        input.chargeId
+      );
+
+    if (
+      !chargeId &&
+      checkoutId
+    ) {
+      const session =
+        await findSession(
+          checkoutId
+        );
+
+      chargeId =
+        safe(
+          session
+            ?.validaPayChargeId
+        );
+    }
+
+    if (!chargeId) {
+      return {
+        ok: false,
+
+        recoverable:
+          true,
+
+        processing:
+          true,
+
+        checkoutId,
+
+        error:
+          "A cobrança ainda está sendo localizada."
+      };
+    }
+
+    const charge =
+      await fetchChargeReady(
+        chargeId,
+        3
+      );
+
+    const result =
+      publicCharge({
+        checkoutId,
+        chargeId,
+        data:
+          charge
+      });
+
+    if (checkoutId) {
+      await upsertSession(
+        checkoutId,
+        {
+          status:
+            result.status,
+
+          updatedAtDate:
+            new Date()
+        }
+      );
+
+      if (
+        result.approved
+      ) {
+        await notifyApprovedSale(
+          checkoutId,
+          chargeId,
+          charge
+        );
+      }
+    }
+
+    return result;
+
+  } catch (error) {
+    const recoverable =
+      transientError(error);
+
+    console.error(
+      "ERRO CONSULTA PIX VALIDAPAY:",
+      error?.message ||
+      error,
+      error
+    );
+
+    return {
+      ok: false,
+
+      recoverable,
+
+      processing:
+        recoverable,
+
+      checkoutId:
+        safe(
+          input.checkoutId
+        ),
+
+      chargeId:
+        safe(
+          input.chargeId
+        ),
+
+      error:
+        recoverable
+          ? "A ValidaPay ainda está atualizando o PIX."
+          : (
+            error?.message ||
+            "Não foi possível consultar o PIX."
+          )
+    };
+  }
+}

@@ -1,0 +1,24 @@
+import { Permissions, webMethod } from "wix-web-module";
+import { getSecret } from "wix-secrets-backend";
+import { Payment, MercadoPagoConfig } from "mercadopago";
+
+export const createPayment = webMethod(
+    Permissions.Anyone,
+
+    async (formData) => {
+
+        const accessToken = await getSecret("MP_ACCESS_TOKEN");
+
+        const client = new MercadoPagoConfig({
+            accessToken
+        });
+
+        const payment = new Payment(client);
+
+        const result = await payment.create({
+            body: formData
+        });
+
+        return result;
+    }
+);

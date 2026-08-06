@@ -1,0 +1,1644 @@
+import wixData from "wix-data";
+
+// TÍTULO NO WIX: backend/entregaProjetosProntos.jsw
+// R6 — PROJETO PELO CÓDIGO + CLIENTE CANÔNICO + ENTREGA UNIFICADA
+
+const SESSIONS_COLLECTION =
+  "SessoesProjetosProntos2";
+
+const PURCHASES_COLLECTION =
+  "ComprasProjetos";
+
+const PROJECTS_COLLECTION =
+  "Videosprojetos";
+
+/*
+  Nome visível: Clientes
+  ID real da coleção no Wix: Campo
+*/
+const CLIENTS_COLLECTION =
+  "Campo";
+
+const DB_OPTS = {
+  suppressAuth: true
+};
+
+function safe(value) {
+  return String(value ?? "").trim();
+}
+
+function firstValue(...values) {
+  for (const value of values) {
+    const normalized = safe(value);
+
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
+
+function normalizeEmail(value) {
+  return safe(value).toLowerCase();
+}
+
+function normalizeWhatsapp(value) {
+  return safe(value).replace(/\D/g, "");
+}
+
+function normalizeProjectCode(value) {
+  return safe(value).replace(/\D/g, "");
+}
+
+function normalizeType(value) {
+  const type = safe(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (
+    type === "MEDIDA" ||
+    type === "MEDIDAS"
+  ) {
+    return "MEDIDAS";
+  }
+
+  if (
+    type === "GRAFICO" ||
+    type === "GRAFICOS"
+  ) {
+    return "GRAFICOS";
+  }
+
+  if (
+    type === "PROJETO" ||
+    type === "COMPLETO" ||
+    type === "PROJETO_COMPLETO"
+  ) {
+    return "PROJETO_COMPLETO";
+  }
+
+  return "MEDIDAS";
+}
+
+function decodeTitle(value) {
+  return safe(value)
+    .replace(/&amp;quot;/gi, '"')
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanProjectTitle(value) {
+  return decodeTitle(value)
+    .split(/\bPELEGO(?:\s*BOX)?\b/i)[0]
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripLeadingProjectCode(value) {
+  return cleanProjectTitle(value)
+    .replace(
+      /^\s*#?\s*\d+\s*/i,
+      ""
+    )
+    .trim();
+}
+
+function mediaSource(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "object") {
+    return firstValue(
+      value.src,
+      value.url,
+      value.fileUrl,
+      value.mediaUrl,
+      value.image
+    );
+  }
+
+  return "";
+}
+
+function referenceId(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return safe(value);
+  }
+
+  if (typeof value === "object") {
+    return firstValue(
+      value._id,
+      value.id,
+      value.value
+    );
+  }
+
+  return "";
+}
+
+function sessionWhatsapp(item) {
+  return firstValue(
+    item?.whatsappE164,
+    item?.whatsapp,
+    item?.whatsApp
+  );
+}
+
+function sessionToken(item) {
+  return firstValue(
+    item?.tokenEntrega,
+    item?.tokenDeEntrega
+  );
+}
+
+function purchaseWhatsapp(item) {
+  return firstValue(
+    item?.whatsApp,
+    item?.whatsapp
+  );
+}
+
+function purchaseClientId(item) {
+  return firstValue(
+    item?.clienteId,
+    referenceId(item?.cliente)
+  );
+}
+
+function approvedPurchase(item) {
+  const payment =
+    safe(item?.pagamento)
+      .toLowerCase();
+
+  const status =
+    safe(item?.statusCompra)
+      .toLowerCase();
+
+  return (
+    payment === "approved" ||
+    status === "approved" ||
+    status === "aprovada" ||
+    status === "liberada"
+  );
+}
+
+function purchaseMatchesPayment(
+  purchase,
+  paymentId
+) {
+  const expected =
+    safe(paymentId);
+
+  return (
+    expected &&
+    safe(purchase?.idPagamento) ===
+      expected
+  );
+}
+
+function purchaseMatchesIdentity(
+  purchase,
+  identity
+) {
+  const clientId =
+    safe(identity?.clienteId);
+
+  const email =
+    normalizeEmail(
+      identity?.email
+    );
+
+  const whatsapp =
+    normalizeWhatsapp(
+      identity?.whatsapp
+    );
+
+  const itemClientId =
+    purchaseClientId(purchase);
+
+  const itemEmail =
+    normalizeEmail(
+      purchase?.email
+    );
+
+  const itemWhatsapp =
+    normalizeWhatsapp(
+      purchaseWhatsapp(purchase)
+    );
+
+  if (
+    clientId &&
+    itemClientId &&
+    clientId === itemClientId
+  ) {
+    return true;
+  }
+
+  if (
+    email &&
+    itemEmail &&
+    email === itemEmail
+  ) {
+    return true;
+  }
+
+  if (
+    whatsapp &&
+    itemWhatsapp &&
+    whatsapp === itemWhatsapp
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function publicSession(item) {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    checkoutId:
+      safe(item.checkoutId),
+
+    status:
+      safe(item.status)
+        .toLowerCase(),
+
+    paymentId:
+      safe(item.paymentId),
+
+    clienteId:
+      safe(item.clienteId),
+
+    nomeCliente:
+      firstValue(
+        item?.nomeCliente,
+        item?.nome
+      ),
+
+    whatsapp:
+      sessionWhatsapp(item),
+
+    email:
+      normalizeEmail(item.email),
+
+    codigoProjeto:
+      normalizeProjectCode(
+        item.codigoProjeto
+      ),
+
+    codigoCheckout:
+      safe(item.codigoCheckout),
+
+    sku:
+      safe(item.sku),
+
+    tipoProduto:
+      normalizeType(
+        item.tipoProduto
+      ),
+
+    produto:
+      safe(item.produto),
+
+    img:
+      mediaSource(item.img),
+
+    valor:
+      Number(item.valor || 0),
+
+    returnUrl:
+      safe(item.returnUrl),
+
+    compraRegistrada:
+      item.compraRegistrada === true,
+
+    emailEnviado:
+      item.emailEnviado === true,
+
+    tokenEntrega:
+      sessionToken(item)
+  };
+}
+
+async function findOne(
+  collection,
+  field,
+  value
+) {
+  if (
+    value === undefined ||
+    value === null ||
+    safe(value) === ""
+  ) {
+    return null;
+  }
+
+  try {
+    const result = await wixData
+      .query(collection)
+      .eq(field, value)
+      .limit(1)
+      .find(DB_OPTS);
+
+    return result.items.length
+      ? result.items[0]
+      : null;
+  } catch (error) {
+    console.warn(
+      `Busca em ${collection}.${field} falhou:`,
+      error?.message || error
+    );
+
+    return null;
+  }
+}
+
+async function findSession({
+  checkoutId,
+  token
+}) {
+  const id =
+    safe(checkoutId);
+
+  const deliveryToken =
+    safe(token);
+
+  if (deliveryToken) {
+    const canonical =
+      await findOne(
+        SESSIONS_COLLECTION,
+        "tokenEntrega",
+        deliveryToken
+      );
+
+    if (canonical) {
+      return canonical;
+    }
+
+    return findOne(
+      SESSIONS_COLLECTION,
+      "tokenDeEntrega",
+      deliveryToken
+    );
+  }
+
+  if (id) {
+    return findOne(
+      SESSIONS_COLLECTION,
+      "checkoutId",
+      id
+    );
+  }
+
+  return null;
+}
+
+async function findProjectByOrder(
+  codigoProjeto
+) {
+  const code =
+    normalizeProjectCode(
+      codigoProjeto
+    );
+
+  if (!code) {
+    return null;
+  }
+
+  const numericCode =
+    Number(code);
+
+  if (Number.isSafeInteger(numericCode)) {
+    const byNumber =
+      await findOne(
+        PROJECTS_COLLECTION,
+        "ordem_video",
+        numericCode
+      );
+
+    if (byNumber) {
+      return byNumber;
+    }
+  }
+
+  const byText =
+    await findOne(
+      PROJECTS_COLLECTION,
+      "ordem_video",
+      code
+    );
+
+  if (byText) {
+    return byText;
+  }
+
+  try {
+    const byTitle = await wixData
+      .query(PROJECTS_COLLECTION)
+      .startsWith(
+        "titulo_video",
+        `#${code}`
+      )
+      .limit(1)
+      .find(DB_OPTS);
+
+    return byTitle.items.length
+      ? byTitle.items[0]
+      : null;
+  } catch (error) {
+    console.warn(
+      "Busca do projeto pelo título falhou:",
+      error?.message || error
+    );
+
+    return null;
+  }
+}
+
+async function findProject(session) {
+  /*
+    codigoProjeto é a identidade do projeto.
+
+    codigo_checkout não é exclusivo:
+    001, 002, 003 etc. podem existir em vários projetos.
+  */
+  const codigoProjeto =
+    normalizeProjectCode(
+      session?.codigoProjeto
+    );
+
+  if (codigoProjeto) {
+    return findProjectByOrder(
+      codigoProjeto
+    );
+  }
+
+  /*
+    Compatibilidade com sessão antiga sem codigoProjeto.
+    Aceita codigo_checkout apenas se houver um único registro.
+  */
+  const codigoCheckout =
+    safe(session?.codigoCheckout);
+
+  if (!codigoCheckout) {
+    return null;
+  }
+
+  try {
+    const result = await wixData
+      .query(PROJECTS_COLLECTION)
+      .eq(
+        "codigo_checkout",
+        codigoCheckout
+      )
+      .limit(2)
+      .find(DB_OPTS);
+
+    if (result.items.length === 1) {
+      return result.items[0];
+    }
+
+    if (result.items.length > 1) {
+      console.error(
+        "codigo_checkout ambíguo:",
+        codigoCheckout
+      );
+    }
+
+    return null;
+  } catch (error) {
+    console.warn(
+      "Busca antiga por codigo_checkout falhou:",
+      error?.message || error
+    );
+
+    return null;
+  }
+}
+
+async function queryPurchasesByProject(
+  codigoProjeto
+) {
+  const code =
+    normalizeProjectCode(
+      codigoProjeto
+    );
+
+  if (!code) {
+    return [];
+  }
+
+  const found =
+    new Map();
+
+  const attempts = [
+    code
+  ];
+
+  const numericCode =
+    Number(code);
+
+  if (Number.isSafeInteger(numericCode)) {
+    attempts.push(numericCode);
+  }
+
+  for (const value of attempts) {
+    try {
+      const result = await wixData
+        .query(PURCHASES_COLLECTION)
+        .eq(
+          "codigoProjeto",
+          value
+        )
+        .limit(1000)
+        .find(DB_OPTS);
+
+      for (
+        const item of
+        result.items || []
+      ) {
+        found.set(
+          safe(item._id),
+          item
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Busca de compras falhou:",
+        value,
+        error?.message || error
+      );
+    }
+  }
+
+  return [
+    ...found.values()
+  ];
+}
+
+function newestFirst(items = []) {
+  return [...items].sort(
+    (a, b) => {
+      const dateA =
+        new Date(
+          a?._updatedDate ||
+          a?.dataProcessamento ||
+          a?.dataLiberacao ||
+          a?.dataCompra ||
+          0
+        ).getTime();
+
+      const dateB =
+        new Date(
+          b?._updatedDate ||
+          b?.dataProcessamento ||
+          b?.dataLiberacao ||
+          b?.dataCompra ||
+          0
+        ).getTime();
+
+      return dateB - dateA;
+    }
+  );
+}
+
+function newestPurchaseValue(
+  purchases,
+  ...fields
+) {
+  for (
+    const purchase of
+    newestFirst(purchases)
+  ) {
+    for (const field of fields) {
+      const value =
+        safe(purchase?.[field]);
+
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return "";
+}
+
+function clientPayload(item) {
+  if (!item) {
+    return {
+      _id: "",
+      clienteId: "",
+      nome: "",
+      email: "",
+      whatsapp: ""
+    };
+  }
+
+  return {
+    _id:
+      safe(item?._id),
+
+    clienteId:
+      firstValue(
+        item?.clienteId,
+        item?._id
+      ),
+
+    nome:
+      firstValue(
+        item?.nome,
+        item?.title
+      ),
+
+    email:
+      normalizeEmail(
+        item?.email
+      ),
+
+    whatsapp:
+      firstValue(
+        item?.whatsapp,
+        item?.whatsApp
+      )
+  };
+}
+
+function isEmailAliasName(
+  name,
+  email
+) {
+  const normalizedName =
+    safe(name).toLowerCase();
+
+  const alias =
+    normalizeEmail(email)
+      .split("@")[0];
+
+  return (
+    normalizedName &&
+    alias &&
+    normalizedName === alias
+  );
+}
+
+async function findClientProfile(
+  session,
+  purchases
+) {
+  const clienteId =
+    firstValue(
+      session?.clienteId,
+      newestPurchaseValue(
+        purchases,
+        "clienteId"
+      )
+    );
+
+  const email =
+    firstValue(
+      session?.email,
+      newestPurchaseValue(
+        purchases,
+        "email"
+      )
+    );
+
+  const whatsapp =
+    firstValue(
+      sessionWhatsapp(session),
+      newestPurchaseValue(
+        purchases,
+        "whatsApp",
+        "whatsapp"
+      )
+    );
+
+  let item = null;
+
+  if (clienteId) {
+    item =
+      await findOne(
+        CLIENTS_COLLECTION,
+        "clienteId",
+        clienteId
+      );
+
+    if (!item) {
+      item =
+        await findOne(
+          CLIENTS_COLLECTION,
+          "_id",
+          clienteId
+        );
+    }
+  }
+
+  if (!item && email) {
+    item =
+      await findOne(
+        CLIENTS_COLLECTION,
+        "email",
+        normalizeEmail(email)
+      );
+  }
+
+  if (!item && whatsapp) {
+    const normalized =
+      normalizeWhatsapp(whatsapp);
+
+    item =
+      await findOne(
+        CLIENTS_COLLECTION,
+        "whatsapp",
+        normalized
+      );
+
+    if (!item) {
+      const number =
+        Number(normalized);
+
+      if (Number.isSafeInteger(number)) {
+        item =
+          await findOne(
+            CLIENTS_COLLECTION,
+            "whatsapp",
+            number
+          );
+      }
+    }
+  }
+
+  const client =
+    clientPayload(item);
+
+  if (!client.nome) {
+    const sessionName =
+      firstValue(
+        session?.nomeCliente,
+        session?.nome
+      );
+
+    const purchaseName =
+      newestPurchaseValue(
+        purchases,
+        "nomeCliente"
+      );
+
+    if (
+      sessionName &&
+      !isEmailAliasName(
+        sessionName,
+        email
+      )
+    ) {
+      client.nome =
+        sessionName;
+    } else if (
+      purchaseName &&
+      !isEmailAliasName(
+        purchaseName,
+        email
+      )
+    ) {
+      client.nome =
+        purchaseName;
+    }
+  }
+
+  client.clienteId =
+    firstValue(
+      client.clienteId,
+      clienteId
+    );
+
+  client.email =
+    firstValue(
+      client.email,
+      email
+    );
+
+  client.whatsapp =
+    firstValue(
+      client.whatsapp,
+      whatsapp
+    );
+
+  return client;
+}
+
+function calculateAccess(purchases) {
+  const access = {
+    medidas: false,
+    graficos: false,
+    projeto: false
+  };
+
+  for (const purchase of purchases) {
+    if (!approvedPurchase(purchase)) {
+      continue;
+    }
+
+    const type =
+      normalizeType(
+        purchase?.tipoProduto
+      );
+
+    const hasProject =
+      purchase?.downloadProjeto === true ||
+      type === "PROJETO_COMPLETO";
+
+    const hasGraphics =
+      purchase?.downloadGraficos === true ||
+      type === "GRAFICOS" ||
+      hasProject;
+
+    const hasMeasures =
+      purchase?.downloadMedidas === true ||
+      type === "MEDIDAS" ||
+      hasGraphics;
+
+    if (hasMeasures) {
+      access.medidas = true;
+    }
+
+    if (hasGraphics) {
+      access.graficos = true;
+    }
+
+    if (hasProject) {
+      access.projeto = true;
+    }
+  }
+
+  return {
+    ...access,
+
+    podeComprarMedidas:
+      !access.medidas,
+
+    podeComprarGraficos:
+      access.medidas &&
+      !access.graficos,
+
+    podeComprarProjeto:
+      access.graficos &&
+      !access.projeto
+  };
+}
+
+function resolveAccessFromPurchases({
+  purchases,
+  clienteId,
+  email,
+  whatsapp,
+  paymentId
+}) {
+  const identity = {
+    clienteId:
+      safe(clienteId),
+
+    email:
+      normalizeEmail(email),
+
+    whatsapp:
+      normalizeWhatsapp(whatsapp)
+  };
+
+  const matched =
+    purchases.filter(
+      (item) =>
+        purchaseMatchesIdentity(
+          item,
+          identity
+        )
+    );
+
+  const currentPurchase =
+    purchases.find(
+      (item) =>
+        purchaseMatchesPayment(
+          item,
+          paymentId
+        )
+    );
+
+  if (
+    currentPurchase &&
+    !matched.some(
+      (item) =>
+        safe(item._id) ===
+        safe(currentPurchase._id)
+    )
+  ) {
+    matched.push(currentPurchase);
+  }
+
+  return {
+    access:
+      calculateAccess(matched),
+
+    purchases:
+      matched
+  };
+}
+
+async function resolveAccess({
+  codigoProjeto,
+  clienteId,
+  email,
+  whatsapp,
+  paymentId
+}) {
+  const purchases =
+    await queryPurchasesByProject(
+      codigoProjeto
+    );
+
+  return resolveAccessFromPurchases({
+    purchases,
+    clienteId,
+    email,
+    whatsapp,
+    paymentId
+  });
+}
+
+function stagePaymentValue(
+  purchases,
+  type,
+  fallbackValue
+) {
+  const normalizedType =
+    normalizeType(type);
+
+  const exact = purchases
+    .filter(approvedPurchase)
+    .filter(
+      (item) =>
+        normalizeType(
+          item?.tipoProduto
+        ) === normalizedType
+    )
+    .sort((a, b) => {
+      const dateA =
+        new Date(
+          a?._updatedDate ||
+          a?.dataCompra ||
+          0
+        ).getTime();
+
+      const dateB =
+        new Date(
+          b?._updatedDate ||
+          b?.dataCompra ||
+          0
+        ).getTime();
+
+      return dateB - dateA;
+    });
+
+  const value =
+    Number(
+      exact[0]?.valor ||
+      fallbackValue ||
+      0
+    );
+
+  return Number.isFinite(value)
+    ? value
+    : 0;
+}
+
+function buildStages(
+  access,
+  purchases,
+  project
+) {
+  return {
+    medidas: {
+      pago:
+        access.medidas === true,
+
+      valorPago:
+        stagePaymentValue(
+          purchases,
+          "MEDIDAS",
+          project?.valor_medidas ||
+          project?.valor_etapa_1
+        )
+    },
+
+    graficos: {
+      pago:
+        access.graficos === true,
+
+      valorPago:
+        stagePaymentValue(
+          purchases,
+          "GRAFICOS",
+          project?.valor_graficos ||
+          project?.valor_etapa_2
+        )
+    },
+
+    projeto: {
+      pago:
+        access.projeto === true,
+
+      valorPago:
+        stagePaymentValue(
+          purchases,
+          "PROJETO_COMPLETO",
+          project?.valor_projeto ||
+          project?.valor_etapa_3
+        )
+    }
+  };
+}
+
+function firstMediaFromPurchases(
+  purchases,
+  ...fields
+) {
+  for (
+    const purchase of
+    newestFirst(purchases)
+  ) {
+    for (const field of fields) {
+      const source =
+        mediaSource(
+          purchase?.[field]
+        );
+
+      if (source) {
+        return source;
+      }
+    }
+  }
+
+  return "";
+}
+
+async function repairCurrentPurchase(
+  session,
+  purchases,
+  client
+) {
+  const paymentId =
+    safe(session?.paymentId);
+
+  if (!paymentId) {
+    return null;
+  }
+
+  const purchase =
+    purchases.find(
+      (item) =>
+        purchaseMatchesPayment(
+          item,
+          paymentId
+        )
+    );
+
+  if (!purchase) {
+    return null;
+  }
+
+  const clientId =
+    firstValue(
+      client?.clienteId,
+      session?.clienteId
+    );
+
+  const clientReference =
+    firstValue(
+      client?._id,
+      referenceId(purchase?.cliente)
+    );
+
+  const clientName =
+    safe(client?.nome);
+
+  const email =
+    firstValue(
+      client?.email,
+      session?.email
+    );
+
+  const whatsapp =
+    firstValue(
+      client?.whatsapp,
+      sessionWhatsapp(session)
+    );
+
+  const checkoutId =
+    safe(session?.checkoutId);
+
+  const deliveryToken =
+    sessionToken(session);
+
+  const projectCode =
+    normalizeProjectCode(
+      session?.codigoProjeto ||
+      purchase?.codigoProjeto
+    );
+
+  const purchaseKey =
+    clientId && projectCode
+      ? `${clientId}_${projectCode}`
+      : "";
+
+  const patch = {
+    ...purchase
+  };
+
+  let changed = false;
+
+  const setCanonical = (
+    field,
+    value
+  ) => {
+    if (
+      value &&
+      safe(patch[field]) !==
+      safe(value)
+    ) {
+      patch[field] = value;
+      changed = true;
+    }
+  };
+
+  setCanonical(
+    "clienteId",
+    clientId
+  );
+
+  setCanonical(
+    "nomeCliente",
+    clientName
+  );
+
+  setCanonical(
+    "email",
+    normalizeEmail(email)
+  );
+
+  setCanonical(
+    "whatsApp",
+    whatsapp
+  );
+
+  setCanonical(
+    "checkoutId",
+    checkoutId
+  );
+
+  setCanonical(
+    "tokenDeEntrega",
+    deliveryToken
+  );
+
+  setCanonical(
+    "chaveCompra",
+    purchaseKey
+  );
+
+  if (
+    clientName &&
+    projectCode
+  ) {
+    const canonicalTitle =
+      `PP-${projectCode} - ${clientName}`;
+
+    if (
+      safe(patch.title) !==
+      canonicalTitle
+    ) {
+      patch.title =
+        canonicalTitle;
+
+      changed = true;
+    }
+  }
+
+  if (
+    safe(patch.pagamento)
+      .toLowerCase() !== "approved"
+  ) {
+    patch.pagamento =
+      "approved";
+
+    changed = true;
+  }
+
+  if (
+    safe(patch.statusCompra)
+      .toLowerCase() !== "approved"
+  ) {
+    patch.statusCompra =
+      "approved";
+
+    changed = true;
+  }
+
+  if (!patch.dataLiberacao) {
+    patch.dataLiberacao =
+      new Date();
+
+    changed = true;
+  }
+
+  if (
+    !referenceId(patch.cliente) &&
+    clientReference
+  ) {
+    patch.cliente =
+      clientReference;
+
+    changed = true;
+  }
+
+  if (changed) {
+    return wixData.update(
+      PURCHASES_COLLECTION,
+      patch,
+      DB_OPTS
+    );
+  }
+
+  return purchase;
+}
+
+function canonicalProjectTitle(
+  project,
+  session
+) {
+  const codigoProjeto =
+    normalizeProjectCode(
+      session?.codigoProjeto
+    );
+
+  const base =
+    stripLeadingProjectCode(
+      project?.titulo_video
+    ) ||
+    stripLeadingProjectCode(
+      session?.produto
+    );
+
+  if (
+    codigoProjeto &&
+    base
+  ) {
+    return `#${codigoProjeto} ${base}`;
+  }
+
+  if (codigoProjeto) {
+    return `Projeto #${codigoProjeto}`;
+  }
+
+  return (
+    cleanProjectTitle(
+      project?.titulo_video
+    ) ||
+    safe(session?.produto)
+  );
+}
+
+function projectPayload(
+  project,
+  session,
+  purchases,
+  client
+) {
+  const codigoProjeto =
+    normalizeProjectCode(
+      session?.codigoProjeto
+    );
+
+  const imagemMedidas =
+    firstMediaFromPurchases(
+      purchases,
+      "imagemMedidas"
+    ) ||
+    mediaSource(
+      project?.imagemMedidas
+    );
+
+  const imagensGraficos = [
+    firstMediaFromPurchases(
+      purchases,
+      "imagemGrafico1"
+    ) ||
+      mediaSource(
+        project?.imagemGrafico1
+      ),
+
+    firstMediaFromPurchases(
+      purchases,
+      "imagemGrafico2"
+    ) ||
+      mediaSource(
+        project?.imagemGrafico2
+      ),
+
+    firstMediaFromPurchases(
+      purchases,
+      "imagemGrafico3"
+    ) ||
+      mediaSource(
+        project?.imagemGrafico3
+      ),
+
+    firstMediaFromPurchases(
+      purchases,
+      "imagemGrafico4"
+    ) ||
+      mediaSource(
+        project?.imagemGrafico4
+      )
+  ].filter(Boolean);
+
+  const pdfProject =
+    firstMediaFromPurchases(
+      purchases,
+      "arquivoProjeto",
+      "pdfProjeto"
+    ) ||
+    mediaSource(
+      project?.arquivoProjeto ||
+      project?.pdfProjeto
+    );
+
+  return {
+    codigoProjeto,
+
+    codigoCheckout:
+      firstValue(
+        project?.codigo_checkout,
+        session?.codigoCheckout
+      ),
+
+    sku:
+      codigoProjeto
+        ? `PP-${codigoProjeto}`
+        : safe(session?.sku),
+
+    titulo:
+      canonicalProjectTitle(
+        project,
+        session
+      ),
+
+    nomeCliente:
+      safe(client?.nome),
+
+    clienteId:
+      firstValue(
+        client?.clienteId,
+        session?.clienteId
+      ),
+
+    thumbnail:
+      mediaSource(
+        project?.thumbnail ||
+        session?.img
+      ),
+
+    imagemMedidas,
+
+    imagensGraficos,
+
+    pdfProjeto:
+      pdfProject,
+
+    valorMedidas:
+      Number(
+        project?.valor_medidas ||
+        project?.valor_etapa_1 ||
+        0
+      ),
+
+    valorGraficos:
+      Number(
+        project?.valor_graficos ||
+        project?.valor_etapa_2 ||
+        0
+      ),
+
+    valorProjeto:
+      Number(
+        project?.valor_projeto ||
+        project?.valor_etapa_3 ||
+        0
+      )
+  };
+}
+
+export async function obterAcessosProjeto(
+  input = {}
+) {
+  const codigoProjeto =
+    normalizeProjectCode(
+      input.codigoProjeto
+    );
+
+  if (!codigoProjeto) {
+    return {
+      ok: false,
+      error:
+        "CODIGO_PROJETO_AUSENTE"
+    };
+  }
+
+  const result =
+    await resolveAccess({
+      codigoProjeto,
+
+      clienteId:
+        input.clienteId,
+
+      email:
+        input.email,
+
+      whatsapp:
+        input.whatsApp ||
+        input.whatsapp,
+
+      paymentId:
+        input.paymentId
+    });
+
+  return {
+    ok: true,
+    codigoProjeto,
+    access:
+      result.access
+  };
+}
+
+export async function buscarEntregaProjetoPronto(
+  input = {}
+) {
+  const session =
+    await findSession({
+      checkoutId:
+        input.checkoutId,
+
+      token:
+        input.token
+    });
+
+  if (!session) {
+    return {
+      ok: false,
+      error:
+        "SESSAO_NAO_ENCONTRADA"
+    };
+  }
+
+  const safeSession =
+    publicSession(session);
+
+  if (
+    safeSession.status !==
+    "approved"
+  ) {
+    return {
+      ok: true,
+      approved: false,
+
+      status:
+        safeSession.status ||
+        "pending",
+
+      session: {
+        checkoutId:
+          safeSession.checkoutId
+      }
+    };
+  }
+
+  if (!safeSession.compraRegistrada) {
+    return {
+      ok: true,
+      approved: false,
+      status: "processing",
+
+      session: {
+        checkoutId:
+          safeSession.checkoutId
+      }
+    };
+  }
+
+  const project =
+    await findProject(session);
+
+  if (!project) {
+    return {
+      ok: false,
+      error:
+        "PROJETO_NAO_ENCONTRADO"
+    };
+  }
+
+  let allPurchases =
+    await queryPurchasesByProject(
+      safeSession.codigoProjeto
+    );
+
+  let client =
+    await findClientProfile(
+      session,
+      allPurchases
+    );
+
+  await repairCurrentPurchase(
+    session,
+    allPurchases,
+    client
+  );
+
+  allPurchases =
+    await queryPurchasesByProject(
+      safeSession.codigoProjeto
+    );
+
+  client =
+    await findClientProfile(
+      session,
+      allPurchases
+    );
+
+  const result =
+    resolveAccessFromPurchases({
+      purchases:
+        allPurchases,
+
+      clienteId:
+        safeSession.clienteId,
+
+      email:
+        safeSession.email,
+
+      whatsapp:
+        safeSession.whatsapp,
+
+      paymentId:
+        safeSession.paymentId
+    });
+
+  const projectData =
+    projectPayload(
+      project,
+      session,
+      result.purchases,
+      client
+    );
+
+  return {
+    ok: true,
+    approved: true,
+
+    session: {
+      ...safeSession,
+
+      nomeCliente:
+        safe(client?.nome)
+    },
+
+    client,
+
+    access:
+      result.access,
+
+    stages:
+      buildStages(
+        result.access,
+        result.purchases,
+        project
+      ),
+
+    project:
+      projectData
+  };
+}

@@ -1,0 +1,18 @@
+// backend/mpCheckoutPro-pro.jsw
+// ADAPTADOR TEMPORÁRIO
+// PROJETOS PRONTOS → VALIDAPAY
+//
+// Mantém o nome antigo para que as páginas existentes
+// não precisem ser alteradas durante a migração.
+
+import {
+  createCheckoutProPreference as criarCheckoutValidaPay
+} from "backend/validaPayProjetosProntos.jsw";
+
+export async function createCheckoutProPreference(
+  input = {}
+) {
+  return criarCheckoutValidaPay(
+    input
+  );
+}

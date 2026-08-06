@@ -1,0 +1,1942 @@
+import wixData from "wix-data";
+import { fetch } from "wix-fetch";
+import { getSecret } from "wix-secrets-backend";
+
+// backend/validaPayProjetosProntos.jsw
+// R6 — REUTILIZA PRODUTO/PREÇO
+// Um produto é criado por projeto + etapa + valor.
+// Cada nova tentativa cria somente uma sessão de checkout.
+//
+// PADRÕES:
+// - WhatsApp salvo no Wix como +55DDDNÚMERO;
+// - telefone enviado à ValidaPay sem o DDI 55;
+// - CPF/CNPJ salvo e enviado somente com números;
+// - título público com no mínimo 3 dígitos;
+// - SKU PP com 4 dígitos.
+
+const AUTH_URL =
+  "https://oauth2.validapay.com.br/auth/token";
+
+const API_BASE =
+  "https://api.validapay.com.br";
+
+const SITE_BASE =
+  "https://www.pelegobox.com.br";
+
+const SESSIONS_COLLECTION =
+  "SessoesProjetosProntos2";
+
+const CLIENTS_COLLECTION =
+  "Campo";
+
+const DB_OPTS = {
+  suppressAuth: true
+};
+
+const SCOPES = [
+  "pix.cob/read",
+  "pix.cob/write",
+  "webhooks/read",
+  "webhooks/write",
+  "products/read",
+  "products/write",
+  "checkouts/read",
+  "checkouts/write",
+  "customers/read",
+  "customers/write"
+].join(" ");
+
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+function safe(value) {
+  return String(
+    value ?? ""
+  ).trim();
+}
+
+
+function onlyDigits(value) {
+  return safe(value)
+    .replace(/\D/g, "");
+}
+
+
+function normalizeEmail(value) {
+  return safe(value)
+    .toLowerCase();
+}
+
+
+function now() {
+  return new Date();
+}
+
+
+function generateCheckoutId() {
+  return (
+    "ckpro_" +
+    Date.now()
+      .toString(36) +
+    "_" +
+    Math.random()
+      .toString(16)
+      .slice(2, 12)
+  );
+}
+
+
+function parseBRL(value) {
+  if (
+    value === undefined ||
+    value === null ||
+    safe(value) === ""
+  ) {
+    return 0;
+  }
+
+  if (
+    typeof value === "number"
+  ) {
+    return Number.isFinite(value)
+      ? Number(
+        value.toFixed(2)
+      )
+      : 0;
+  }
+
+  let text =
+    safe(value)
+      .replace(
+        /[^\d,.-]/g,
+        ""
+      );
+
+  if (
+    text.includes(",") &&
+    text.includes(".")
+  ) {
+    text =
+      text
+        .replace(/\./g, "")
+        .replace(",", ".");
+
+  } else if (
+    text.includes(",")
+  ) {
+    text =
+      text.replace(",", ".");
+  }
+
+  const number =
+    Number(text);
+
+  return Number.isFinite(number)
+    ? Number(
+      number.toFixed(2)
+    )
+    : 0;
+}
+
+
+function sameMoney(
+  left,
+  right
+) {
+  return (
+    Math.abs(
+      parseBRL(left) -
+      parseBRL(right)
+    ) < 0.005
+  );
+}
+
+
+function limitText(
+  value,
+  maximum
+) {
+  return safe(value)
+    .replace(/\s+/g, " ")
+    .slice(0, maximum);
+}
+
+
+function decodeEntities(value) {
+  return safe(value)
+    .replace(
+      /&amp;quot;/gi,
+      '"'
+    )
+    .replace(
+      /&quot;|&#34;|&#x22;/gi,
+      '"'
+    )
+    .replace(
+      /&apos;|&#39;/gi,
+      "'"
+    )
+    .replace(
+      /&amp;/gi,
+      "&"
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+
+function normalizeProductType(value) {
+  const type =
+    safe(value)
+      .normalize("NFD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .toUpperCase()
+      .replace(
+        /[\s-]+/g,
+        "_"
+      );
+
+  return [
+    "MEDIDAS",
+    "GRAFICOS",
+    "PROJETO_COMPLETO"
+  ].includes(type)
+    ? type
+    : "MEDIDAS";
+}
+
+
+function stageLabel(
+  tipoProduto
+) {
+  const type =
+    normalizeProductType(
+      tipoProduto
+    );
+
+  if (
+    type === "GRAFICOS"
+  ) {
+    return "ANÁLISES GRÁFICAS";
+  }
+
+  if (
+    type === "PROJETO_COMPLETO"
+  ) {
+    return "PROJETO COMPLETO";
+  }
+
+  return "MEDIDAS";
+}
+
+
+function formatCodigoPublico(value) {
+  const codigo =
+    onlyDigits(value);
+
+  if (!codigo) {
+    return "";
+  }
+
+  const numero =
+    Number(codigo);
+
+  if (!Number.isFinite(numero)) {
+    return codigo;
+  }
+
+  if (numero <= 100) {
+    return String(numero)
+      .padStart(3, "0");
+  }
+
+  return String(numero);
+}
+
+
+function normalizeSku(
+  value,
+  codigoProjeto
+) {
+  const informado =
+    safe(value);
+
+  const match =
+    informado.match(
+      /^PP[-\s]?(\d+)$/i
+    );
+
+  if (match) {
+    return (
+      `PP-${String(
+        Number(match[1])
+      ).padStart(4, "0")}`
+    );
+  }
+
+  if (informado) {
+    return informado;
+  }
+
+  const codigo =
+    onlyDigits(codigoProjeto);
+
+  return codigo
+    ? `PP-${String(Number(codigo)).padStart(4, "0")}`
+    : "PP";
+}
+
+
+function removeStagePrefix(value) {
+  return decodeEntities(value)
+    .replace(
+      /^\s*#?\s*\d+\s*/i,
+      ""
+    )
+    .replace(
+      /^(?:MEDIDAS\s+DO\s+PROJETO\s+PRONTO\s+PARA|ANÁLISES?\s+GRÁFICAS?\s+DO\s+PROJETO\s+PRONTO\s+PARA|PROJETO\s+COMPLETO\s+PARA)\s+/i,
+      ""
+    )
+    .replace(
+      /^[\s\-–—:]+/,
+      ""
+    )
+    .trim();
+}
+
+
+function buildProductName({
+  produto,
+  codigoProjeto
+}) {
+  const base =
+    removeStagePrefix(
+      produto
+    );
+
+  const codigoPublico =
+    formatCodigoPublico(
+      codigoProjeto
+    );
+
+  if (
+    codigoPublico &&
+    base
+  ) {
+    return (
+      `#${codigoPublico} ${base}`
+    );
+  }
+
+  if (codigoPublico) {
+    return (
+      `PROJETO PRONTO #${codigoPublico}`
+    );
+  }
+
+  return (
+    base ||
+    "PROJETO PRONTO"
+  );
+}
+
+
+async function readResponse(
+  response
+) {
+  const text =
+    await response.text();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+
+  } catch (_) {
+    return {
+      raw: text
+    };
+  }
+}
+
+
+function apiErrorMessage(
+  data,
+  status
+) {
+  return (
+    safe(
+      data?.error?.message
+    ) ||
+    safe(
+      data?.error_description
+    ) ||
+    safe(
+      data?.message
+    ) ||
+    (
+      typeof data?.error ===
+      "string"
+        ? safe(data.error)
+        : ""
+    ) ||
+    safe(
+      data?.code
+    ) ||
+    safe(
+      data?.raw
+    ) ||
+    `ValidaPay respondeu HTTP ${status}.`
+  );
+}
+
+
+// ======================================================
+// CPF/CNPJ
+// ======================================================
+
+function cpfValido(value) {
+  const cpf =
+    onlyDigits(value);
+
+  if (
+    cpf.length !== 11 ||
+    /^(\d)\1{10}$/.test(cpf)
+  ) {
+    return false;
+  }
+
+  let soma = 0;
+
+  for (
+    let index = 0;
+    index < 9;
+    index += 1
+  ) {
+    soma +=
+      Number(cpf[index]) *
+      (10 - index);
+  }
+
+  let digito =
+    (soma * 10) % 11;
+
+  if (digito === 10) {
+    digito = 0;
+  }
+
+  if (
+    digito !==
+    Number(cpf[9])
+  ) {
+    return false;
+  }
+
+  soma = 0;
+
+  for (
+    let index = 0;
+    index < 10;
+    index += 1
+  ) {
+    soma +=
+      Number(cpf[index]) *
+      (11 - index);
+  }
+
+  digito =
+    (soma * 10) % 11;
+
+  if (digito === 10) {
+    digito = 0;
+  }
+
+  return (
+    digito ===
+    Number(cpf[10])
+  );
+}
+
+
+function calcularDigitoCnpj(
+  base,
+  pesos
+) {
+  let soma = 0;
+
+  for (
+    let index = 0;
+    index < pesos.length;
+    index += 1
+  ) {
+    soma +=
+      Number(base[index]) *
+      pesos[index];
+  }
+
+  const resto =
+    soma % 11;
+
+  return resto < 2
+    ? 0
+    : 11 - resto;
+}
+
+
+function cnpjValido(value) {
+  const cnpj =
+    onlyDigits(value);
+
+  if (
+    cnpj.length !== 14 ||
+    /^(\d)\1{13}$/.test(cnpj)
+  ) {
+    return false;
+  }
+
+  const base =
+    cnpj.slice(0, 12);
+
+  const digito1 =
+    calcularDigitoCnpj(
+      base,
+      [
+        5, 4, 3, 2,
+        9, 8, 7, 6,
+        5, 4, 3, 2
+      ]
+    );
+
+  const digito2 =
+    calcularDigitoCnpj(
+      base + digito1,
+      [
+        6, 5, 4, 3, 2,
+        9, 8, 7, 6,
+        5, 4, 3, 2
+      ]
+    );
+
+  return (
+    cnpj ===
+    base +
+    digito1 +
+    digito2
+  );
+}
+
+
+function documentoValido(value) {
+  const documento =
+    onlyDigits(value);
+
+  if (documento.length === 11) {
+    return cpfValido(documento);
+  }
+
+  if (documento.length === 14) {
+    return cnpjValido(documento);
+  }
+
+  return false;
+}
+
+
+function getCpfCnpj({
+  client,
+  input,
+  ctx
+}) {
+  return onlyDigits(
+    input?.cpfCnpj ||
+    input?.cpf ||
+    input?.cnpj ||
+    input?.documentNumber ||
+    ctx?.cpfCnpj ||
+    ctx?.cpf ||
+    ctx?.cnpj ||
+    ctx?.documentNumber ||
+    client?.cpfCnpj ||
+    client?.cpf ||
+    client?.cnpj ||
+    client?.documentNumber
+  );
+}
+
+
+// ======================================================
+// AUTENTICAÇÃO
+// ======================================================
+
+async function getValidaPayToken() {
+  const clientId =
+    safe(
+      await getSecret(
+        "VALIDAPAY_CLIENT_ID"
+      )
+    );
+
+  const clientSecret =
+    safe(
+      await getSecret(
+        "VALIDAPAY_CLIENT_SECRET"
+      )
+    );
+
+  if (
+    !clientId ||
+    !clientSecret
+  ) {
+    throw new Error(
+      "Credenciais da ValidaPay não encontradas."
+    );
+  }
+
+  const body = [
+    "grant_type=client_credentials",
+
+    `client_id=${encodeURIComponent(
+      clientId
+    )}`,
+
+    `client_secret=${encodeURIComponent(
+      clientSecret
+    )}`,
+
+    `scope=${encodeURIComponent(
+      SCOPES
+    )}`
+  ].join("&");
+
+  const response =
+    await fetch(
+      AUTH_URL,
+      {
+        method:
+          "post",
+
+        headers: {
+          "Content-Type":
+            "application/x-www-form-urlencoded"
+        },
+
+        body
+      }
+    );
+
+  const data =
+    await readResponse(
+      response
+    );
+
+  if (
+    !response.ok ||
+    !safe(
+      data?.access_token
+    )
+  ) {
+    throw new Error(
+      apiErrorMessage(
+        data,
+        response.status
+      )
+    );
+  }
+
+  return safe(
+    data.access_token
+  );
+}
+
+
+// ======================================================
+// API VALIDAPAY
+// ======================================================
+
+async function requestValidaPay({
+  path,
+  method = "get",
+  body
+}) {
+  const accessToken =
+    await getValidaPayToken();
+
+  const options = {
+    method,
+
+    headers: {
+      Authorization:
+        `Bearer ${accessToken}`,
+
+      "Content-Type":
+        "application/json"
+    }
+  };
+
+  if (
+    body !== undefined
+  ) {
+    options.body =
+      JSON.stringify(body);
+  }
+
+  const response =
+    await fetch(
+      `${API_BASE}${path}`,
+      options
+    );
+
+  const data =
+    await readResponse(
+      response
+    );
+
+  if (!response.ok) {
+    console.error(
+      "VALIDAPAY API ERROR:",
+      {
+        path,
+
+        status:
+          response.status,
+
+        data
+      }
+    );
+
+    throw new Error(
+      apiErrorMessage(
+        data,
+        response.status
+      )
+    );
+  }
+
+  return data;
+}
+
+
+// ======================================================
+// URLS
+// ======================================================
+
+function fallbackReturnUrl(
+  codigoProjeto
+) {
+  const code =
+    onlyDigits(
+      codigoProjeto
+    );
+
+  return code
+    ? (
+      `${SITE_BASE}/checkoutprojetosprontos` +
+      `?codigo=${encodeURIComponent(code)}`
+    )
+    : (
+      `${SITE_BASE}/checkoutprojetosprontos`
+    );
+}
+
+
+function cleanReturnUrl({
+  codigoProjeto,
+  returnUrl
+}) {
+  const original =
+    safe(returnUrl);
+
+  if (!original) {
+    return fallbackReturnUrl(
+      codigoProjeto
+    );
+  }
+
+  try {
+    const url =
+      new URL(
+        original,
+        SITE_BASE
+      );
+
+    const official =
+      new URL(
+        SITE_BASE
+      );
+
+    const hostname =
+      url.hostname
+        .toLowerCase()
+        .replace(
+          /^www\./,
+          ""
+        );
+
+    const officialHostname =
+      official.hostname
+        .toLowerCase()
+        .replace(
+          /^www\./,
+          ""
+        );
+
+    if (
+      hostname !==
+      officialHostname
+    ) {
+      throw new Error(
+        "Host de retorno não permitido."
+      );
+    }
+
+    [
+      "collection_id",
+      "collection_status",
+      "payment_id",
+      "status",
+      "external_reference",
+      "payment_type",
+      "merchant_order_id",
+      "preference_id",
+      "site_id",
+      "processing_mode",
+      "merchant_account_id"
+    ].forEach(
+      (key) => {
+        url.searchParams.delete(
+          key
+        );
+      }
+    );
+
+    url.protocol =
+      official.protocol;
+
+    url.hostname =
+      official.hostname;
+
+    url.port =
+      official.port;
+
+    return url.toString();
+
+  } catch (error) {
+    console.warn(
+      "ReturnUrl inválida:",
+      error?.message ||
+      error
+    );
+
+    return fallbackReturnUrl(
+      codigoProjeto
+    );
+  }
+}
+
+
+// ======================================================
+// CLIENTE
+// ======================================================
+
+async function findClientById(
+  clienteId
+) {
+  const id =
+    safe(clienteId);
+
+  if (!id) {
+    return null;
+  }
+
+  try {
+    const item =
+      await wixData.get(
+        CLIENTS_COLLECTION,
+        id,
+        DB_OPTS
+      );
+
+    if (item) {
+      return item;
+    }
+
+  } catch (_) {
+    /*
+      Continua pela consulta do campo clienteId.
+    */
+  }
+
+  try {
+    const result =
+      await wixData
+        .query(
+          CLIENTS_COLLECTION
+        )
+        .eq(
+          "clienteId",
+          id
+        )
+        .limit(1)
+        .find(DB_OPTS);
+
+    return result.items.length
+      ? result.items[0]
+      : null;
+
+  } catch (error) {
+    console.warn(
+      "Cliente não localizado:",
+      error?.message ||
+      error
+    );
+
+    return null;
+  }
+}
+
+
+function buildPhone({
+  whatsapp,
+  whatsappE164
+}) {
+  let digits =
+    onlyDigits(
+      whatsappE164 ||
+      whatsapp
+    );
+
+  if (
+    digits.startsWith("55") &&
+    (
+      digits.length === 12 ||
+      digits.length === 13
+    )
+  ) {
+    digits =
+      digits.slice(2);
+  }
+
+  const valid =
+    digits.length === 10 ||
+    digits.length === 11;
+
+  if (!valid) {
+    return {
+      local: "",
+      e164: "",
+      checkoutPhone: ""
+    };
+  }
+
+  return {
+    local:
+      digits,
+
+    e164:
+      `+55${digits}`,
+
+    /*
+      A ValidaPay recebe temporariamente
+      somente DDD + número, sem o DDI 55.
+    */
+    checkoutPhone:
+      digits
+  };
+}
+
+
+function getClientName(
+  client,
+  input,
+  ctx
+) {
+  const name =
+    safe(
+      input.nomeCliente ||
+      input.nome ||
+      ctx.nomeCliente ||
+      ctx.nome ||
+      client?.nome ||
+      client?.title
+    );
+
+  if (name) {
+    return decodeEntities(
+      name
+    );
+  }
+
+  const email =
+    normalizeEmail(
+      input.email ||
+      ctx.email ||
+      client?.email
+    );
+
+  return email
+    ? email
+        .split("@")[0]
+        .replace(
+          /[._-]+/g,
+          " "
+        )
+        .trim()
+    : "Cliente";
+}
+
+
+// ======================================================
+// SESSÕES WIX
+// ======================================================
+
+async function findSessionByCheckoutId(
+  checkoutId
+) {
+  const result =
+    await wixData
+      .query(
+        SESSIONS_COLLECTION
+      )
+      .eq(
+        "checkoutId",
+        checkoutId
+      )
+      .limit(1)
+      .find(DB_OPTS);
+
+  return result.items.length
+    ? result.items[0]
+    : null;
+}
+
+
+async function upsertSession(
+  checkoutId,
+  patch
+) {
+  const existing =
+    await findSessionByCheckoutId(
+      checkoutId
+    );
+
+  if (existing) {
+    return wixData.update(
+      SESSIONS_COLLECTION,
+      {
+        ...existing,
+        ...patch,
+        checkoutId
+      },
+      DB_OPTS
+    );
+  }
+
+  return wixData.insert(
+    SESSIONS_COLLECTION,
+    {
+      checkoutId,
+      ...patch
+    },
+    DB_OPTS
+  );
+}
+
+
+async function findReusableProduct({
+  codigoProjeto,
+  codigoCheckout,
+  tipoProduto,
+  valor
+}) {
+  const result =
+    await wixData
+      .query(
+        SESSIONS_COLLECTION
+      )
+      .eq(
+        "codigoProjeto",
+        codigoProjeto
+      )
+      .eq(
+        "codigoCheckout",
+        codigoCheckout
+      )
+      .eq(
+        "tipoProduto",
+        tipoProduto
+      )
+      .descending(
+        "_createdDate"
+      )
+      .limit(100)
+      .find(DB_OPTS);
+
+  const item =
+    result.items.find(
+      (session) => (
+        safe(
+          session?.validaPayProductId
+        ) &&
+        safe(
+          session?.validaPayPriceId
+        ) &&
+        sameMoney(
+          session?.valor,
+          valor
+        )
+      )
+    );
+
+  if (!item) {
+    return null;
+  }
+
+  return {
+    productId:
+      safe(
+        item.validaPayProductId
+      ),
+
+    priceId:
+      safe(
+        item.validaPayPriceId
+      )
+  };
+}
+
+
+// ======================================================
+// PRODUTO VALIDAPAY
+// ======================================================
+
+async function createValidaPayProduct({
+  checkoutId,
+  productName,
+  priceTitle,
+  sku,
+  valor,
+  codigoProjeto,
+  codigoCheckout,
+  tipoProduto
+}) {
+  const data =
+    await requestValidaPay({
+      path:
+        "/v1/products",
+
+      method:
+        "post",
+
+      body: {
+        name:
+          limitText(
+            productName,
+            150
+          ),
+
+        description:
+          limitText(
+            [
+              `Projeto Pronto #${formatCodigoPublico(codigoProjeto)}`,
+
+              sku
+                ? `SKU ${sku}`
+                : "",
+
+              stageLabel(
+                tipoProduto
+              )
+            ]
+              .filter(Boolean)
+              .join(" | "),
+            250
+          ),
+
+        type:
+          "ONE_TIME",
+
+        statementDescriptor:
+          "PELEGO BOX",
+
+        isActive:
+          true,
+
+        metadata: {
+          checkoutId,
+          codigoProjeto,
+          codigoCheckout,
+          tipoProduto,
+          sku
+        },
+
+        prices: [
+          {
+            title:
+              limitText(
+                priceTitle,
+                100
+              ),
+
+            amount:
+              valor,
+
+            currency:
+              "BRL",
+
+            recurrenceType:
+              "ONE_TIME",
+
+            recurrenceInterval:
+              1
+          }
+        ]
+      }
+    });
+
+  const productId =
+    safe(
+      data?.productId
+    );
+
+  const priceId =
+    safe(
+      data?.prices?.[0]?.priceId
+    );
+
+  if (
+    !productId ||
+    !priceId
+  ) {
+    console.error(
+      "Produto ValidaPay incompleto:",
+      data
+    );
+
+    throw new Error(
+      "A ValidaPay não devolveu Product ID e Price ID."
+    );
+  }
+
+  return {
+    productId,
+    priceId
+  };
+}
+
+
+// ======================================================
+// SESSÃO DE CHECKOUT
+// ======================================================
+
+async function createValidaPaySession({
+  checkoutId,
+  priceId,
+  cliente,
+  successUrl,
+  failureUrl,
+  metadata
+}) {
+  const data =
+    await requestValidaPay({
+      path:
+        "/v1/checkout-sessions",
+
+      method:
+        "post",
+
+      body: {
+        priceId,
+
+        allowedPaymentMethods: [
+          "pix",
+          "creditcard"
+        ],
+
+        customer: {
+          name:
+            safe(
+              cliente.nome
+            ),
+
+          email:
+            normalizeEmail(
+              cliente.email
+            ),
+
+          documentNumber:
+            onlyDigits(
+              cliente.cpfCnpj
+            ),
+
+          phone:
+            onlyDigits(
+              cliente.phone
+            )
+        },
+
+        items: [
+          {
+            priceId,
+            quantity: 1
+          }
+        ],
+
+        installments:
+          1,
+
+        passFeesToCustomer:
+          false,
+
+        freeInstallments:
+          1,
+
+        maxInstallments:
+          12,
+
+        primaryColor:
+          "#159447",
+
+        secondaryColor:
+          "#FFFFFF",
+
+        fontColor:
+          "#111111",
+
+        companyName:
+          "Pelego Box",
+
+        successUrl,
+
+        failureUrl,
+
+        metadata: {
+          checkoutId,
+          ...metadata
+        }
+      }
+    });
+
+  const sessionId =
+    safe(
+      data?.id
+    );
+
+  const checkoutUrl =
+    safe(
+      data?.url
+    );
+
+  if (
+    !sessionId ||
+    !checkoutUrl
+  ) {
+    console.error(
+      "Sessão ValidaPay incompleta:",
+      data
+    );
+
+    throw new Error(
+      "A ValidaPay não devolveu o ID ou a URL da sessão."
+    );
+  }
+
+  return {
+    sessionId,
+
+    checkoutUrl,
+
+    priceId:
+      safe(
+        data?.priceId
+      ) ||
+      priceId
+  };
+}
+
+
+// ======================================================
+// FUNÇÃO PRINCIPAL
+// ======================================================
+
+export async function createCheckoutProPreference(
+  input = {}
+) {
+  let checkoutId =
+    safe(
+      input.checkoutId
+    ) ||
+    generateCheckoutId();
+
+  try {
+    const ctx =
+      input.ctx || {};
+
+    const originalProductTitle =
+      decodeEntities(
+        ctx.produto ||
+        ctx.titulo ||
+        ctx.name ||
+        input.produto ||
+        "Projeto Pronto"
+      );
+
+    const codigoProjeto =
+      onlyDigits(
+        ctx.codigoProjeto ||
+        input.codigoProjeto
+      );
+
+    const codigoCheckout =
+      safe(
+        ctx.codigoCheckout ||
+        input.codigoCheckout ||
+        ctx.productId
+      );
+
+    const tipoProduto =
+      normalizeProductType(
+        ctx.tipoProduto ||
+        input.tipoProduto
+      );
+
+    const sku =
+      normalizeSku(
+        ctx.sku ||
+        input.sku,
+        codigoProjeto
+      );
+
+    const img =
+      safe(
+        ctx.img ||
+        ctx.imagem ||
+        input.img ||
+        input.imagem
+      );
+
+    const valor =
+      parseBRL(
+        ctx.valor ??
+        ctx.price ??
+        input.valor
+      );
+
+    if (
+      !codigoProjeto ||
+      !codigoCheckout ||
+      !(valor > 0)
+    ) {
+      return {
+        ok:
+          false,
+
+        error:
+          "Dados do produto incompletos para criar o checkout ValidaPay."
+      };
+    }
+
+    const clienteId =
+      safe(
+        input.clienteId ||
+        ctx.clienteId
+      );
+
+    if (!clienteId) {
+      return {
+        ok:
+          false,
+
+        error:
+          "Cliente não identificado para abrir o checkout."
+      };
+    }
+
+    const client =
+      await findClientById(
+        clienteId
+      );
+
+    if (!client) {
+      return {
+        ok:
+          false,
+
+        error:
+          "Cliente não encontrado na coleção Clientes."
+      };
+    }
+
+    const email =
+      normalizeEmail(
+        input.email ||
+        ctx.email ||
+        client.email
+      );
+
+    const phone =
+      buildPhone({
+        whatsapp:
+          input.whatsapp ||
+          ctx.whatsapp ||
+          client.whatsapp,
+
+        whatsappE164:
+          input.whatsappE164 ||
+          ctx.whatsappE164
+      });
+
+    const nome =
+      getClientName(
+        client,
+        input,
+        ctx
+      );
+
+    const cpfCnpj =
+      getCpfCnpj({
+        client,
+        input,
+        ctx
+      });
+
+    if (!nome) {
+      return {
+        ok:
+          false,
+
+        error:
+          "Nome do cliente não encontrado."
+      };
+    }
+
+    if (!email) {
+      return {
+        ok:
+          false,
+
+        error:
+          "E-mail do cliente não encontrado."
+      };
+    }
+
+    if (!phone.local) {
+      return {
+        ok:
+          false,
+
+        error:
+          "WhatsApp do cliente não encontrado ou inválido."
+      };
+    }
+
+    if (!cpfCnpj) {
+      return {
+        ok:
+          false,
+
+        error:
+          "CPF/CNPJ não encontrado no cadastro do cliente."
+      };
+    }
+
+    if (!documentoValido(cpfCnpj)) {
+      return {
+        ok:
+          false,
+
+        error:
+          "O CPF/CNPJ cadastrado é inválido."
+      };
+    }
+
+    const productName =
+      buildProductName({
+        produto:
+          originalProductTitle,
+
+        codigoProjeto
+      });
+
+    const priceTitle =
+      stageLabel(
+        tipoProduto
+      );
+
+    const returnUrl =
+      cleanReturnUrl({
+        codigoProjeto,
+
+        returnUrl:
+          input.returnUrl ||
+          ctx.returnUrl
+      });
+
+    const successUrl =
+      (
+        `${SITE_BASE}/entregaprojetosprontos` +
+        `?checkout_id=${encodeURIComponent(checkoutId)}`
+      );
+
+    const currentDate =
+      now();
+
+    await upsertSession(
+      checkoutId,
+      {
+        preferenceId:
+          "",
+
+        paymentId:
+          "",
+
+        status:
+          "pending",
+
+        clienteId,
+
+        whatsapp:
+          phone.e164,
+
+        email,
+
+        codigoProjeto,
+
+        codigoCheckout,
+
+        sku,
+
+        tipoProduto,
+
+        produto:
+          productName,
+
+        img,
+
+        valor,
+
+        returnUrl,
+
+        compraRegistrada:
+          false,
+
+        tokenEntrega:
+          "",
+
+        validaPayProductId:
+          "",
+
+        validaPayPriceId:
+          "",
+
+        validaPayChargeId:
+          "",
+
+        emailEnviadoEm:
+          null,
+
+        abandonSentAt:
+          null,
+
+        abandonSent:
+          false,
+
+        chatbotVendaEnviado:
+          false,
+
+        nomeCliente:
+          nome,
+
+        cpfCnpj,
+
+        createdAtDate:
+          currentDate,
+
+        updatedAtDate:
+          currentDate
+      }
+    );
+
+    /*
+      Busca produto e preço já existentes.
+    */
+
+    let product =
+      await findReusableProduct({
+        codigoProjeto,
+        codigoCheckout,
+        tipoProduto,
+        valor
+      });
+
+    let productReused =
+      Boolean(product);
+
+    if (!product) {
+      product =
+        await createValidaPayProduct({
+          checkoutId,
+          productName,
+          priceTitle,
+          sku,
+          valor,
+          codigoProjeto,
+          codigoCheckout,
+          tipoProduto
+        });
+    }
+
+    await upsertSession(
+      checkoutId,
+      {
+        validaPayProductId:
+          product.productId,
+
+        validaPayPriceId:
+          product.priceId,
+
+        updatedAtDate:
+          now()
+      }
+    );
+
+    const sessionInput = {
+      checkoutId,
+
+      priceId:
+        product.priceId,
+
+      cliente: {
+        nome,
+        email,
+        cpfCnpj,
+
+        phone:
+          phone.checkoutPhone
+      },
+
+      successUrl,
+
+      failureUrl:
+        returnUrl,
+
+      metadata: {
+        checkoutId,
+        codigoProjeto,
+        codigoCheckout,
+        tipoProduto,
+        sku,
+        clienteId,
+
+        nomeCliente:
+          nome,
+
+        email,
+        cpfCnpj,
+
+        whatsapp:
+          phone.e164,
+
+        whatsappValidaPay:
+          phone.checkoutPhone,
+
+        valor
+      }
+    };
+
+    let session;
+
+    try {
+      session =
+        await createValidaPaySession(
+          sessionInput
+        );
+
+    } catch (error) {
+      /*
+        Se o produto antigo foi apagado ou
+        desativado, cria outro apenas uma vez.
+      */
+
+      if (!productReused) {
+        throw error;
+      }
+
+      console.warn(
+        "Preço antigo inválido. Criando novo produto:",
+        error?.message ||
+        error
+      );
+
+      product =
+        await createValidaPayProduct({
+          checkoutId,
+          productName,
+          priceTitle,
+          sku,
+          valor,
+          codigoProjeto,
+          codigoCheckout,
+          tipoProduto
+        });
+
+      productReused =
+        false;
+
+      await upsertSession(
+        checkoutId,
+        {
+          validaPayProductId:
+            product.productId,
+
+          validaPayPriceId:
+            product.priceId,
+
+          updatedAtDate:
+            now()
+        }
+      );
+
+      session =
+        await createValidaPaySession({
+          ...sessionInput,
+
+          priceId:
+            product.priceId
+        });
+    }
+
+    await upsertSession(
+      checkoutId,
+      {
+        preferenceId:
+          session.sessionId,
+
+        validaPayPriceId:
+          session.priceId,
+
+        updatedAtDate:
+          now()
+      }
+    );
+
+    return {
+      ok:
+        true,
+
+      checkoutId,
+
+      preferenceId:
+        session.sessionId,
+
+      init_point:
+        session.checkoutUrl,
+
+      returnUrl,
+
+      provider:
+        "VALIDAPAY",
+
+      validaPaySessionId:
+        session.sessionId,
+
+      validaPayProductId:
+        product.productId,
+
+      validaPayPriceId:
+        session.priceId,
+
+      productReused
+    };
+
+  } catch (error) {
+    console.error(
+      "ERRO CHECKOUT VALIDAPAY:",
+      error?.message ||
+      error,
+      error
+    );
+
+    try {
+      await upsertSession(
+        checkoutId,
+        {
+          status:
+            "error",
+
+          updatedAtDate:
+            now()
+        }
+      );
+
+    } catch (_) {
+      /*
+        Preserva o erro principal.
+      */
+    }
+
+    return {
+      ok:
+        false,
+
+      checkoutId,
+
+      error:
+        error?.message ||
+        "Não foi possível abrir o checkout ValidaPay."
+    };
+  }
+}
+
+
+// ======================================================
+// TESTE DE AUTENTICAÇÃO
+// ======================================================
+
+export async function testarAutenticacaoValidaPay() {
+  try {
+    const accessToken =
+      await getValidaPayToken();
+
+    return {
+      ok:
+        true,
+
+      ambiente:
+        "production",
+
+      tokenRecebido:
+        Boolean(
+          accessToken
+        ),
+
+      tokenType:
+        "Bearer",
+
+      scopes:
+        SCOPES
+    };
+
+  } catch (error) {
+    return {
+      ok:
+        false,
+
+      ambiente:
+        "production",
+
+      error:
+        error?.message ||
+        "Falha ao autenticar na ValidaPay."
+    };
+  }
+}

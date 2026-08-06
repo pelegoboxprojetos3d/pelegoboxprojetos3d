@@ -1,4 +1,8 @@
 import wixData from "wix-data";
+import {
+  normalizarWhatsappBrasil,
+  tituloProdutoComCodigoCheckout
+} from "backend/projetosProntosNormalizacao";
 
 // TÍTULO NO WIX: backend/entregaProjetosProntos.jsw
 // R6 — PROJETO PELO CÓDIGO + CLIENTE CANÔNICO + ENTREGA UNIFICADA
@@ -168,8 +172,8 @@ function sessionToken(item) {
 
 function purchaseWhatsapp(item) {
   return firstValue(
-    item?.whatsApp,
-    item?.whatsapp
+    item?.whatsapp,
+    item?.whatsApp
   );
 }
 
@@ -1202,9 +1206,14 @@ async function repairCurrentPurchase(
   );
 
   setCanonical(
-    "whatsApp",
-    whatsapp
+    "whatsapp",
+    normalizarWhatsappBrasil(whatsapp)
   );
+
+  if (Object.prototype.hasOwnProperty.call(patch, "whatsApp")) {
+    delete patch.whatsApp;
+    changed = true;
+  }
 
   setCanonical(
     "checkoutId",
@@ -1304,22 +1313,30 @@ function canonicalProjectTitle(
       session?.produto
     );
 
+  let title = "";
+
   if (
     codigoProjeto &&
     base
   ) {
-    return `#${codigoProjeto} ${base}`;
+    title = `#${codigoProjeto} ${base}`;
+  } else if (codigoProjeto) {
+    title = `Projeto #${codigoProjeto}`;
+  } else {
+    title = (
+      cleanProjectTitle(
+        project?.titulo_video
+      ) ||
+      safe(session?.produto)
+    );
   }
 
-  if (codigoProjeto) {
-    return `Projeto #${codigoProjeto}`;
-  }
-
-  return (
-    cleanProjectTitle(
-      project?.titulo_video
-    ) ||
-    safe(session?.produto)
+  return tituloProdutoComCodigoCheckout(
+    title,
+    firstValue(
+      project?.codigo_checkout,
+      session?.codigoCheckout
+    )
   );
 }
 

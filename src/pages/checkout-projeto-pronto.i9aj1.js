@@ -1,6 +1,11 @@
 import wixLocation from "wix-location";
 
 import {
+  local,
+  session
+} from "wix-storage-frontend";
+
+import {
   buscarCliente,
   criarCliente
 } from "backend/clientes.web";
@@ -18,8 +23,15 @@ import {
 // HTML: #htmlIframeMP
 // R21 — CONTRATO ANTIGO DO HTML + RECUPERAÇÃO DO PIX
 
+const PIX_POLL_INTERVALO_RAPIDO = 750;
 const PIX_POLL_INTERVALO = 2500;
 const PIX_POLL_MAX_TENTATIVAS = 240;
+
+const SESSION_KEY =
+  "pp_identificacao_atual";
+
+const LOCAL_KEY =
+  "pp_identificacao_persistente";
 const PIX_RECOVERY_TENTATIVAS = 8;
 const PIX_RECOVERY_ESPERA = 750;
 
@@ -43,6 +55,7 @@ let acessoPendente = null;
 let chargeIdAtual = "";
 let pollingPix = false;
 let pixPollTimer = null;
+let pixConteudoEnviado = false;
 
 
 // ======================================================
@@ -338,10 +351,56 @@ function urlEntrega() {
   );
 }
 
+function lerIdentificacaoSalva() {
+  const fontes = [
+    {
+      storage: session,
+      key: SESSION_KEY
+    },
+    {
+      storage: local,
+      key: LOCAL_KEY
+    }
+  ];
+
+  for (const fonte of fontes) {
+    try {
+      const raw =
+        fonte.storage.getItem(
+          fonte.key
+        );
+
+      if (!raw) {
+        continue;
+      }
+
+      const data =
+        JSON.parse(raw);
+
+      if (
+        data &&
+        typeof data === "object"
+      ) {
+        return data;
+      }
+
+    } catch (_) {
+      /*
+        Ignora identificação antiga ou inválida.
+      */
+    }
+  }
+
+  return {};
+}
+
 function contextoDaUrl() {
   const query =
     wixLocation.query ||
     {};
+
+  const identificacao =
+    lerIdentificacaoSalva();
 
   const codigoProjeto =
     digits(
@@ -400,54 +459,58 @@ function contextoDaUrl() {
         "MEDIDAS"
       ).toUpperCase(),
 
+    /*
+      Dados pessoais vêm do armazenamento do navegador,
+      nunca da URL pública.
+    */
     whatsapp:
       digits(
-        query.whatsapp ||
+        identificacao.whatsapp ||
         ""
       ),
 
     whatsappE164:
       safe(
-        query.whatsappE164 ||
+        identificacao.whatsappE164 ||
         ""
       ),
 
     ddi:
       digits(
-        query.ddi ||
+        identificacao.ddi ||
         "55"
       ),
 
     country:
       safe(
-        query.country ||
+        identificacao.country ||
         "br"
       ).toLowerCase(),
 
     clienteId:
       safe(
-        query.clienteId ||
+        identificacao.clienteId ||
         ""
       ),
 
     nome:
       safe(
-        query.nome ||
-        query.nomeCliente ||
+        identificacao.nome ||
+        identificacao.nomeCliente ||
         ""
       ),
 
     email:
       normalizarEmail(
-        query.email ||
+        identificacao.email ||
         ""
       ),
 
     cpfCnpj:
       normalizarCpfCnpj(
-        query.cpfCnpj ||
-        query.cpf ||
-        query.cnpj ||
+        identificacao.cpfCnpj ||
+        identificacao.cpf ||
+        identificacao.cnpj ||
         ""
       ),
 
@@ -965,6 +1028,9 @@ function respostaPixPronta(response) {
 }
 
 function enviarResultadoPix(response) {
+  pixConteudoEnviado =
+    true;
+
   chargeIdAtual =
     safe(
       response.chargeId ||
@@ -1181,9 +1247,21 @@ async function executarPollingPix(
     }
 
     if (resultado?.ok) {
-      enviarStatusPix(
-        resultado
-      );
+      if (
+        respostaPixPronta(
+          resultado
+        ) &&
+        !pixConteudoEnviado
+      ) {
+        enviarResultadoPix(
+          resultado
+        );
+
+      } else {
+        enviarStatusPix(
+          resultado
+        );
+      }
 
       if (
         resultado.approved ===
@@ -1219,7 +1297,7 @@ async function executarPollingPix(
             );
           },
 
-          3000
+          750
         );
 
         return;
@@ -1281,7 +1359,9 @@ async function executarPollingPix(
         );
       },
 
-      PIX_POLL_INTERVALO
+      pixConteudoEnviado
+        ? PIX_POLL_INTERVALO
+        : PIX_POLL_INTERVALO_RAPIDO
     );
 }
 
@@ -1513,9 +1593,56 @@ async function abrirPixTransparente(
       );
 
     if (
-      !respostaPixPronta(
+      respostaPixPronta(
+        resposta
+      )
+    ) {
+      enviarResultadoPix(
+        resposta
+      );
+
+      iniciarPollingPix(
+        resposta.chargeId
+      );
+
+      return;
+    }
+
+    const chargeId =
+      safe(
+        resposta?.chargeId
+      );
+
+    if (
+      respostaRecuperavel(
         resposta
       ) &&
+      chargeId
+    ) {
+      chargeIdAtual =
+        chargeId;
+
+      enviarStatusPix({
+        ...resposta,
+
+        ok:
+          true,
+
+        processing:
+          true,
+
+        recoverable:
+          true
+      });
+
+      iniciarPollingPix(
+        chargeId
+      );
+
+      return;
+    }
+
+    if (
       respostaRecuperavel(
         resposta
       )
@@ -1527,22 +1654,24 @@ async function abrirPixTransparente(
     }
 
     if (
-      !respostaPixPronta(
+      respostaPixPronta(
         resposta
       )
     ) {
-      throw new Error(
-        resposta?.error ||
-        "A ValidaPay ainda está finalizando o PIX. Tente gerar novamente."
+      enviarResultadoPix(
+        resposta
       );
+
+      iniciarPollingPix(
+        resposta.chargeId
+      );
+
+      return;
     }
 
-    enviarResultadoPix(
-      resposta
-    );
-
-    iniciarPollingPix(
-      resposta.chargeId
+    throw new Error(
+      resposta?.error ||
+      "A ValidaPay ainda está finalizando o PIX. Aguarde alguns segundos."
     );
 
   } catch (error) {

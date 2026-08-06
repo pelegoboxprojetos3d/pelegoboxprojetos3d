@@ -1692,27 +1692,17 @@ function montarUrlCheckout(
       projeto?.thumbnail
     );
 
+  /*
+    A identificação do cliente já está salva no navegador.
+    Não coloque nome, e-mail, WhatsApp ou clienteId na URL.
+  */
   const parametros = {
     codigoProjeto,
 
     codigoCheckout:
       codigoInterno,
 
-    codigo:
-      codigoProjeto,
-
     titulo,
-
-    produto:
-      titulo,
-
-    name:
-      titulo,
-
-    tituloOriginal:
-      tituloProjeto(
-        projeto
-      ),
 
     productId:
       safe(
@@ -1721,40 +1711,13 @@ function montarUrlCheckout(
 
     imagem,
 
-    img:
-      imagem,
-
     sku:
       `PP-${codigoProjeto}`,
 
     valor:
       String(valor),
 
-    price:
-      String(valor),
-
     tipoProduto,
-
-    whatsapp:
-      identificacao.whatsapp,
-
-    whatsappE164:
-      identificacao.whatsappE164,
-
-    ddi:
-      identificacao.ddi,
-
-    country:
-      identificacao.country,
-
-    clienteId:
-      identificacao.clienteId,
-
-    nome:
-      identificacao.nome,
-
-    email:
-      identificacao.email,
 
     returnUrl:
       wixLocation.url

@@ -2437,9 +2437,64 @@ async function iniciarFluxoAutomatico() {
 // ON READY
 // ======================================================
 
+function tipoDaSecaoInformativa(contextoAtual) {
+  const referencia = safe(
+    [
+      contextoAtual?.tipoProduto,
+      wixLocation.query?.tipo,
+      wixLocation.query?.tipoProduto,
+      contextoAtual?.produto
+    ].join(" ")
+  )
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+
+  if (referencia.includes("GRAFIC")) {
+    return "GRAFICOS";
+  }
+
+  if (
+    referencia.includes("PROJETO_COMPLETO") ||
+    referencia.includes("PROJETO COMPLETO") ||
+    /(^|\s)COMPLETO($|\s)/.test(referencia)
+  ) {
+    return "PROJETO_COMPLETO";
+  }
+
+  return "MEDIDAS";
+}
+
+async function configurarSecoesInformativas(contextoAtual) {
+  const tipo = tipoDaSecaoInformativa(contextoAtual);
+  const secoes = {
+    MEDIDAS: $w("#botao1baixarmedidas"),
+    GRAFICOS: $w("#botao2baixargraficos"),
+    PROJETO_COMPLETO: $w("#botao3projetocompleto")
+  };
+
+  await Promise.all(
+    Object.entries(secoes).map(([chave, secao]) =>
+      chave === tipo
+        ? secao.expand()
+        : secao.collapse()
+    )
+  );
+
+  await $w("#textoimportante").expand();
+}
+
 $w.onReady(function () {
   contexto =
     contextoDaUrl();
+
+  configurarSecoesInformativas(contexto)
+    .catch((error) => {
+      console.error(
+        "Falha ao configurar os textos da etapa:",
+        error?.message || error
+      );
+    });
 
   checkoutId =
     gerarCheckoutId();

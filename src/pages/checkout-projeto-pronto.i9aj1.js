@@ -2468,20 +2468,34 @@ function tipoDaSecaoInformativa(contextoAtual) {
 async function configurarSecoesInformativas(contextoAtual) {
   const tipo = tipoDaSecaoInformativa(contextoAtual);
   const secoes = {
-    MEDIDAS: $w("#botao1baixarmedidas"),
-    GRAFICOS: $w("#botao2baixargraficos"),
-    PROJETO_COMPLETO: $w("#botao3projetocompleto")
+    MEDIDAS: "#botao1baixarmedidas",
+    GRAFICOS: "#botao2baixargraficos",
+    PROJETO_COMPLETO: "#botao3projetocompleto"
   };
 
-  await Promise.all(
-    Object.entries(secoes).map(([chave, secao]) =>
-      chave === tipo
-        ? secao.expand()
-        : secao.collapse()
-    )
-  );
+  for (const [chave, seletor] of Object.entries(secoes)) {
+    try {
+      const secao = $w(seletor);
+      const ativa = chave === tipo;
 
-  await $w("#textoimportante").expand();
+      await Promise.allSettled(
+        ativa
+          ? [secao.expand(), secao.show()]
+          : [secao.collapse(), secao.hide()]
+      );
+    } catch (error) {
+      console.error(
+        `Falha ao alternar a seção ${seletor}:`,
+        error?.message || error
+      );
+    }
+  }
+
+  const importante = $w("#textoimportante");
+  await Promise.allSettled([
+    importante.expand(),
+    importante.show()
+  ]);
 }
 
 $w.onReady(function () {

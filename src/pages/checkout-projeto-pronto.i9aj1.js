@@ -26,6 +26,9 @@ import {
 const PIX_POLL_INTERVALO_RAPIDO = 750;
 const PIX_POLL_INTERVALO = 2500;
 const PIX_POLL_MAX_TENTATIVAS = 240;
+const PIX_CRIACAO_TIMEOUT = 9000;
+const PIX_CONSULTA_TIMEOUT = 4500;
+const PIX_RECOVERY_TIMEOUT = 8000;
 
 const SESSION_KEY =
   "pp_identificacao_atual";
@@ -1154,10 +1157,16 @@ async function recuperarPix(
     );
 
     const resposta =
-      await consultarCobrancaPix({
-        checkoutId,
-        chargeId
-      });
+      await comTimeout(
+        consultarCobrancaPix({
+          checkoutId,
+          chargeId
+        }),
+
+        PIX_CONSULTA_TIMEOUT,
+
+        "A consulta do PIX demorou mais que o esperado."
+      );
 
     ultimaResposta =
       resposta ||
@@ -1230,12 +1239,18 @@ async function executarPollingPix(
 
   try {
     const resultado =
-      await consultarCobrancaPix({
-        checkoutId,
+      await comTimeout(
+        consultarCobrancaPix({
+          checkoutId,
 
-        chargeId:
-          chargeIdAtual
-      });
+          chargeId:
+            chargeIdAtual
+        }),
+
+        PIX_CONSULTA_TIMEOUT,
+
+        "A atualização do PIX demorou mais que o esperado."
+      );
 
     if (
       resultado?.chargeId
@@ -1394,12 +1409,18 @@ function iniciarPollingPix(chargeId) {
 
 async function consultarPixAgora() {
   const resultado =
-    await consultarCobrancaPix({
-      checkoutId,
+    await comTimeout(
+      consultarCobrancaPix({
+        checkoutId,
 
-      chargeId:
-        chargeIdAtual
-    });
+        chargeId:
+          chargeIdAtual
+      }),
+
+      PIX_CONSULTA_TIMEOUT,
+
+      "A consulta do PIX demorou mais que o esperado."
+    );
 
   if (
     resultado?.chargeId
@@ -1588,8 +1609,14 @@ async function abrirPixTransparente(
     };
 
     let resposta =
-      await criarCobrancaPixTransparente(
-        payload
+      await comTimeout(
+        criarCobrancaPixTransparente(
+          payload
+        ),
+
+        PIX_CRIACAO_TIMEOUT,
+
+        "A ValidaPay demorou para responder. Tente gerar o PIX novamente."
       );
 
     if (
@@ -1648,8 +1675,14 @@ async function abrirPixTransparente(
       )
     ) {
       resposta =
-        await recuperarPix(
-          resposta
+        await comTimeout(
+          recuperarPix(
+            resposta
+          ),
+
+          PIX_RECOVERY_TIMEOUT,
+
+          "O PIX ainda está sendo preparado. Tente novamente em alguns segundos."
         );
     }
 

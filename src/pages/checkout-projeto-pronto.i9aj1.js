@@ -397,6 +397,42 @@ function lerIdentificacaoSalva() {
   return {};
 }
 
+function normalizarCodigoCheckout(value) {
+  const codigo =
+    digits(value);
+
+  return codigo
+    ? codigo
+      .slice(-3)
+      .padStart(3, "0")
+    : "";
+}
+
+function tituloProdutoComCodigo(
+  titulo,
+  codigoCheckout
+) {
+  const codigo =
+    normalizarCodigoCheckout(
+      codigoCheckout
+    );
+
+  const tituloBase =
+    (
+      safe(titulo) ||
+      "Produto"
+    )
+      .replace(
+        /\s*\|\s*C[oó]digo\s+\d{1,3}.*$/i,
+        ""
+      )
+      .trim();
+
+  return codigo
+    ? `${tituloBase} | Código ${codigo}`
+    : tituloBase;
+}
+
 function contextoDaUrl() {
   const query =
     wixLocation.query ||
@@ -413,9 +449,17 @@ function contextoDaUrl() {
     );
 
   const codigoCheckout =
-    safe(
+    normalizarCodigoCheckout(
       query.codigoCheckout ||
       ""
+    );
+
+  const produtoOriginal =
+    safe(
+      query.titulo ||
+      query.produto ||
+      query.name ||
+      "Produto"
     );
 
   return {
@@ -423,11 +467,9 @@ function contextoDaUrl() {
     codigoCheckout,
 
     produto:
-      safe(
-        query.titulo ||
-        query.produto ||
-        query.name ||
-        "Produto"
+      tituloProdutoComCodigo(
+        produtoOriginal,
+        codigoCheckout
       ),
 
     sku:
@@ -582,6 +624,45 @@ function dadosTelefone(
     country:
       "br"
   };
+}
+
+function dadosTelefoneDigitado(
+  data = {}
+) {
+  const recebido =
+    safe(
+      data.whatsappE164 ||
+      data.whatsapp ||
+      data.whatsappDigits ||
+      data.telefone
+    );
+
+  const whatsapp =
+    normalizarWhatsappBrasil(
+      recebido
+    );
+
+  return {
+    whatsapp,
+
+    whatsappE164:
+      whatsapp
+        ? `+55${whatsapp}`
+        : "",
+
+    ddi:
+      "55",
+
+    country:
+      "br"
+  };
+}
+
+function whatsappPrimeiroEstagio() {
+  return normalizarWhatsappBrasil(
+    contexto.whatsappE164 ||
+    contexto.whatsapp
+  );
 }
 
 
@@ -1943,9 +2024,12 @@ async function consultarCliente(
 
   try {
     const telefone =
-      dadosTelefone(
+      dadosTelefoneDigitado(
         data
       );
+
+    const whatsappEsperado =
+      whatsappPrimeiroEstagio();
 
     if (!telefone.whatsapp) {
       enviarParaHtml({
@@ -1972,6 +2056,69 @@ async function consultarCliente(
 
         error:
           "WhatsApp não informado."
+      });
+
+      return;
+    }
+
+    if (!whatsappEsperado) {
+      enviarParaHtml({
+        type:
+          "CUSTOMER_RESULT",
+
+        ok:
+          false,
+
+        exists:
+          false,
+
+        needsName:
+          false,
+
+        needsEmail:
+          false,
+
+        needsCpfCnpj:
+          false,
+
+        needsCustomerData:
+          false,
+
+        error:
+          "Não encontrei o WhatsApp da primeira etapa. Volte e informe o número novamente."
+      });
+
+      return;
+    }
+
+    if (
+      telefone.whatsapp !==
+      whatsappEsperado
+    ) {
+      enviarParaHtml({
+        type:
+          "CUSTOMER_RESULT",
+
+        ok:
+          false,
+
+        exists:
+          false,
+
+        needsName:
+          false,
+
+        needsEmail:
+          false,
+
+        needsCpfCnpj:
+          false,
+
+        needsCustomerData:
+          false,
+
+        error:
+          "O WhatsApp digitado não confere com o informado na primeira etapa."
       });
 
       return;

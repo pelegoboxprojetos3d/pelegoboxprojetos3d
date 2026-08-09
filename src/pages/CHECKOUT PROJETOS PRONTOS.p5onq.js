@@ -44,6 +44,12 @@ const SESSION_KEY =
 const LOCAL_KEY =
   "pp_identificacao_persistente";
 
+const FIRST_WHATSAPP_SESSION_KEY =
+  "pp_whatsapp_primeiro_estagio";
+
+const FIRST_WHATSAPP_LOCAL_KEY =
+  "pp_whatsapp_primeiro_estagio_persistente";
+
 const MANUTENCAO_ATIVA =
   true;
 
@@ -850,11 +856,61 @@ function lerIdentificacaoSalva() {
   return null;
 }
 
+function salvarWhatsappPrimeiroEstagio(
+  value
+) {
+  let numero =
+    onlyDigits(
+      value
+    );
+
+  if (
+    numero.startsWith("55") &&
+    (
+      numero.length === 12 ||
+      numero.length === 13
+    )
+  ) {
+    numero =
+      numero.slice(2);
+  }
+
+  if (
+    numero.length !== 10 &&
+    numero.length !== 11
+  ) {
+    return;
+  }
+
+  try {
+    session.setItem(
+      FIRST_WHATSAPP_SESSION_KEY,
+      numero
+    );
+  } catch (_) {}
+
+  try {
+    local.setItem(
+      FIRST_WHATSAPP_LOCAL_KEY,
+      numero
+    );
+  } catch (_) {}
+}
+
 function salvarIdentificacao() {
   const serialized =
     JSON.stringify(
       identificacao
     );
+
+  /*
+    Esta chave só é gravada no primeiro estágio.
+    O checkout de confirmação nunca pode alterá-la.
+  */
+  salvarWhatsappPrimeiroEstagio(
+    identificacao.whatsappE164 ||
+    identificacao.whatsapp
+  );
 
   try {
     session.setItem(

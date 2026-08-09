@@ -76,7 +76,16 @@ const IDS = {
     "#button3",
 
   valorProjeto:
-    "#txtValor3"
+    "#txtValor3",
+
+  avisoMedidas:
+    "#box1",
+
+  avisoGraficos:
+    "#box2",
+
+  avisoProjeto:
+    "#box3"
 };
 
 let projeto =
@@ -922,6 +931,74 @@ function estadoPago(
   );
 
   button.enable();
+}
+
+function ligarDestaqueAoPassarMouse(
+  buttonId,
+  avisoId
+) {
+  const button =
+    $w(buttonId);
+
+  const aviso =
+    $w(avisoId);
+
+  let corOriginal =
+    "";
+
+  let larguraOriginal =
+    0;
+
+  try {
+    corOriginal =
+      aviso.style.borderColor;
+
+    larguraOriginal =
+      aviso.style.borderWidth;
+  } catch (_) {
+    return;
+  }
+
+  button.onMouseIn(
+    () => {
+      try {
+        aviso.style.borderColor =
+          "#159447";
+
+        aviso.style.borderWidth =
+          3;
+      } catch (_) {}
+    }
+  );
+
+  button.onMouseOut(
+    () => {
+      try {
+        aviso.style.borderColor =
+          corOriginal;
+
+        aviso.style.borderWidth =
+          larguraOriginal;
+      } catch (_) {}
+    }
+  );
+}
+
+function ligarDestaquesDosAvisos() {
+  ligarDestaqueAoPassarMouse(
+    IDS.medidas,
+    IDS.avisoMedidas
+  );
+
+  ligarDestaqueAoPassarMouse(
+    IDS.graficos,
+    IDS.avisoGraficos
+  );
+
+  ligarDestaqueAoPassarMouse(
+    IDS.projeto,
+    IDS.avisoProjeto
+  );
 }
 
 
@@ -1833,6 +1910,8 @@ function ligarEventos() {
 
   eventosLigados =
     true;
+
+  ligarDestaquesDosAvisos();
 
   $w(
     IDS.medidas

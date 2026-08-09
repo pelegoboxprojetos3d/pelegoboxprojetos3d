@@ -80,7 +80,21 @@ function normalizeEmail(value) {
 }
 
 function normalizeWhatsapp(value) {
-  const digits = onlyDigits(value);
+  let digits = onlyDigits(value);
+
+  /*
+    Proteção para sessões antigas gravadas como
+    +1 + 55DDDNÚMERO pelo HTML do checkout.
+  */
+  if (
+    digits.startsWith("155") &&
+    (
+      digits.length === 13 ||
+      digits.length === 14
+    )
+  ) {
+    digits = digits.slice(1);
+  }
 
   return digits
     ? `+${digits}`
@@ -108,11 +122,13 @@ function normalizeWhatsappFromItem(item) {
   );
 
   if (ddi && number) {
-    return `+${ddi}${number}`;
+    return normalizeWhatsapp(
+      `+${ddi}${number}`
+    );
   }
 
   return number
-    ? `+${number}`
+    ? normalizeWhatsapp(number)
     : "";
 }
 

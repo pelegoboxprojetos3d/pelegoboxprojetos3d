@@ -1,5 +1,5 @@
 import wixLocation from "wix-location";
-import wixData from "wix-data";
+import { getMpSession } from "backend/mpSessionsApi.jsw";
 
 let timer = null;
 
@@ -38,16 +38,13 @@ async function verificar(checkoutId){
 
   try{
 
-    const r = await wixData.query("MpSessions")
-      .eq("checkoutId", checkoutId)
-      .limit(1)
-      .find({ suppressAuth:true });
+    const r = await getMpSession({ checkoutId });
 
-    if(!r.items.length){
+    if(!r?.ok || !r.session){
       return;
     }
 
-    const s = r.items[0];
+    const s = r.session;
 
     console.log("status:", s.status);
 

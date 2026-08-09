@@ -6,6 +6,9 @@
 import wixLocation from "wix-location";
 import { getMpSession } from "backend/mpSessionsApi.jsw";
 
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 180000;
+
 
 // ===============================
 // HELPERS
@@ -77,6 +80,33 @@ function setImageNice(id, src){
 
 }
 
+function wait(ms){
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForApprovedSession(checkoutId){
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+  while(Date.now() < deadline){
+    let sess = null;
+
+    try{
+      const r = await getMpSession({ checkoutId });
+      sess = r?.session || null;
+    }catch(e){
+      console.log("Falha temporária ao consultar pagamento:", e);
+    }
+
+    if(sess && safeStr(sess.status).toLowerCase() === "approved"){
+      return sess;
+    }
+
+    await wait(POLL_INTERVAL_MS);
+  }
+
+  return null;
+}
+
 
 // ===============================
 // PAGE READY
@@ -88,45 +118,34 @@ $w.onReady(async function(){
 
   const checkoutId = safeStr(q.checkout_id || q.checkoutId);
 
-  const statusUrl = safeStr(q.status || q.collection_status).toLowerCase();
+  if(!checkoutId){
+    setText("#txtStatus", "Não foi possível identificar a compra");
+    return;
+  }
 
 
   // ===============================
   // BUSCAR SESSÃO
   // ===============================
 
-  const r = await getMpSession({ checkoutId });
+  setText("#txtStatus", "Confirmando seu pagamento...");
 
-  if(!r?.ok){
-
-    console.log("Erro ao buscar sessão");
-
-    wixLocation.to("/");
-    return;
-
-  }
-
-  const sess = r.session;
-
+  const sess = await waitForApprovedSession(checkoutId);
 
   if(!sess){
-
-    console.log("Sessão não encontrada");
-
-    wixLocation.to("/");
+    setText(
+      "#txtStatus",
+      "Pagamento ainda em confirmação. Atualize esta página em alguns segundos."
+    );
     return;
-
   }
-
-
-  const statusSess = safeStr(sess.status).toLowerCase();
 
 
   // ===============================
   // PAGAMENTO APROVADO
   // ===============================
 
-  if(statusSess === "approved" || statusUrl === "approved"){
+  if(safeStr(sess.status).toLowerCase() === "approved"){
 
     setText("#txtProduto", sess?.produto || "Compra confirmada");
 
@@ -153,16 +172,6 @@ $w.onReady(async function(){
   // NÃO APROVADO
   // ===============================
 
-  const returnUrl = safeStr(sess.returnUrl);
-
-  if(returnUrl){
-
-    wixLocation.to(returnUrl);
-
-  }else{
-
-    wixLocation.to("/");
-
-  }
+  setText("#txtStatus", "Pagamento ainda em confirmação.");
 
 });

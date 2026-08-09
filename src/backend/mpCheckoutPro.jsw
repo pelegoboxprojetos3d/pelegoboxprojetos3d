@@ -43,29 +43,80 @@ function parseBRL(v){
 
 }
 
-function buildWhatsappE164({ ddi, whatsapp, whatsappE164 }){
-  const explicit = safe(whatsappE164).trim();
-  if(explicit){
-    if(explicit.startsWith("+")) return explicit.replace(/\s+/g, "");
-    const cleaned = explicit.replace(/[^\d+]/g, "");
-    return cleaned.startsWith("+") ? cleaned : `+${cleaned.replace(/[^\d]/g, "")}`;
+function brazilWhatsapp(value){
+  let digits = onlyDigits(value);
+
+  /*
+    Corrige o formato quebrado +1 + 55DDDNÚMERO
+    que algumas versões do HTML do checkout enviavam.
+  */
+  if(
+    digits.startsWith("155") &&
+    (digits.length === 13 || digits.length === 14)
+  ){
+    digits = digits.slice(1);
   }
 
-  const w = safe(whatsapp).trim();
-  if(w.startsWith("+")) return w.replace(/\s+/g, "");
+  if(
+    digits.startsWith("55") &&
+    (digits.length === 12 || digits.length === 13)
+  ){
+    return `+${digits}`;
+  }
 
+  if(digits.length === 10 || digits.length === 11){
+    return `+55${digits}`;
+  }
+
+  return "";
+}
+
+function buildWhatsappE164({ ddi, country, whatsapp, whatsappE164 }){
+  const explicitDigits = onlyDigits(whatsappE164);
+  const numberDigits = onlyDigits(whatsapp);
   const d = onlyDigits(ddi);
-  const n = onlyDigits(w);
+  const countryCode = safe(country).trim().toLowerCase();
+  const malformedBrazilE164 =
+    explicitDigits.startsWith("155") &&
+    (
+      explicitDigits.length === 13 ||
+      explicitDigits.length === 14
+    );
 
-  if(d && n){
-    return `+${d}${n}`;
+  /*
+    Se qualquer campo já contém um telefone brasileiro
+    completo, ele prevalece sobre um DDI incorreto do HTML.
+  */
+  const brazilComplete =
+    brazilWhatsapp(numberDigits) ||
+    brazilWhatsapp(explicitDigits);
+
+  if(
+    brazilComplete &&
+    (
+      numberDigits.startsWith("55") ||
+      explicitDigits.startsWith("55") ||
+      malformedBrazilE164 ||
+      d === "55" ||
+      countryCode === "br"
+    )
+  ){
+    return brazilComplete;
   }
 
-  if(n){
-    return `+${n}`;
+  if(explicitDigits){
+    return `+${explicitDigits}`;
   }
 
-  return w;
+  if(d && numberDigits){
+    const complete = numberDigits.startsWith(d)
+      ? numberDigits
+      : `${d}${numberDigits}`;
+
+    return `+${complete}`;
+  }
+
+  return numberDigits ? `+${numberDigits}` : "";
 }
 
 async function upsertSession(checkoutId, patch){
@@ -110,14 +161,18 @@ export async function createCheckoutProPreference(input){
 
   const valor = parseBRL(ctx.valor ?? ctx.price);
 
-  const whatsappDigits = onlyDigits(input?.whatsapp);
-  const ddi = onlyDigits(input?.ddi || ctx.ddi || "55");
-  const country = safe(input?.country || ctx.country || "br");
+  const inputDdi = onlyDigits(input?.ddi || ctx.ddi || "55");
+  const inputCountry = safe(input?.country || ctx.country || "br");
   const whatsapp = buildWhatsappE164({
-    ddi,
+    ddi: inputDdi,
+    country: inputCountry,
     whatsapp: input?.whatsapp,
     whatsappE164: input?.whatsappE164
   });
+  const brazil = /^\+55\d{10,11}$/.test(whatsapp);
+  const whatsappDigits = onlyDigits(whatsapp);
+  const ddi = brazil ? "55" : inputDdi;
+  const country = brazil ? "br" : inputCountry;
 
   const productPageUrl = safe(ctx.returnUrl || input?.returnUrl || SITE_BASE);
 

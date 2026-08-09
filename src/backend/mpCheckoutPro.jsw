@@ -209,6 +209,9 @@ export async function createCheckoutProPreference(input){
   const waitingUrl =
   `${SITE_BASE}/pix-aguardando?checkout_id=${checkoutId}`;
 
+  const successUrl =
+  `${SITE_BASE}/agradecimentos-mercado-pago?checkout_id=${checkoutId}`;
+
   const preference = {
 
     external_reference: checkoutId,
@@ -216,10 +219,12 @@ export async function createCheckoutProPreference(input){
     notification_url: NOTIFICATION_URL,
 
     back_urls:{
-      success: waitingUrl,
-      pending: productPageUrl,
+      success: successUrl,
+      pending: waitingUrl,
       failure: productPageUrl
     },
+
+    auto_return:"approved",
 
     items:[
       {

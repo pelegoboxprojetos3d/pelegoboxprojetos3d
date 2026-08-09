@@ -35,6 +35,13 @@ const SESSION_KEY =
 
 const LOCAL_KEY =
   "pp_identificacao_persistente";
+
+const FIRST_WHATSAPP_SESSION_KEY =
+  "pp_whatsapp_primeiro_estagio";
+
+const FIRST_WHATSAPP_LOCAL_KEY =
+  "pp_whatsapp_primeiro_estagio_persistente";
+
 const PIX_RECOVERY_TENTATIVAS = 8;
 const PIX_RECOVERY_ESPERA = 750;
 
@@ -397,6 +404,42 @@ function lerIdentificacaoSalva() {
   return {};
 }
 
+function lerWhatsappPrimeiroEstagioDedicado() {
+  const fontes = [
+    {
+      storage: session,
+      key:
+        FIRST_WHATSAPP_SESSION_KEY
+    },
+    {
+      storage: local,
+      key:
+        FIRST_WHATSAPP_LOCAL_KEY
+    }
+  ];
+
+  for (const fonte of fontes) {
+    try {
+      const numero =
+        normalizarWhatsappBrasil(
+          fonte.storage.getItem(
+            fonte.key
+          )
+        );
+
+      if (numero) {
+        return numero;
+      }
+    } catch (_) {
+      /*
+        Ignora armazenamento indisponível.
+      */
+    }
+  }
+
+  return "";
+}
+
 function normalizarCodigoCheckout(value) {
   const codigo =
     digits(value);
@@ -659,9 +702,19 @@ function dadosTelefoneDigitado(
 }
 
 function whatsappPrimeiroEstagio() {
-  return normalizarWhatsappBrasil(
-    contexto.whatsappE164 ||
-    contexto.whatsapp
+  /*
+    A chave dedicada é imutável neste checkout:
+    apenas o popup anterior pode gravá-la.
+
+    O objeto legado fica somente como compatibilidade
+    para clientes que iniciaram o fluxo antes da correção.
+  */
+  return (
+    lerWhatsappPrimeiroEstagioDedicado() ||
+    normalizarWhatsappBrasil(
+      contexto.whatsappE164 ||
+      contexto.whatsapp
+    )
   );
 }
 

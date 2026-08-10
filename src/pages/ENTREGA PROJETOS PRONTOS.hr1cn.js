@@ -287,6 +287,24 @@ function entregaProcessada(resultado) {
   const projeto = resultado?.project || {};
   const tipo = safe(resultado?.session?.tipoProduto).toUpperCase();
 
+  const statusProcessamento =
+    safe(projeto.statusProcessamento)
+      .toUpperCase();
+
+  /*
+    Quando o Make já iniciou o processamento, a galeria
+    só é liberada depois de PROCESSADO. Isso impede que
+    o primeiro gráfico apareça enquanto os demais ainda
+    estão sendo importados. Registros antigos sem status
+    continuam compatíveis pela existência do arquivo.
+  */
+  if (
+    statusProcessamento &&
+    statusProcessamento !== "PROCESSADO"
+  ) {
+    return false;
+  }
+
   if (tipo === "PROJETO_COMPLETO") {
     return Boolean(safe(projeto.pdfProjeto));
   }

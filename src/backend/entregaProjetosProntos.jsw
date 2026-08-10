@@ -1405,6 +1405,23 @@ function projectPayload(
       project?.pdfProjeto
     );
 
+  const currentProcessingPurchase =
+    purchases.find(
+      (item) =>
+        purchaseMatchesPayment(
+          item,
+          safe(session?.paymentId)
+        )
+    ) ||
+    newestFirst(purchases)[0] ||
+    null;
+
+  const statusProcessamento =
+    safe(
+      currentProcessingPurchase
+        ?.statusProcessamento
+    ).toUpperCase();
+
   return {
     codigoProjeto,
 
@@ -1446,6 +1463,8 @@ function projectPayload(
 
     pdfProjeto:
       pdfProject,
+
+    statusProcessamento,
 
     valorMedidas:
       Number(

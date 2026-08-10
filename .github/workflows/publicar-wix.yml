@@ -50,7 +50,8 @@ jobs:
         env:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
 
-      - name: Sincronizar UI e tipos do Wix
+      - name: Sincronizar tipos do Wix
+        continue-on-error: true
         run: npm run postinstall
 
       - name: Validar código

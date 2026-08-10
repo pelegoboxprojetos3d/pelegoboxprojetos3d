@@ -2871,25 +2871,30 @@ async function iniciarFluxoAutomatico() {
 // ON READY
 // ======================================================
 
-function acessosLocaisDoCheckout(contextoAtual = {}) {
-  const codigo = digits(contextoAtual.codigoProjeto);
+function tipoVisualCheckout(contextoAtual = {}) {
+  const referencia = safe([
+    contextoAtual?.tipoProduto,
+    wixLocation.query?.tipo,
+    wixLocation.query?.tipoProduto,
+    contextoAtual?.produto
+  ].join(" "))
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
 
-  if (!codigo) {
-    return acessoVazio();
+  if (referencia.includes("GRAFIC")) {
+    return "GRAFICOS";
   }
 
-  try {
-    const raw = local.getItem(`pp_acessos_${codigo}`);
-    const data = raw ? JSON.parse(raw) : {};
-
-    return {
-      medidas: data.medidas === true,
-      graficos: data.graficos === true,
-      projeto: data.projeto === true
-    };
-  } catch (_) {
-    return acessoVazio();
+  if (
+    referencia.includes("PROJETO_COMPLETO") ||
+    referencia.includes("PROJETO COMPLETO") ||
+    /(^|\s)COMPLETO($|\s)/.test(referencia)
+  ) {
+    return "PROJETO_COMPLETO";
   }
+
+  return "MEDIDAS";
 }
 
 async function mostrarSecaoEtapa(seletor, mostrar) {
@@ -2915,20 +2920,29 @@ async function mostrarSecaoEtapa(seletor, mostrar) {
   }
 }
 
-function pintarAvisoEtapa(seletor, pago) {
+function pintarAvisoEtapa(seletor, pago, etapaAtual) {
   try {
     const elemento = $w(seletor);
 
-    if (elemento?.style) {
-      elemento.style.backgroundColor = pago
-        ? "#E8F5ED"
-        : "#FFFFFF";
-
-      if (pago) {
-        elemento.style.borderColor = "#159447";
-        elemento.style.borderWidth = "2px";
-      }
+    if (!elemento?.style) {
+      return;
     }
+
+    /*
+      Verde de fundo significa SOMENTE pagamento confirmado.
+      A etapa atual, antes do pagamento, recebe no máximo borda verde.
+    */
+    elemento.style.backgroundColor = pago
+      ? "#E8F5ED"
+      : "#FFFFFF";
+
+    elemento.style.borderColor = (pago || etapaAtual)
+      ? "#159447"
+      : "#E0E0E0";
+
+    elemento.style.borderWidth = (pago || etapaAtual)
+      ? "2px"
+      : "1px";
   } catch (_) {}
 }
 
@@ -2936,25 +2950,39 @@ async function configurarSecoesInformativas(
   contextoAtual,
   acessosInformados = null
 ) {
+  /*
+    Nunca usa pp_acessos local para pintar o checkout.
+    Cache antigo não pode transformar uma compra nova em "paga".
+    Antes da confirmação do backend, tudo começa não pago.
+  */
   const access =
-    acessosInformados ||
-    acessosLocaisDoCheckout(contextoAtual);
+    acessosInformados &&
+    typeof acessosInformados === "object"
+      ? acessosInformados
+      : acessoVazio();
 
   const mobile =
     wixWindowFrontend.formFactor === "Mobile";
 
+  const tipoAtual =
+    tipoVisualCheckout(contextoAtual);
+
   const secoes = [
-    { seletor: "#botao1baixarmedidas", pago: access.medidas === true },
-    { seletor: "#botao2baixargraficos", pago: access.graficos === true },
-    { seletor: "#botao3projetocompleto", pago: access.projeto === true }
+    { tipo: "MEDIDAS", seletor: "#botao1baixarmedidas", pago: access.medidas === true },
+    { tipo: "GRAFICOS", seletor: "#botao2baixargraficos", pago: access.graficos === true },
+    { tipo: "PROJETO_COMPLETO", seletor: "#botao3projetocompleto", pago: access.projeto === true }
   ];
 
   for (const etapa of secoes) {
-    pintarAvisoEtapa(etapa.seletor, etapa.pago);
+    pintarAvisoEtapa(
+      etapa.seletor,
+      etapa.pago,
+      !etapa.pago && etapa.tipo === tipoAtual
+    );
 
     /*
-      Desktop: todos os avisos ficam visíveis; os pagos ficam verdes.
-      Mobile: avisos pagos desaparecem; faltantes continuam visíveis.
+      Desktop: os três avisos aparecem sempre.
+      Mobile: só desaparecem as etapas realmente pagas.
     */
     await mostrarSecaoEtapa(
       etapa.seletor,

@@ -423,12 +423,22 @@ function pintarBoxEtapa(id, pago) {
 
 async function mostrarAvisosEntrega() {
   const acessos = entrega?.access || {};
+  const stages = entrega?.stages || {};
   const mobile = wixWindowFrontend.formFactor === "Mobile";
 
   const etapas = [
-    { id: IDS.boxMedidas, pago: acessos.medidas === true },
-    { id: IDS.boxGraficos, pago: acessos.graficos === true },
-    { id: IDS.boxProjeto, pago: acessos.projeto === true }
+    {
+      id: IDS.boxMedidas,
+      pago: acessos.medidas === true && stages.medidas?.pago === true
+    },
+    {
+      id: IDS.boxGraficos,
+      pago: acessos.graficos === true && stages.graficos?.pago === true
+    },
+    {
+      id: IDS.boxProjeto,
+      pago: acessos.projeto === true && stages.projeto?.pago === true
+    }
   ];
 
   await forcarElementoVisivel(IDS.avisosEtapas);
@@ -625,7 +635,7 @@ function imagensLiberadas(
   }
 
   if (
-    graficosPaga
+    acessos.graficos
   ) {
     const graficos =
       Array.isArray(
@@ -2220,6 +2230,8 @@ async function carregarEntrega() {
 
           return;
         }
+
+        await mostrarProcessamento();
 
         await mostrarProcessamento();
 

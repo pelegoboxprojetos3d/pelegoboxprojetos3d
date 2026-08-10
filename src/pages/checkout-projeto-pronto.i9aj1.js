@@ -19,6 +19,10 @@ import {
   obterAcessosProjeto
 } from "backend/entregaProjetosProntos.jsw";
 
+import {
+  resolverConfirmacaoWhatsappBrasil
+} from "public/projetosProntosFluxo";
+
 // PÁGINA: /checkout-projeto-pronto
 // HTML: #htmlIframeMP
 // R21 — CONTRATO ANTIGO DO HTML + RECUPERAÇÃO DO PIX

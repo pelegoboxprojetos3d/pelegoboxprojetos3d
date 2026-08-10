@@ -373,29 +373,75 @@ function salvarAcessosLocais(
 }
 
 
+async function forcarElementoVisivel(id) {
+  let elemento;
+
+  try {
+    elemento = $w(id);
+  } catch (erro) {
+    console.warn(
+      `Elemento de aviso não encontrado ${id}:`,
+      erro?.message || erro
+    );
+    return;
+  }
+
+  /*
+    Um filho pode estar com hidden/collapsed = false e ainda
+    assim não aparecer porque um ancestral está escondido ou
+    recolhido. Por isso a cadeia inteira é reaberta.
+  */
+  const cadeia = [];
+  let atual = elemento;
+
+  for (let nivel = 0; nivel < 6 && atual; nivel += 1) {
+    cadeia.unshift(atual);
+
+    try {
+      atual = atual.parent || null;
+    } catch (_) {
+      atual = null;
+    }
+  }
+
+  for (const item of cadeia) {
+    try {
+      if (typeof item.expand === "function") {
+        await item.expand();
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof item.show === "function") {
+        await item.show();
+      }
+    } catch (_) {}
+  }
+}
+
 async function mostrarAvisosEntrega() {
   const ids = [
     IDS.avisosEtapas,
-    IDS.avisoImportante
+    IDS.boxMedidas,
+    IDS.boxGraficos,
+    IDS.boxProjeto,
+    IDS.avisoImportante,
+    "#box4"
   ];
 
   for (const id of ids) {
-    try {
-      const elemento = $w(id);
+    await forcarElementoVisivel(id);
+  }
 
-      if (elemento.collapsed) {
-        await elemento.expand();
-      }
+  /*
+    A Pro Gallery recalcula o layout ao expandir.
+    Repetimos uma vez depois desse reflow para impedir que
+    o estado visual antigo seja reaplicado pelo Wix.
+  */
+  await esperar(180);
 
-      if (elemento.hidden) {
-        await elemento.show();
-      }
-    } catch (erro) {
-      console.warn(
-        `Não foi possível restaurar a seção de aviso ${id}:`,
-        erro?.message || erro
-      );
-    }
+  for (const id of ids) {
+    await forcarElementoVisivel(id);
   }
 }
 
@@ -2032,11 +2078,11 @@ async function renderizarEntrega(
 
   await renderizarBotoes();
 
-  await mostrarAvisosEntrega();
-
   await mostrarGaleria();
 
   await esconderProcessamento();
+
+  await mostrarAvisosEntrega();
 
   /*
     Somente depois procura o vídeo.
@@ -2167,6 +2213,8 @@ async function carregarEntrega() {
 
           return;
         }
+
+        await mostrarProcessamento();
 
         await mostrarProcessamento();
 

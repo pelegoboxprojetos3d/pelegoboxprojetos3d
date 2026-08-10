@@ -1,14 +1,16 @@
 import wixWindowFrontend from "wix-window-frontend";
 
 // POPUP: pedir whatsapp
-// HTML EXISTENTE: #html1
+// HTML OFICIAL: #htmlWhatsappInicial
 //
-// R4
+// R5
 //
 // - A confirmação dupla acontece dentro do HTML do popup.
 // - O Velo só confirma depois de receber VERIFY_WHATSAPP.
 // - CLOSE/FECHAR encerra o popup sem identificar.
 // - A página principal continua consultando clientes e compras.
+
+const HTML_WHATSAPP_INICIAL = "#htmlWhatsappInicial";
 
 let contexto = {};
 let htmlPronto = false;
@@ -44,7 +46,7 @@ function normalizarMensagem(raw) {
 function enviarInit() {
   if (!htmlPronto) return;
 
-  $w("#html1").postMessage({
+  $w(HTML_WHATSAPP_INICIAL).postMessage({
     type: "INIT",
     whatsapp: safe(contexto.whatsapp),
     ddi: safe(contexto.ddi) || "55",
@@ -74,7 +76,7 @@ function whatsappValido(data = {}) {
 
 function fecharComWhatsapp(data = {}) {
   if (!whatsappValido(data)) {
-    $w("#html1").postMessage({
+    $w(HTML_WHATSAPP_INICIAL).postMessage({
       type: "VERIFY_ERROR",
       error: "Digite um número de WhatsApp válido."
     });
@@ -121,7 +123,7 @@ function fecharPopup() {
 
 $w.onReady(function () {
   contexto = wixWindowFrontend.lightbox.getContext() || {};
-  const html = $w("#html1");
+  const html = $w(HTML_WHATSAPP_INICIAL);
 
   html.onMessage((event) => {
     const data = normalizarMensagem(event.data);

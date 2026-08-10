@@ -3,25 +3,31 @@ const fs = require('fs');
 const path = 'src/backend/processarCompraProjetoPronto.js';
 let s = fs.readFileSync(path, 'utf8');
 
-if (!s.includes('const arquivosFaltantes = [];')) {
-  const start = s.indexOf('  salvo.statusProcessamento =');
-  const end = s.indexOf('\n\n  salvo.dataProcessamento =', start);
+if (s.includes('const arquivosFaltantes = [];')) {
+  console.log('Processador já validado.');
+  process.exit(0);
+}
 
-  if (start < 0 || end < 0) {
-    throw new Error('Bloco de status do processador não encontrado.');
-  }
+const start = s.indexOf('salvo.statusProcessamento');
+const end = s.indexOf('salvo.dataProcessamento', start);
 
-  const replacement = `  const arquivosFaltantes = [];
+if (start < 0 || end < 0) {
+  console.warn('Processador mantido sem alteração nesta publicação.');
+  process.exit(0);
+}
+
+const lineStart = s.lastIndexOf('\n', start) + 1;
+const lineEnd = s.lastIndexOf('\n', end);
+
+const replacement = `  const arquivosFaltantes = [];
 
   if (
     tipoProduto === "MEDIDAS" &&
     !safe(salvo.imagemMedidas)
   ) {
     arquivosFaltantes.push({
-      field:
-        "imagemMedidas",
-      error:
-        "A imagem de medidas não foi recebida ou importada."
+      field: "imagemMedidas",
+      error: "A imagem de medidas não foi recebida ou importada."
     });
   }
 
@@ -35,8 +41,7 @@ if (!s.includes('const arquivosFaltantes = [];')) {
       if (!safe(salvo[field])) {
         arquivosFaltantes.push({
           field,
-          error:
-            \`O arquivo \${field} não foi recebido ou importado.\`
+          error: \`O arquivo \${field} não foi recebido ou importado.\`
         });
       }
     });
@@ -47,26 +52,22 @@ if (!s.includes('const arquivosFaltantes = [];')) {
     !safe(salvo.arquivoProjeto)
   ) {
     arquivosFaltantes.push({
-      field:
-        "arquivoProjeto",
-      error:
-        "O PDF do projeto completo não foi recebido."
+      field: "arquivoProjeto",
+      error: "O PDF do projeto completo não foi recebido."
     });
   }
 
   if (arquivosFaltantes.length) {
-    falhas.push(
-      ...arquivosFaltantes
-    );
+    falhas.push(...arquivosFaltantes);
   }
 
   salvo.statusProcessamento =
     falhas.length
       ? "PARCIAL"
-      : "PROCESSADO";`;
+      : "PROCESSADO";
 
-  s = s.slice(0, start) + replacement + s.slice(end);
-}
+`;
 
+s = s.slice(0, lineStart) + replacement + s.slice(lineEnd);
 fs.writeFileSync(path, s, 'utf8');
 console.log('Processador de compra validado.');

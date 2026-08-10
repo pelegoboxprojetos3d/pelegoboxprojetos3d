@@ -375,43 +375,21 @@ function salvarAcessosLocais(
 
 
 async function forcarElementoVisivel(id) {
-  let elemento;
-
   try {
-    elemento = $w(id);
+    const elemento = $w(id);
+
+    if (typeof elemento.expand === "function") {
+      await elemento.expand();
+    }
+
+    if (typeof elemento.show === "function") {
+      await elemento.show();
+    }
   } catch (erro) {
     console.warn(
       `Elemento de aviso não encontrado ${id}:`,
       erro?.message || erro
     );
-    return;
-  }
-
-  const cadeia = [];
-  let atual = elemento;
-
-  for (let nivel = 0; nivel < 6 && atual; nivel += 1) {
-    cadeia.unshift(atual);
-
-    try {
-      atual = atual.parent || null;
-    } catch (_) {
-      atual = null;
-    }
-  }
-
-  for (const item of cadeia) {
-    try {
-      if (typeof item.expand === "function") {
-        await item.expand();
-      }
-    } catch (_) {}
-
-    try {
-      if (typeof item.show === "function") {
-        await item.show();
-      }
-    } catch (_) {}
   }
 }
 
@@ -434,69 +412,40 @@ async function esconderElementoAviso(id) {
   }
 }
 
+function pintarBoxEtapa(id, pago) {
+  try {
+    const box = $w(id);
+    box.style.backgroundColor = pago ? "#E8F5ED" : "#FFFFFF";
+    box.style.borderColor = pago ? CORES.compradoBorda : "#E0E0E0";
+    box.style.borderWidth = pago ? "2px" : "1px";
+  } catch (_) {}
+}
+
 async function mostrarAvisosEntrega() {
-  const mobile =
-    wixWindowFrontend.formFactor === "Mobile";
+  const acessos = entrega?.access || {};
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
 
-  const boxes = [
-    IDS.boxMedidas,
-    IDS.boxGraficos,
-    IDS.boxProjeto
+  const etapas = [
+    { id: IDS.boxMedidas, pago: acessos.medidas === true },
+    { id: IDS.boxGraficos, pago: acessos.graficos === true },
+    { id: IDS.boxProjeto, pago: acessos.projeto === true }
   ];
 
-  if (mobile) {
-    const acessos =
-      entrega?.access || {};
+  await forcarElementoVisivel(IDS.avisosEtapas);
 
-    let proximoAviso = "";
+  for (const etapa of etapas) {
+    pintarBoxEtapa(etapa.id, etapa.pago);
 
-    if (!acessos.medidas) {
-      proximoAviso = IDS.boxMedidas;
-    } else if (!acessos.graficos) {
-      proximoAviso = IDS.boxGraficos;
-    } else if (!acessos.projeto) {
-      proximoAviso = IDS.boxProjeto;
-    }
-
-    for (const id of boxes) {
-      await esconderElementoAviso(id);
-    }
-
-    if (proximoAviso) {
-      await forcarElementoVisivel(IDS.avisosEtapas);
-      await forcarElementoVisivel(proximoAviso);
+    if (mobile && etapa.pago) {
+      await esconderElementoAviso(etapa.id);
     } else {
-      await esconderElementoAviso(IDS.avisosEtapas);
+      await forcarElementoVisivel(etapa.id);
     }
-
-    /*
-      O aviso IMPORTANTE continua com o comportamento atual.
-      A alteração mobile afeta somente os três cartões das etapas.
-    */
-    await forcarElementoVisivel(IDS.avisoImportante);
-    await forcarElementoVisivel("#box4");
-
-    return;
   }
 
-  const idsDesktop = [
-    IDS.avisosEtapas,
-    IDS.boxMedidas,
-    IDS.boxGraficos,
-    IDS.boxProjeto,
-    IDS.avisoImportante,
-    "#box4"
-  ];
-
-  for (const id of idsDesktop) {
-    await forcarElementoVisivel(id);
-  }
-
-  await esperar(180);
-
-  for (const id of idsDesktop) {
-    await forcarElementoVisivel(id);
-  }
+  /* IMPORTANTE aparece sempre, em qualquer dispositivo. */
+  await forcarElementoVisivel(IDS.avisoImportante);
+  await forcarElementoVisivel("#box4");
 }
 
 
@@ -676,7 +625,7 @@ function imagensLiberadas(
   }
 
   if (
-    acessos.graficos
+    graficosPaga
   ) {
     const graficos =
       Array.isArray(
@@ -1827,17 +1776,21 @@ async function renderizarBotoes() {
   const projeto =
     entrega.project || {};
 
-  if (acessos.medidas) {
-    marcarBoxComprado(IDS.boxMedidas);
-  }
+  const medidasPaga =
+    acessos.medidas === true &&
+    etapas.medidas?.pago === true;
 
-  if (acessos.graficos) {
-    marcarBoxComprado(IDS.boxGraficos);
-  }
+  const graficosPaga =
+    acessos.graficos === true &&
+    etapas.graficos?.pago === true;
 
-  if (acessos.projeto) {
-    marcarBoxComprado(IDS.boxProjeto);
-  }
+  const projetoPago =
+    acessos.projeto === true &&
+    etapas.projeto?.pago === true;
+
+  pintarBoxEtapa(IDS.boxMedidas, medidasPaga);
+  pintarBoxEtapa(IDS.boxGraficos, graficosPaga);
+  pintarBoxEtapa(IDS.boxProjeto, projetoPago);
 
   const valorMedidas =
     valorEtapa(
@@ -1860,7 +1813,7 @@ async function renderizarBotoes() {
   $w(
     IDS.valorMedidas
   ).text =
-    acessos.medidas
+    medidasPaga
       ? (
         "PAGO — " +
         dinheiro(
@@ -1874,7 +1827,7 @@ async function renderizarBotoes() {
   $w(
     IDS.valorGraficos
   ).text =
-    acessos.graficos
+    graficosPaga
       ? (
         "PAGO — " +
         dinheiro(
@@ -1888,7 +1841,7 @@ async function renderizarBotoes() {
   $w(
     IDS.valorProjeto
   ).text =
-    acessos.projeto
+    projetoPago
       ? (
         "PAGO — " +
         dinheiro(
@@ -1903,7 +1856,7 @@ async function renderizarBotoes() {
   // ETAPA 1
 
   if (
-    acessos.medidas
+    medidasPaga
   ) {
     await definirComprado(
       $w(
@@ -1927,7 +1880,7 @@ async function renderizarBotoes() {
   // ETAPA 2
 
   if (
-    acessos.graficos
+    graficosPaga
   ) {
     await definirComprado(
       $w(
@@ -1938,7 +1891,7 @@ async function renderizarBotoes() {
     );
 
   } else if (
-    acessos.medidas
+    medidasPaga
   ) {
     await definirDisponivel(
       $w(
@@ -1962,7 +1915,7 @@ async function renderizarBotoes() {
   // ETAPA 3
 
   if (
-    acessos.projeto
+    projetoPago
   ) {
     await definirComprado(
       $w(
@@ -1973,7 +1926,7 @@ async function renderizarBotoes() {
     );
 
   } else if (
-    acessos.graficos
+    graficosPaga
   ) {
     await definirDisponivel(
       $w(
@@ -2267,6 +2220,8 @@ async function carregarEntrega() {
 
           return;
         }
+
+        await mostrarProcessamento();
 
         await mostrarProcessamento();
 

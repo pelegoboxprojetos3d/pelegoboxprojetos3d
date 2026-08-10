@@ -1,4 +1,5 @@
 import wixLocation from "wix-location";
+import wixWindowFrontend from "wix-window-frontend";
 
 import {
   local,
@@ -1169,12 +1170,19 @@ async function consultarAcessos({
         "A consulta das compras não respondeu."
       );
 
-    return (
+    const access = (
       result?.ok &&
       result?.access
     )
       ? result.access
       : acessoVazio();
+
+    configurarSecoesInformativas(
+      contexto,
+      access
+    ).catch(() => {});
+
+    return access;
 
   } catch (error) {
     console.warn(
@@ -2863,65 +2871,99 @@ async function iniciarFluxoAutomatico() {
 // ON READY
 // ======================================================
 
-function tipoDaSecaoInformativa(contextoAtual) {
-  const referencia = safe(
-    [
-      contextoAtual?.tipoProduto,
-      wixLocation.query?.tipo,
-      wixLocation.query?.tipoProduto,
-      contextoAtual?.produto
-    ].join(" ")
-  )
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase();
+function acessosLocaisDoCheckout(contextoAtual = {}) {
+  const codigo = digits(contextoAtual.codigoProjeto);
 
-  if (referencia.includes("GRAFIC")) {
-    return "GRAFICOS";
+  if (!codigo) {
+    return acessoVazio();
   }
 
-  if (
-    referencia.includes("PROJETO_COMPLETO") ||
-    referencia.includes("PROJETO COMPLETO") ||
-    /(^|\s)COMPLETO($|\s)/.test(referencia)
-  ) {
-    return "PROJETO_COMPLETO";
-  }
+  try {
+    const raw = local.getItem(`pp_acessos_${codigo}`);
+    const data = raw ? JSON.parse(raw) : {};
 
-  return "MEDIDAS";
+    return {
+      medidas: data.medidas === true,
+      graficos: data.graficos === true,
+      projeto: data.projeto === true
+    };
+  } catch (_) {
+    return acessoVazio();
+  }
 }
 
-async function configurarSecoesInformativas(contextoAtual) {
-  const tipo = tipoDaSecaoInformativa(contextoAtual);
-  const secoes = {
-    MEDIDAS: "#botao1baixarmedidas",
-    GRAFICOS: "#botao2baixargraficos",
-    PROJETO_COMPLETO: "#botao3projetocompleto"
-  };
+async function mostrarSecaoEtapa(seletor, mostrar) {
+  try {
+    const elemento = $w(seletor);
 
-  for (const [chave, seletor] of Object.entries(secoes)) {
-    try {
-      const secao = $w(seletor);
-      const ativa = chave === tipo;
-
-      await Promise.allSettled(
-        ativa
-          ? [secao.expand(), secao.show()]
-          : [secao.collapse(), secao.hide()]
-      );
-    } catch (error) {
-      console.error(
-        `Falha ao alternar a seção ${seletor}:`,
-        error?.message || error
-      );
+    if (mostrar) {
+      await Promise.allSettled([
+        typeof elemento.expand === "function" ? elemento.expand() : Promise.resolve(),
+        typeof elemento.show === "function" ? elemento.show() : Promise.resolve()
+      ]);
+    } else {
+      await Promise.allSettled([
+        typeof elemento.hide === "function" ? elemento.hide() : Promise.resolve(),
+        typeof elemento.collapse === "function" ? elemento.collapse() : Promise.resolve()
+      ]);
     }
+  } catch (error) {
+    console.warn(
+      `Falha ao alternar aviso ${seletor}:`,
+      error?.message || error
+    );
+  }
+}
+
+function pintarAvisoEtapa(seletor, pago) {
+  try {
+    const elemento = $w(seletor);
+
+    if (elemento?.style) {
+      elemento.style.backgroundColor = pago
+        ? "#E8F5ED"
+        : "#FFFFFF";
+
+      if (pago) {
+        elemento.style.borderColor = "#159447";
+        elemento.style.borderWidth = "2px";
+      }
+    }
+  } catch (_) {}
+}
+
+async function configurarSecoesInformativas(
+  contextoAtual,
+  acessosInformados = null
+) {
+  const access =
+    acessosInformados ||
+    acessosLocaisDoCheckout(contextoAtual);
+
+  const mobile =
+    wixWindowFrontend.formFactor === "Mobile";
+
+  const secoes = [
+    { seletor: "#botao1baixarmedidas", pago: access.medidas === true },
+    { seletor: "#botao2baixargraficos", pago: access.graficos === true },
+    { seletor: "#botao3projetocompleto", pago: access.projeto === true }
+  ];
+
+  for (const etapa of secoes) {
+    pintarAvisoEtapa(etapa.seletor, etapa.pago);
+
+    /*
+      Desktop: todos os avisos ficam visíveis; os pagos ficam verdes.
+      Mobile: avisos pagos desaparecem; faltantes continuam visíveis.
+    */
+    await mostrarSecaoEtapa(
+      etapa.seletor,
+      mobile ? !etapa.pago : true
+    );
   }
 
-  const importante = $w("#textoimportante");
-  await Promise.allSettled([
-    importante.expand(),
-    importante.show()
-  ]);
+  /* IMPORTANTE aparece sempre. */
+  await mostrarSecaoEtapa("#textoimportante", true);
 }
 
 $w.onReady(function () {

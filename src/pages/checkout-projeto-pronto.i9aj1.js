@@ -27,7 +27,7 @@ import {
 const PIX_POLL_INTERVALO_RAPIDO = 750;
 const PIX_POLL_INTERVALO = 2500;
 const PIX_POLL_MAX_TENTATIVAS = 240;
-const PIX_PRE_QR_LIMITE_MS = 18000;
+const PIX_PRE_QR_LIMITE_MS = 30000;
 const PIX_CRIACAO_TIMEOUT = 6000;
 const PIX_CONSULTA_TIMEOUT = 3000;
 
@@ -3007,7 +3007,20 @@ $w.onReady(function () {
       );
     });
 
+  /*
+    Uma entrada nova nunca herda polling/cobrança da navegação anterior.
+    O ID recebido foi criado no clique da página de origem.
+  */
+  pararPollingPix();
+  chargeIdAtual = "";
+  pixConteudoEnviado = false;
+  pixPollingInicio = 0;
+  criandoCheckout = false;
+  fluxoAutomaticoIniciado = false;
+  checkoutAutorizado = false;
+
   checkoutId =
+    safe(wixLocation.query.checkoutId) ||
     gerarCheckoutId();
 
   const html =

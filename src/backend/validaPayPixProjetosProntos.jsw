@@ -860,7 +860,10 @@ async function findSession(
         safe(checkoutId)
       )
       .limit(1)
-      .find(DB_OPTS);
+      .find({
+        ...DB_OPTS,
+        consistentRead: true
+      });
 
   return (
     result.items[0] ||

@@ -1974,7 +1974,17 @@ function montarUrlCheckout(
     A identificação do cliente já está salva no navegador.
     Não coloque nome, e-mail, WhatsApp ou clienteId na URL.
   */
+  /*
+    Cada clique abre uma tentativa independente.
+    O checkoutId vai na URL para impedir que o histórico/BFCache
+    reaproveite a cobrança de uma navegação anterior.
+  */
+  const checkoutId =
+    `ckpro_${Date.now().toString(36)}_` +
+    Math.random().toString(16).slice(2, 12);
+
   const parametros = {
+    checkoutId,
     codigoProjeto,
 
     codigoCheckout:

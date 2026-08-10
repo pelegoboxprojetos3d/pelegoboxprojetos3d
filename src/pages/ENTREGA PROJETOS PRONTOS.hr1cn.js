@@ -2245,6 +2245,8 @@ async function carregarEntrega() {
 
         await mostrarProcessamento();
 
+        await mostrarProcessamento();
+
         alterarDescricao(
           "Pagamento aprovado. Estamos preparando seus arquivos..."
         );

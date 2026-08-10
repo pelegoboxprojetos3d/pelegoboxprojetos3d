@@ -1656,7 +1656,31 @@ async function identificarCliente(
         data.countryName
       ) ||
       identificacao.countryName ||
-      "Brasil"
+      "Brasil",
+
+    whatsappConfirmado:
+      data.whatsappConfirmado === true ||
+      identificacao.whatsappConfirmado === true,
+
+    confirmacaoWhatsappVersao:
+      data.whatsappConfirmado === true
+        ? Number(
+          data.confirmacaoWhatsappVersao ||
+          CONFIRMACAO_FLUXO_VERSAO
+        )
+        : Number(
+          identificacao.confirmacaoWhatsappVersao ||
+          0
+        ),
+
+    confirmadoEm:
+      safe(data.confirmadoEm) ||
+      identificacao.confirmadoEm ||
+      (
+        data.whatsappConfirmado === true
+          ? new Date().toISOString()
+          : ""
+      )
   };
 
   identificado =
@@ -1683,7 +1707,14 @@ async function identificarCliente(
   };
 
   try {
+    const clienteDoPopup =
+      data.cliente &&
+      typeof data.cliente === "object"
+        ? data.cliente
+        : null;
+
     clienteAtual =
+      clienteDoPopup ||
       await comTimeout(
         buscarCliente(
           telefone.whatsapp
@@ -1871,14 +1902,22 @@ async function abrirPopupWhatsapp() {
       resultado.whatsapp
     );
 
+    /*
+      O popup WhatsApp inicial já validou esta identificação.
+      Não desfazemos a confirmação ao retornar para a página.
+    */
     identificacao.whatsappConfirmado =
-      false;
+      resultado.whatsappConfirmado === true;
 
     identificacao.confirmacaoWhatsappVersao =
-      0;
+      Number(
+        resultado.confirmacaoWhatsappVersao ||
+        CONFIRMACAO_FLUXO_VERSAO
+      );
 
     identificacao.confirmadoEm =
-      "";
+      safe(resultado.confirmadoEm) ||
+      new Date().toISOString();
 
     await identificarCliente(
       resultado

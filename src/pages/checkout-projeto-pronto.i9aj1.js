@@ -21,8 +21,8 @@ import {
 } from "backend/entregaProjetosProntos.jsw";
 
 // PÁGINA: /checkout-projeto-pronto
-// HTML: #htmlIframeMP
-// R21 — CONTRATO ANTIGO DO HTML + RECUPERAÇÃO DO PIX
+// HTML: #htmlCheckoutValidaPay
+// R22 — ID OFICIAL + IDENTIFICAÇÃO UNIVERSAL + RECUPERAÇÃO DO PIX
 
 const PIX_POLL_INTERVALO_RAPIDO = 750;
 const PIX_POLL_INTERVALO = 2500;
@@ -880,7 +880,7 @@ function whatsappPrimeiroEstagio() {
 function postarDiretoNoHtml(message) {
   try {
     $w(
-      "#htmlIframeMP"
+      "#htmlCheckoutValidaPay"
     ).postMessage(
       message
     );
@@ -3034,7 +3034,7 @@ $w.onReady(function () {
 
   const html =
     $w(
-      "#htmlIframeMP"
+      "#htmlCheckoutValidaPay"
     );
 
   html.onMessage(

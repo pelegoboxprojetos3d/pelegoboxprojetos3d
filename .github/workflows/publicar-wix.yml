@@ -45,9 +45,6 @@ jobs:
       - name: Corrigir impressora pós-pagamento
         run: node scripts/corrigir-impressora-pos-pagamento.cjs
 
-      - name: Estabilizar PIX ValidaPay
-        run: node scripts/estabilizar-validapay-pix.cjs
-
       - name: Travar regra visual final
         run: node scripts/travar-regra-visual-final.cjs
 

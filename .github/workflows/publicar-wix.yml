@@ -45,6 +45,9 @@ jobs:
       - name: Unificar regra visual de etapas
         run: node scripts/unificar-regra-avisos.cjs
 
+      - name: Corrigir impressora pós-pagamento
+        run: node scripts/corrigir-impressora-pos-pagamento.cjs
+
       - name: Instalar dependências
         run: npm install --ignore-scripts
 

@@ -865,19 +865,11 @@ function dadosTelefoneDigitado(
 
 function whatsappPrimeiroEstagio() {
   /*
-    A chave dedicada é imutável neste checkout:
-    apenas o popup anterior pode gravá-la.
-
-    O objeto legado fica somente como compatibilidade
-    para clientes que iniciaram o fluxo antes da correção.
+    REGRA RÍGIDA:
+    a única fonte válida é a chave dedicada gravada pelo popup 1.
+    Não usamos contexto, cadastro nem o número digitado no popup 2 como fallback.
   */
-  return (
-    lerWhatsappPrimeiroEstagioDedicado() ||
-    normalizarWhatsappBrasil(
-      contexto.whatsappE164 ||
-      contexto.whatsapp
-    )
-  );
+  return lerWhatsappPrimeiroEstagioDedicado();
 }
 
 
@@ -2435,6 +2427,18 @@ async function cadastrarCliente(
       );
     }
 
+    const whatsappEsperado =
+      whatsappPrimeiroEstagio();
+
+    if (
+      !whatsappEsperado ||
+      telefone.whatsapp !== whatsappEsperado
+    ) {
+      throw new Error(
+        "O WhatsApp informado não confere com o digitado na primeira etapa."
+      );
+    }
+
     if (
       whatsappConsultado &&
       telefone.whatsapp !==
@@ -2622,9 +2626,14 @@ async function enviarClienteExistente(
       data
     );
 
+  const whatsappEsperado =
+    whatsappPrimeiroEstagio();
+
   if (
     !checkoutAutorizado ||
     !clienteConsultado ||
+    !whatsappEsperado ||
+    telefone.whatsapp !== whatsappEsperado ||
     telefone.whatsapp !==
       whatsappConsultado
   ) {

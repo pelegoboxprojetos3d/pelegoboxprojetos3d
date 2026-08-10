@@ -936,13 +936,10 @@ function salvarIdentificacao() {
     );
 
   /*
-    Esta chave só é gravada no primeiro estágio.
-    O checkout de confirmação nunca pode alterá-la.
+    A chave dedicada do primeiro WhatsApp NÃO é atualizada aqui.
+    Ela só pode ser gravada explicitamente quando o popup 1 retorna VERIFY.
+    Isso impede o checkout/popup 2 de transformar outro número no "primeiro".
   */
-  salvarWhatsappPrimeiroEstagio(
-    identificacao.whatsappE164 ||
-    identificacao.whatsapp
-  );
 
   try {
     session.setItem(
@@ -1864,6 +1861,15 @@ async function abrirPopupWhatsapp() {
 
       return;
     }
+
+    /*
+      Fonte da verdade da etapa 1.
+      Gravamos uma única vez, exatamente com o número retornado pelo popup 1.
+    */
+    salvarWhatsappPrimeiroEstagio(
+      resultado.whatsappE164 ||
+      resultado.whatsapp
+    );
 
     identificacao.whatsappConfirmado =
       false;

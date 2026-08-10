@@ -132,7 +132,7 @@ function whatsappValido(data = {}) {
   }
 
   if (ddi === "55") {
-    return /^\d{11}$/.test(
+    return /^\d{10,11}$/.test(
       whatsapp
     );
   }

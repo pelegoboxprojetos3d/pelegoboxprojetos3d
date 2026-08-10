@@ -2028,21 +2028,45 @@ async function iniciarPagina() {
       ...salva
     };
 
-    identificado =
-      true;
+    const confirmacaoAtualValida =
+      salva.whatsappConfirmado === true &&
+      Number(
+        salva.confirmacaoWhatsappVersao ||
+        0
+      ) === 2;
 
-    identificarCliente(
-      salva
-    ).catch(
-      (
-        error
-      ) => {
-        console.error(
-          "Erro ao restaurar identificação:",
-          error?.message ||
+    if (confirmacaoAtualValida) {
+      identificado =
+        true;
+
+      identificarCliente(
+        salva
+      ).catch(
+        (
           error
-        );
-      }
+        ) => {
+          console.error(
+            "Erro ao restaurar identificação:",
+            error?.message ||
+            error
+          );
+        }
+      );
+
+      return;
+    }
+
+    /*
+      Registros antigos nunca passaram pela dupla
+      confirmação corrigida. Eles refazem o primeiro
+      popup uma única vez e, depois da confirmação no
+      checkout, deixam de ser incomodados novamente.
+    */
+    identificado =
+      false;
+
+    agendarPopupWhatsapp(
+      300
     );
 
     return;

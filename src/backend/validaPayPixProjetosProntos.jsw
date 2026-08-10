@@ -948,47 +948,75 @@ async function findProductReferenceSession({
   type,
   amount
 }) {
-  try {
-    const result =
-      await wixData
-        .query(SESSIONS)
-        .eq(
-          "codigoProjeto",
-          safe(projectCode)
-        )
-        .descending(
-          "updatedAtDate"
-        )
-        .limit(30)
-        .find(DB_OPTS);
+  const code =
+    safe(projectCode);
 
-    return (
-      result.items || []
-    ).find(
-      (item) =>
-        normalizeType(
-          item?.tipoProduto
-        ) === type &&
-        sameMoney(
-          item?.valor,
-          amount
-        ) &&
-        safe(
-          item?.validaPayProductId
-        ) &&
-        safe(
-          item?.validaPayPriceId
-        )
-    ) || null;
+  const numericCode =
+    Number(code);
 
-  } catch (error) {
-    console.warn(
-      "Não foi possível reutilizar referência de produto da sessão:",
-      error?.message || error
+  const attempts = [
+    code
+  ];
+
+  if (
+    code &&
+    Number.isSafeInteger(
+      numericCode
+    )
+  ) {
+    attempts.push(
+      numericCode
     );
-
-    return null;
   }
+
+  for (const codeValue of attempts) {
+    try {
+      const result =
+        await wixData
+          .query(SESSIONS)
+          .eq(
+            "codigoProjeto",
+            codeValue
+          )
+          .descending(
+            "updatedAtDate"
+          )
+          .limit(30)
+          .find(DB_OPTS);
+
+      const match =
+        (
+          result.items || []
+        ).find(
+          (item) =>
+            normalizeType(
+              item?.tipoProduto
+            ) === type &&
+            sameMoney(
+              item?.valor,
+              amount
+            ) &&
+            safe(
+              item?.validaPayProductId
+            ) &&
+            safe(
+              item?.validaPayPriceId
+            )
+        );
+
+      if (match) {
+        return match;
+      }
+
+    } catch (error) {
+      console.warn(
+        "Não foi possível reutilizar referência de produto da sessão:",
+        error?.message || error
+      );
+    }
+  }
+
+  return null;
 }
 
 // ======================================================

@@ -39,6 +39,9 @@ jobs:
       - name: Corrigir galeria da entrega
         run: node scripts/corrigir-entrega-galeria.cjs
 
+      - name: Restaurar avisos da entrega
+        run: node scripts/restaurar-avisos-entrega.cjs
+
       - name: Instalar dependências
         run: npm install --ignore-scripts
 

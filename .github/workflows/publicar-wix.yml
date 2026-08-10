@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar-e-publicar:
@@ -28,26 +28,11 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Travar dupla confirmação do WhatsApp
-        run: node scripts/corrigir-whatsapp-dupla-confirmacao.cjs
-
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
       - name: Validar código
         run: npm run lint
-
-      - name: Persistir correção do WhatsApp
-        run: |
-          if git diff --quiet; then
-            echo "Nenhuma alteração pendente."
-          else
-            git config user.name "PELEGO BOX PROJETOS 3D via WIX"
-            git config user.email "pelegobox82@gmail.com"
-            git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" "src/pages/checkout-projeto-pronto.i9aj1.js"
-            git commit -m "Travar confirmação do WhatsApp entre popup 1 e popup 2"
-            git push origin HEAD:main
-          fi
 
       - name: Aguardar sincronização GitHub → Wix
         run: sleep 12

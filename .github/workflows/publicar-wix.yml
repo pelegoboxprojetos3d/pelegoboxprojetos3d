@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar-e-publicar:
@@ -28,27 +28,11 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Ocultar placeholders da entrega R26
-        run: node scripts/fix-entrega-placeholder-r26.cjs
-
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
       - name: Validar código
         run: npm run lint
-
-      - name: Persistir correção da entrega R26
-        run: |
-          set -euo pipefail
-          if git diff --quiet; then
-            echo "Entrega R26 já aplicada."
-          else
-            git config user.name "PELEGO BOX PROJETOS 3D via WIX"
-            git config user.email "pelegobox82@gmail.com"
-            git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-            git commit -m "Ocultar placeholders durante processamento da entrega R26 [skip ci]"
-            git push origin HEAD:main
-          fi
 
       - name: Aguardar sincronização GitHub → Wix
         run: sleep 12

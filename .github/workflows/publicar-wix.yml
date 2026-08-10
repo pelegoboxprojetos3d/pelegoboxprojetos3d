@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validar-e-publicar:
@@ -28,11 +28,26 @@ jobs:
           node-version: "20"
           cache: npm
 
+      - name: Corrigir banner pago no checkout
+        run: node scripts/fix-checkout-banner-pago.cjs
+
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
       - name: Validar código
         run: npm run lint
+
+      - name: Persistir correção do checkout
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração pendente."
+            exit 0
+          fi
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/checkout-projeto-pronto.i9aj1.js"
+          git commit -m "Ocultar banner de etapa já paga no checkout"
+          git push
 
       - name: Aguardar sincronização GitHub → Wix
         run: sleep 12

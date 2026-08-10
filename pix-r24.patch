@@ -1,0 +1,106 @@
+diff --git a/src/pages/checkout-projeto-pronto.i9aj1.js b/src/pages/checkout-projeto-pronto.i9aj1.js
+index 56161f7..0000000 100644
+--- a/src/pages/checkout-projeto-pronto.i9aj1.js
++++ b/src/pages/checkout-projeto-pronto.i9aj1.js
+@@ -22,12 +22,12 @@ import {
+ // HTML: #htmlCheckoutValidaPay
+ // R22 — ID OFICIAL + IDENTIFICAÇÃO UNIVERSAL + RECUPERAÇÃO DO PIX
+ 
+-const PIX_POLL_INTERVALO_RAPIDO = 750;
++const PIX_POLL_INTERVALO_RAPIDO = 2000;
+ const PIX_POLL_INTERVALO = 2500;
+ const PIX_POLL_MAX_TENTATIVAS = 240;
+ const PIX_PRE_QR_LIMITE_MS = 30000;
+-const PIX_CRIACAO_TIMEOUT = 6000;
++const PIX_CRIACAO_TIMEOUT = 12000;
+ const PIX_CONSULTA_TIMEOUT = 3000;
+ 
+ const SESSION_KEY =
+diff --git a/src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js b/src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js
+index 4014700..0000000 100644
+--- a/src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js
++++ b/src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js
+@@ -1,3 +1,3 @@
+@@
+-  if (!consultaConcluida) {
+-    try {
+-      await identificarCliente(
+-        identificacao
+-      );
+-    } catch (error) {
+-      console.error(
+-        "Não foi possível atualizar o cliente:",
+-        error?.message ||
+-        error
+-      );
+-
+-      return;
+-    }
+-  }
++  /*
++    Não bloqueia a abertura do checkout esperando uma nova consulta de
++    cliente/acessos. A identificação já foi feita antes e a navegação deve
++    ser imediata. A atualização de acessos continua acontecendo no fluxo da
++    página, mas não segura o clique por vários segundos.
++  */
+ 
+   if (
+     etapaPaga(
+diff --git a/src/backend/validaPayPixProjetosProntos.jsw b/src/backend/validaPayPixProjetosProntos.jsw
+index 11a75c3..0000000 100644
+--- a/src/backend/validaPayPixProjetosProntos.jsw
++++ b/src/backend/validaPayPixProjetosProntos.jsw
+@@ -875,13 +875,18 @@ async function findSession(
+ async function upsertSession(
+   checkoutId,
+-  patch
++  patch,
++  existingKnown = undefined
+ ) {
+   const existing =
+-    await findSession(
+-      checkoutId
+-    );
++    existingKnown === undefined
++      ? await findSession(
++        checkoutId
++      )
++      : existingKnown;
+@@ -1947,7 +1952,7 @@ export async function criarCobrancaPixTransparente(
+-    await upsertSession(
++    const sessaoPreparada = await upsertSession(
+       checkoutId,
+       {
+@@ -2026,7 +2031,8 @@ export async function criarCobrancaPixTransparente(
+         updatedAtDate:
+           now
+-      }
++      },
++      existing
+     );
+@@ -2081,27 +2087,11 @@ export async function criarCobrancaPixTransparente(
+-    /*
+-      Se o EMV ainda não chegou, devolve "processing" imediatamente.
+-      O frontend continua consultando pelo chargeId sem travar o comprador.
+-    */
+-
+-    await upsertSession(
+-      checkoutId,
+-      {
+-        preferenceId:
+-          chargeId,
+-
+-        validaPayChargeId:
+-          chargeId,
+-
+-        status:
+-          "pending",
+-
+-        updatedAtDate:
+-          new Date()
+-      }
+-    );
+-
+     return publicCharge({
+       checkoutId,
+       chargeId,

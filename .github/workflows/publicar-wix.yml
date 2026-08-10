@@ -51,6 +51,9 @@ jobs:
       - name: Estabilizar PIX ValidaPay
         run: node scripts/estabilizar-validapay-pix.cjs
 
+      - name: Travar regra visual final
+        run: node scripts/travar-regra-visual-final.cjs
+
       - name: Instalar dependências
         run: npm install --ignore-scripts
 

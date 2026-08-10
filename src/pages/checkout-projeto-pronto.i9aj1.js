@@ -1772,25 +1772,33 @@ async function processarClienteEncontrado(
     safe(
       cliente._id ||
       cliente.clienteId ||
+      cliente["Cliente ID"] ||
       contexto.clienteId
     );
 
   const nomeCliente =
     safe(
       cliente.nome ||
+      cliente.nomeCliente ||
+      cliente.Nomecliente ||
       cliente.title ||
+      cliente.Title ||
       contexto.nome
     );
 
   const emailResult =
     validarEmail(
       cliente.email ||
+      cliente.Email ||
       contexto.email
     );
 
   const documentoResult =
     validarCpfCnpj(
       cliente.cpfCnpj ||
+      cliente.cpfcnpj ||
+      cliente.Cpfcnpj ||
+      cliente["CPF/CNPJ"] ||
       contexto.cpfCnpj
     );
 

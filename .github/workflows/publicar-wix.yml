@@ -6,17 +6,20 @@ on:
       - main
   workflow_dispatch:
 
+# Sempre vence a alteração mais recente.
+# Se outro commit entrar enquanto um deploy antigo ainda roda,
+# o deploy antigo é cancelado em vez de publicar versões intermediárias.
 concurrency:
   group: wix-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar-e-publicar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
       - name: Baixar código
@@ -26,54 +29,52 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Corrigir estabilizador
-        run: node scripts/corrigir-estabilizador.cjs
-
-      - name: Validar arquivos da entrega
-        run: node scripts/corrigir-processador.cjs
-
-      - name: Corrigir galeria da entrega
-        run: node scripts/corrigir-entrega-galeria.cjs
-
-      - name: Restaurar avisos da entrega
-        run: node scripts/restaurar-avisos-entrega.cjs
-
-      - name: Unificar regra visual de etapas
-        run: node scripts/unificar-regra-avisos.cjs
-
-      - name: Corrigir impressora pós-pagamento
-        run: node scripts/corrigir-impressora-pos-pagamento.cjs
-
-      - name: Travar regra visual final
-        run: node scripts/travar-regra-visual-final.cjs
+          cache: npm
 
       - name: Instalar dependências
-        run: npm install --ignore-scripts
-
-      - name: Autenticar no Wix
-        run: npx wix login --api-key "$WIX_API_KEY"
-        env:
-          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
-
-      - name: Sincronizar tipos do Wix
-        continue-on-error: true
-        run: npm run postinstall
+        run: npm ci --ignore-scripts
 
       - name: Validar código
         run: npm run lint
 
-      - name: Persistir estabilização no GitHub
-        run: |
-          if git diff --quiet; then
-            echo "Nenhuma alteração pendente."
-            exit 0
-          fi
-          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
-          git config user.email "pelegobox82@gmail.com"
-          git add -A
-          git commit -m "Estabilizar fluxo final de lançamento"
-          git push origin HEAD:main
+      # O Editor Wix é sincronizado automaticamente com a branch main,
+      # mas a documentação do Wix informa que pode existir um pequeno atraso
+      # entre o push no GitHub e a chegada do commit ao Editor.
+      - name: Aguardar sincronização GitHub → Wix
+        run: sleep 12
 
-      - name: Publicar no Wix
-        run: npx wix publish --source remote --approve-preview
+      # Não usamos `wix publish` aqui porque o CLI publica a UI indicada
+      # no wix.config.json, que atualmente está presa à revisão 5429.
+      # A API Site Publisher publica as alterações já salvas no site,
+      # preservando a UI mais recente do Editor.
+      - name: Publicar versão salva no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+
+          response_file="$(mktemp)"
+
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "Falha ao publicar o site pela API oficial do Wix."
+            exit 1
+          fi
+
+          echo "Site publicado com a versão salva mais recente do Editor."

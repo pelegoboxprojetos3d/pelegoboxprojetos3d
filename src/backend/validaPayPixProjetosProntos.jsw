@@ -13,7 +13,6 @@ import {
 const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
 const API_BASE = "https://api.validapay.com.br";
 const SESSIONS = "SessoesProjetosProntos2";
-const PRODUCT_TEMPLATE = "PP_VALIDAPAY_R8";
 const MAKE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
 const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";
 const SITE_BASE = "https://www.pelegobox.com.br";
@@ -22,14 +21,8 @@ const DB_OPTS = {
   suppressAuth: true
 };
 
-const SCOPES = [
-  "pix.cob/read",
-  "pix.cob/write",
-  "checkouts/read",
-  "checkouts/write",
-  "products/read",
-  "products/write"
-].join(" ");
+const SCOPE_CHARGE_WRITE = "checkouts/write";
+const SCOPE_CHARGE_READ = "pix.cob/read";
 
 const CREATE_ATTEMPTS = 3;
 const READY_ATTEMPTS = 3;
@@ -38,14 +31,9 @@ const READY_DELAY_MS = 300;
 const TOKEN_SAFETY_MS =
   60000;
 
-let accessTokenCache =
-  "";
-
-let accessTokenExpiresAt =
-  0;
-
-let accessTokenPromise =
-  null;
+const accessTokenCache = new Map();
+const accessTokenExpiresAt = new Map();
+const accessTokenPromise = new Map();
 
 
 // ======================================================
@@ -332,19 +320,6 @@ function parseMoney(value) {
   return Number.isFinite(number)
     ? Number(number.toFixed(2))
     : 0;
-}
-
-
-function sameMoney(
-  left,
-  right
-) {
-  return (
-    Math.abs(
-      parseMoney(left) -
-      parseMoney(right)
-    ) <= 0.01
-  );
 }
 
 
@@ -668,7 +643,7 @@ function transientError(error) {
 // AUTENTICAÇÃO
 // ======================================================
 
-async function requestAccessToken() {
+async function requestAccessToken(scope) {
   const clientId =
     safe(
       await getSecret(
@@ -683,10 +658,7 @@ async function requestAccessToken() {
       )
     );
 
-  if (
-    !clientId ||
-    !clientSecret
-  ) {
+  if (!clientId || !clientSecret) {
     throw new Error(
       "Credenciais da ValidaPay não encontradas."
     );
@@ -694,116 +666,125 @@ async function requestAccessToken() {
 
   const body = [
     "grant_type=client_credentials",
-
-    `client_id=${encodeURIComponent(
-      clientId
-    )}`,
-
-    `client_secret=${encodeURIComponent(
-      clientSecret
-    )}`,
-
-    `scope=${encodeURIComponent(
-      SCOPES
-    )}`
+    `client_id=${encodeURIComponent(clientId)}`,
+    `client_secret=${encodeURIComponent(clientSecret)}`,
+    `scope=${encodeURIComponent(scope)}`
   ].join("&");
 
-  const response =
-    await fetch(
-      AUTH_URL,
-      {
-        method: "post",
+  let lastError = null;
 
-        headers: {
-          "Content-Type":
-            "application/x-www-form-urlencoded"
-        },
-
-        body
-      }
-    );
-
-  const data =
-    await readResponse(
-      response
-    );
-
-  const token =
-    safe(
-      data?.access_token
-    );
-
-  if (
-    !response.ok ||
-    !token
-  ) {
-    throw createApiError(
-      data,
-      response.status,
-      AUTH_URL
-    );
-  }
-
-  return {
-    token,
-
-    expiresIn:
-      Number(
-        data?.expires_in ||
-        data?.expiresIn ||
-        300
-      )
-  };
-}
-
-
-async function getAccessToken() {
-  const now =
-    Date.now();
-
-  if (
-    accessTokenCache &&
-    now <
-      accessTokenExpiresAt -
-      TOKEN_SAFETY_MS
-  ) {
-    return accessTokenCache;
-  }
-
-  if (accessTokenPromise) {
-    return accessTokenPromise;
-  }
-
-  accessTokenPromise =
-    requestAccessToken()
-      .then(
-        (
-          {
-            token,
-            expiresIn
-          }
-        ) => {
-          accessTokenCache =
-            token;
-
-          accessTokenExpiresAt =
-            Date.now() +
-            Math.max(
-              120,
-              expiresIn
-            ) * 1000;
-
-          return accessTokenCache;
-        }
-      )
-      .finally(
-        () => {
-          accessTokenPromise =
-            null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const response =
+      await fetch(
+        AUTH_URL,
+        {
+          method: "post",
+          headers: {
+            "Content-Type":
+              "application/x-www-form-urlencoded"
+          },
+          body
         }
       );
 
-  return accessTokenPromise;
+    const data =
+      await readResponse(response);
+
+    const token =
+      safe(data?.access_token);
+
+    if (response.ok && token) {
+      return {
+        token,
+        expiresIn:
+          Number(
+            data?.expires_in ||
+            data?.expiresIn ||
+            300
+          )
+      };
+    }
+
+    lastError =
+      createApiError(
+        data,
+        response.status,
+        AUTH_URL
+      );
+
+    if (
+      attempt < 2 &&
+      [408, 429, 500, 502, 503, 504]
+        .includes(Number(response.status || 0))
+    ) {
+      await sleep(250);
+      continue;
+    }
+
+    throw lastError;
+  }
+
+  throw lastError ||
+    new Error("Falha ao autenticar na ValidaPay.");
+}
+
+function clearToken(scope) {
+  accessTokenCache.delete(scope);
+  accessTokenExpiresAt.delete(scope);
+  accessTokenPromise.delete(scope);
+}
+
+async function getAccessToken(scope, force = false) {
+  const now = Date.now();
+
+  if (!force) {
+    const cached = safe(accessTokenCache.get(scope));
+    const expiresAt = Number(accessTokenExpiresAt.get(scope) || 0);
+
+    if (
+      cached &&
+      now < expiresAt - TOKEN_SAFETY_MS
+    ) {
+      return cached;
+    }
+
+    if (accessTokenPromise.get(scope)) {
+      return accessTokenPromise.get(scope);
+    }
+  } else {
+    clearToken(scope);
+  }
+
+  const promise =
+    requestAccessToken(scope)
+      .then(({ token, expiresIn }) => {
+        accessTokenCache.set(scope, token);
+        accessTokenExpiresAt.set(
+          scope,
+          Date.now() +
+            Math.max(120, expiresIn) * 1000
+        );
+        return token;
+      })
+      .finally(() => {
+        accessTokenPromise.delete(scope);
+      });
+
+  accessTokenPromise.set(scope, promise);
+  return promise;
+}
+
+function scopeForRequest(path, method) {
+  const verb = safe(method).toLowerCase();
+
+  if (
+    verb === "post" &&
+    path === "/v1/charges"
+  ) {
+    return SCOPE_CHARGE_WRITE;
+  }
+
+  return SCOPE_CHARGE_READ;
 }
 
 async function requestValidaPay({
@@ -811,40 +792,48 @@ async function requestValidaPay({
   method = "get",
   body
 }) {
-  const token =
-    await getAccessToken();
+  const scope = scopeForRequest(path, method);
 
-  const options = {
-    method,
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const token =
+      await getAccessToken(
+        scope,
+        attempt > 1
+      );
 
-    headers: {
-      Authorization:
-        `Bearer ${token}`,
+    const options = {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    };
 
-      "Content-Type":
-        "application/json"
+    if (body !== undefined) {
+      options.body = JSON.stringify(body);
     }
-  };
 
-  if (
-    body !== undefined
-  ) {
-    options.body =
-      JSON.stringify(body);
-  }
+    const response =
+      await fetch(
+        `${API_BASE}${path}`,
+        options
+      );
 
-  const response =
-    await fetch(
-      `${API_BASE}${path}`,
-      options
-    );
+    const data =
+      await readResponse(response);
 
-  const data =
-    await readResponse(
-      response
-    );
+    if (response.ok) {
+      return data;
+    }
 
-  if (!response.ok) {
+    if (
+      attempt === 1 &&
+      [401, 403].includes(Number(response.status || 0))
+    ) {
+      clearToken(scope);
+      continue;
+    }
+
     throw createApiError(
       data,
       response.status,
@@ -852,7 +841,7 @@ async function requestValidaPay({
     );
   }
 
-  return data;
+  throw new Error("Falha ao consultar a ValidaPay.");
 }
 
 
@@ -939,428 +928,6 @@ async function upsertSession(
       item,
       DB_OPTS
     );
-}
-
-
-async function findProductReferenceSession({
-  projectCode,
-  type,
-  amount
-}) {
-  const codigo =
-    safe(projectCode);
-
-  const candidatos = [
-    codigo
-  ];
-
-  const numero =
-    Number(codigo);
-
-  if (
-    codigo &&
-    Number.isSafeInteger(numero)
-  ) {
-    candidatos.push(numero);
-  }
-
-  for (const codigoValor of candidatos) {
-    try {
-      const result =
-        await wixData
-          .query(SESSIONS)
-          .eq(
-            "codigoProjeto",
-            codigoValor
-          )
-          .descending(
-            "updatedAtDate"
-          )
-          .limit(50)
-          .find(DB_OPTS);
-
-      const match =
-        (result.items || [])
-          .find(
-            (item) =>
-              normalizeType(
-                item?.tipoProduto
-              ) === type &&
-              sameMoney(
-                item?.valor,
-                amount
-              ) &&
-              safe(
-                item?.validaPayProductId
-              ) &&
-              safe(
-                item?.validaPayPriceId
-              )
-          );
-
-      if (match) {
-        return match;
-      }
-
-    } catch (error) {
-      console.warn(
-        "Falha ao procurar referência local do produto ValidaPay:",
-        error?.message || error
-      );
-    }
-  }
-
-  return null;
-}
-
-// ======================================================
-// PRODUTOS VALIDAPAY
-// ======================================================
-
-function productIdFrom(data) {
-  return safe(
-    data?.productId ||
-    data?.id ||
-    data?.product?.productId ||
-    data?.product?.id
-  );
-}
-
-
-function pricesFrom(data) {
-  if (
-    Array.isArray(
-      data?.prices
-    )
-  ) {
-    return data.prices;
-  }
-
-  if (
-    Array.isArray(
-      data?.product?.prices
-    )
-  ) {
-    return data.product.prices;
-  }
-
-  return [];
-}
-
-
-function priceIdFrom(price) {
-  return safe(
-    price?.priceId ||
-    price?.id
-  );
-}
-
-
-function validReusableProduct(
-  data,
-  expectedName,
-  expectedSku,
-  amount
-) {
-  const name =
-    safe(
-      data?.name ||
-      data?.product?.name
-    );
-
-  const template =
-    safe(
-      data?.metadata
-        ?.checkoutTemplate ||
-      data?.product
-        ?.metadata
-        ?.checkoutTemplate
-    );
-
-  const sku =
-    safe(
-      data?.metadata?.sku ||
-      data?.product
-        ?.metadata
-        ?.sku
-    );
-
-  const price =
-    pricesFrom(data)
-      .find(
-        (item) =>
-          priceIdFrom(item) &&
-          sameMoney(
-            item?.amount,
-            amount
-          )
-      );
-
-  return (
-    template ===
-      PRODUCT_TEMPLATE &&
-    name.toLowerCase() ===
-      expectedName.toLowerCase() &&
-    sku === expectedSku &&
-    Boolean(price)
-  );
-}
-
-
-async function fetchProduct(
-  productId
-) {
-  return requestValidaPay({
-    path:
-      `/v1/products/${encodeURIComponent(
-        productId
-      )}`,
-
-    method:
-      "get"
-  });
-}
-
-
-async function createProduct({
-  name,
-  sku,
-  projectCode,
-  checkoutCode,
-  type,
-  amount,
-  image
-}) {
-  const data =
-    await requestValidaPay({
-      path:
-        "/v1/products",
-
-      method:
-        "post",
-
-      body: {
-        name,
-
-        description:
-          stageLabel(type),
-
-        type:
-          "ONE_TIME",
-
-        isActive:
-          true,
-
-        metadata: {
-          origem:
-            "PELEGO_BOX_PROJETOS_PRONTOS",
-
-          checkoutTemplate:
-            PRODUCT_TEMPLATE,
-
-          sku,
-
-          codigoProjeto:
-            projectCode,
-
-          codigoCheckout:
-            checkoutCode,
-
-          tipoProduto:
-            type,
-
-          etapa:
-            stageLabel(type),
-
-          imagem:
-            image
-        },
-
-        prices: [
-          {
-            title:
-              stageLabel(type),
-
-            amount,
-
-            currency:
-              "BRL",
-
-            recurrenceType:
-              "ONE_TIME",
-
-            recurrenceInterval:
-              1
-          }
-        ]
-      }
-    });
-
-  const productId =
-    productIdFrom(data);
-
-  const price =
-    pricesFrom(data)
-      .find(
-        (item) =>
-          sameMoney(
-            item?.amount,
-            amount
-          )
-      ) ||
-    pricesFrom(data)[0];
-
-  const priceId =
-    priceIdFrom(price);
-
-  if (
-    !productId ||
-    !priceId
-  ) {
-    throw new Error(
-      "A ValidaPay não devolveu productId e priceId."
-    );
-  }
-
-  return {
-    productId,
-    priceId,
-    reused: false
-  };
-}
-
-
-async function findReusableProduct(
-  name,
-  sku,
-  amount
-) {
-  const data =
-    await requestValidaPay({
-      path:
-        "/v1/products" +
-        "?limit=50" +
-        "&status=active" +
-        `&search=${encodeURIComponent(name)}`,
-
-      method:
-        "get"
-    });
-
-  const items =
-    Array.isArray(
-      data?.items
-    )
-      ? data.items
-      : [];
-
-  for (const item of items) {
-    const productId =
-      productIdFrom(item);
-
-    if (
-      !productId ||
-      safe(item?.name)
-        .toLowerCase() !==
-        name.toLowerCase()
-    ) {
-      continue;
-    }
-
-    try {
-      const details =
-        await fetchProduct(
-          productId
-        );
-
-      if (
-        !validReusableProduct(
-          details,
-          name,
-          sku,
-          amount
-        )
-      ) {
-        continue;
-      }
-
-      const price =
-        pricesFrom(details)
-          .find(
-            (entry) =>
-              sameMoney(
-                entry?.amount,
-                amount
-              )
-          );
-
-      return {
-        productId,
-
-        priceId:
-          priceIdFrom(price),
-
-        reused: true
-      };
-
-    } catch (error) {
-      console.warn(
-        "Produto ValidaPay não pôde ser reutilizado:",
-        error?.message ||
-        error
-      );
-    }
-  }
-
-  return null;
-}
-
-
-async function ensureProduct({
-  session,
-  name,
-  sku,
-  projectCode,
-  checkoutCode,
-  type,
-  amount,
-  image
-}) {
-  const savedProductId =
-    safe(
-      session?.validaPayProductId
-    );
-
-  const savedPriceId =
-    safe(
-      session?.validaPayPriceId
-    );
-
-  if (
-    savedProductId &&
-    savedPriceId
-  ) {
-    return {
-      productId:
-        savedProductId,
-
-      priceId:
-        savedPriceId,
-
-      reused:
-        true
-    };
-  }
-
-  return createProduct({
-    name,
-    sku,
-    projectCode,
-    checkoutCode,
-    type,
-    amount,
-    image
-  });
 }
 
 
@@ -2463,45 +2030,6 @@ export async function criarCobrancaPixTransparente(
       }
     );
 
-    const productReferenceSession =
-      existing?.validaPayProductId &&
-      existing?.validaPayPriceId
-        ? existing
-        : await findProductReferenceSession({
-          projectCode,
-          type,
-          amount
-        });
-
-    const product =
-      await ensureProduct({
-        session:
-          productReferenceSession ||
-          existing,
-
-        name,
-        sku,
-        projectCode,
-        checkoutCode,
-        type,
-        amount,
-        image
-      });
-
-    await upsertSession(
-      checkoutId,
-      {
-        validaPayProductId:
-          product.productId,
-
-        validaPayPriceId:
-          product.priceId,
-
-        updatedAtDate:
-          new Date()
-      }
-    );
-
     const chargeBody = {
       paymentMethod:
         "pix",
@@ -2528,16 +2056,8 @@ export async function criarCobrancaPixTransparente(
         documentNumber:
           cpfCnpj
       },
+      amount,
 
-      items: [
-        {
-          priceId:
-            product.priceId,
-
-          quantity:
-            1
-        }
-      ],
 
       metadata: {
         origem:

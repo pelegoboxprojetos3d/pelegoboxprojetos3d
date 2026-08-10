@@ -30,9 +30,6 @@ jobs:
       - name: Corrigir estabilizador
         run: node scripts/corrigir-estabilizador.cjs
 
-      - name: Aplicar estabilização final
-        run: node scripts/estabilizar-fluxo-final.cjs
-
       - name: Validar arquivos da entrega
         run: node scripts/corrigir-processador.cjs
 

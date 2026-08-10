@@ -424,7 +424,6 @@ function pintarBoxEtapa(id, pago) {
 async function mostrarAvisosEntrega() {
   const acessos = entrega?.access || {};
   const stages = entrega?.stages || {};
-  const mobile = wixWindowFrontend.formFactor === "Mobile";
 
   const etapas = [
     {
@@ -446,7 +445,7 @@ async function mostrarAvisosEntrega() {
   for (const etapa of etapas) {
     pintarBoxEtapa(etapa.id, etapa.pago);
 
-    if (mobile && etapa.pago) {
+    if (etapa.pago) {
       await esconderElementoAviso(etapa.id);
     } else {
       await forcarElementoVisivel(etapa.id);

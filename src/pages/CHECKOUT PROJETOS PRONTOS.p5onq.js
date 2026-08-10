@@ -1403,8 +1403,6 @@ function estilizarAvisoPaginaPrincipal(id, pago) {
 }
 
 async function aplicarRegraVisualAvisosPaginaPrincipal() {
-  const mobile = wixWindowFrontend.formFactor === "Mobile";
-
   const etapas = [
     { id: IDS.avisoMedidas, pago: acessos.medidas === true },
     { id: IDS.avisoGraficos, pago: acessos.graficos === true },
@@ -1415,15 +1413,14 @@ async function aplicarRegraVisualAvisosPaginaPrincipal() {
     estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
 
     /*
-      REGRA ÚNICA:
-      - Desktop: os três avisos ficam visíveis.
-      - Mobile: aviso de etapa paga some e recolhe espaço.
-      - Mobile: etapas ainda não pagas continuam visíveis.
-      - IMPORTANTE não é tocado por esta função e permanece sempre.
+      REGRA ÚNICA EM QUALQUER DISPOSITIVO:
+      - etapa paga: aviso some e recolhe espaço;
+      - etapa não paga: aviso permanece visível;
+      - IMPORTANTE permanece sempre visível.
     */
     await alternarAvisoPaginaPrincipal(
       etapa.id,
-      mobile ? !etapa.pago : true
+      !etapa.pago
     );
   }
 }

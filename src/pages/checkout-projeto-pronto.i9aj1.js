@@ -2971,9 +2971,6 @@ async function configurarSecoesInformativas(
       ? acessosInformados
       : acessoVazio();
 
-  const mobile =
-    wixWindowFrontend.formFactor === "Mobile";
-
   const tipoAtual =
     tipoVisualCheckout(contextoAtual);
 
@@ -2991,12 +2988,12 @@ async function configurarSecoesInformativas(
     );
 
     /*
-      Desktop: os três avisos aparecem sempre.
-      Mobile: só desaparecem as etapas realmente pagas.
+      REGRA ÚNICA EM DESKTOP E MOBILE:
+      etapa paga desaparece; etapa não paga permanece visível.
     */
     await mostrarSecaoEtapa(
       etapa.seletor,
-      mobile ? !etapa.pago : true
+      !etapa.pago
     );
   }
 

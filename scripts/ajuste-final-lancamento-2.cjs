@@ -76,7 +76,56 @@ function patchValidaPay() {
   write(path, s);
 }
 
+function patchDeliveryBackend() {
+  const path = 'src/backend/entregaProjetosProntos.jsw';
+  let s = read(path);
+
+  if (!s.includes('const currentProcessingPurchase =')) {
+    const anchor = `  const pdfProject =\n    firstMediaFromPurchases(\n      purchases,\n      "arquivoProjeto",\n      "pdfProjeto"\n    ) ||\n    mediaSource(\n      project?.arquivoProjeto ||\n      project?.pdfProjeto\n    );\n\n  return {`;
+
+    const replacement = `  const pdfProject =\n    firstMediaFromPurchases(\n      purchases,\n      "arquivoProjeto",\n      "pdfProjeto"\n    ) ||\n    mediaSource(\n      project?.arquivoProjeto ||\n      project?.pdfProjeto\n    );\n\n  const currentProcessingPurchase =\n    purchases.find(\n      (item) =>\n        purchaseMatchesPayment(\n          item,\n          safe(session?.paymentId)\n        )\n    ) ||\n    newestFirst(purchases)[0] ||\n    null;\n\n  const statusProcessamento =\n    safe(\n      currentProcessingPurchase\n        ?.statusProcessamento\n    ).toUpperCase();\n\n  return {`;
+
+    s = replaceOnce(
+      s,
+      anchor,
+      replacement,
+      'ENTREGA BACKEND: status atual'
+    );
+
+    s = replaceOnce(
+      s,
+      `    pdfProjeto:\n      pdfProject,\n\n    valorMedidas:`,
+      `    pdfProjeto:\n      pdfProject,\n\n    statusProcessamento,\n\n    valorMedidas:`,
+      'ENTREGA BACKEND: expor status'
+    );
+  }
+
+  write(path, s);
+}
+
+function patchDeliveryPage() {
+  const path = 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+  let s = read(path);
+
+  if (!s.includes('const statusProcessamento =\n    safe(projeto.statusProcessamento)')) {
+    const oldFunction = `function entregaProcessada(resultado) {\n  const projeto = resultado?.project || {};\n  const tipo = safe(resultado?.session?.tipoProduto).toUpperCase();\n\n  if (tipo === "PROJETO_COMPLETO") {\n    return Boolean(safe(projeto.pdfProjeto));\n  }\n\n  if (tipo === "GRAFICOS") {\n    return Array.isArray(projeto.imagensGraficos) &&\n      projeto.imagensGraficos.filter(Boolean).length > 0;\n  }\n\n  return Boolean(safe(projeto.imagemMedidas));\n}`;
+
+    const newFunction = `function entregaProcessada(resultado) {\n  const projeto = resultado?.project || {};\n  const tipo = safe(resultado?.session?.tipoProduto).toUpperCase();\n\n  const statusProcessamento =\n    safe(projeto.statusProcessamento)\n      .toUpperCase();\n\n  /*\n    Quando o Make já iniciou o processamento, a galeria\n    só é liberada depois de PROCESSADO. Isso impede que\n    o primeiro gráfico apareça enquanto os demais ainda\n    estão sendo importados. Registros antigos sem status\n    continuam compatíveis pela existência do arquivo.\n  */\n  if (\n    statusProcessamento &&\n    statusProcessamento !== "PROCESSADO"\n  ) {\n    return false;\n  }\n\n  if (tipo === "PROJETO_COMPLETO") {\n    return Boolean(safe(projeto.pdfProjeto));\n  }\n\n  if (tipo === "GRAFICOS") {\n    return Array.isArray(projeto.imagensGraficos) &&\n      projeto.imagensGraficos.filter(Boolean).length > 0;\n  }\n\n  return Boolean(safe(projeto.imagemMedidas));\n}`;
+
+    s = replaceOnce(
+      s,
+      oldFunction,
+      newFunction,
+      'ENTREGA PAGE: aguardar processamento final'
+    );
+  }
+
+  write(path, s);
+}
+
 patchMainPage();
 patchPopup();
 patchValidaPay();
+patchDeliveryBackend();
+patchDeliveryPage();
 console.log('Ajustes finais de lançamento 2 aplicados.');

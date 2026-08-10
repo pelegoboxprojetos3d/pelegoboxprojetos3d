@@ -19,10 +19,6 @@ import {
   obterAcessosProjeto
 } from "backend/entregaProjetosProntos.jsw";
 
-import {
-  resolverConfirmacaoWhatsappBrasil
-} from "public/projetosProntosFluxo";
-
 // PÁGINA: /checkout-projeto-pronto
 // HTML: #htmlIframeMP
 // R21 — CONTRATO ANTIGO DO HTML + RECUPERAÇÃO DO PIX
@@ -30,17 +26,24 @@ import {
 const PIX_POLL_INTERVALO_RAPIDO = 750;
 const PIX_POLL_INTERVALO = 2500;
 const PIX_POLL_MAX_TENTATIVAS = 240;
-const PIX_CRIACAO_TIMEOUT = 9000;
-const PIX_CONSULTA_TIMEOUT = 4500;
-const PIX_RECOVERY_TIMEOUT = 8000;
+const PIX_PRE_QR_LIMITE_MS = 18000;
+const PIX_CRIACAO_TIMEOUT = 6000;
+const PIX_CONSULTA_TIMEOUT = 3000;
 
 const SESSION_KEY =
   "pp_identificacao_atual";
 
 const LOCAL_KEY =
   "pp_identificacao_persistente";
-const PIX_RECOVERY_TENTATIVAS = 8;
-const PIX_RECOVERY_ESPERA = 750;
+
+const FIRST_WHATSAPP_SESSION_KEY =
+  "pp_whatsapp_primeiro_estagio";
+
+const FIRST_WHATSAPP_LOCAL_KEY =
+  "pp_whatsapp_primeiro_estagio_persistente";
+
+const PIX_RECOVERY_TENTATIVAS = 4;
+const PIX_RECOVERY_ESPERA = 500;
 
 let contexto = {};
 let checkoutId = "";
@@ -63,6 +66,7 @@ let chargeIdAtual = "";
 let pollingPix = false;
 let pixPollTimer = null;
 let pixConteudoEnviado = false;
+let pixPollingInicio = 0;
 
 
 // ======================================================
@@ -401,6 +405,78 @@ function lerIdentificacaoSalva() {
   return {};
 }
 
+function lerWhatsappPrimeiroEstagioDedicado() {
+  const fontes = [
+    {
+      storage: session,
+      key:
+        FIRST_WHATSAPP_SESSION_KEY
+    },
+    {
+      storage: local,
+      key:
+        FIRST_WHATSAPP_LOCAL_KEY
+    }
+  ];
+
+  for (const fonte of fontes) {
+    try {
+      const numero =
+        normalizarWhatsappBrasil(
+          fonte.storage.getItem(
+            fonte.key
+          )
+        );
+
+      if (numero) {
+        return numero;
+      }
+    } catch (_) {
+      /*
+        Ignora armazenamento indisponível.
+      */
+    }
+  }
+
+  return "";
+}
+
+function normalizarCodigoCheckout(value) {
+  const codigo =
+    digits(value);
+
+  return codigo
+    ? codigo
+      .slice(-3)
+      .padStart(3, "0")
+    : "";
+}
+
+function tituloProdutoComCodigo(
+  titulo,
+  codigoCheckout
+) {
+  const codigo =
+    normalizarCodigoCheckout(
+      codigoCheckout
+    );
+
+  const tituloBase =
+    (
+      safe(titulo) ||
+      "Produto"
+    )
+      .replace(
+        /\s*\|\s*C[oó]digo\s+\d{1,3}.*$/i,
+        ""
+      )
+      .trim();
+
+  return codigo
+    ? `${tituloBase} | Código ${codigo}`
+    : tituloBase;
+}
+
 function contextoDaUrl() {
   const query =
     wixLocation.query ||
@@ -417,9 +493,17 @@ function contextoDaUrl() {
     );
 
   const codigoCheckout =
-    safe(
+    normalizarCodigoCheckout(
       query.codigoCheckout ||
       ""
+    );
+
+  const produtoOriginal =
+    safe(
+      query.titulo ||
+      query.produto ||
+      query.name ||
+      "Produto"
     );
 
   return {
@@ -427,11 +511,9 @@ function contextoDaUrl() {
     codigoCheckout,
 
     produto:
-      safe(
-        query.titulo ||
-        query.produto ||
-        query.name ||
-        "Produto"
+      tituloProdutoComCodigo(
+        produtoOriginal,
+        codigoCheckout
       ),
 
     sku:
@@ -588,6 +670,55 @@ function dadosTelefone(
   };
 }
 
+function dadosTelefoneDigitado(
+  data = {}
+) {
+  const recebido =
+    safe(
+      data.whatsappE164 ||
+      data.whatsapp ||
+      data.whatsappDigits ||
+      data.telefone
+    );
+
+  const whatsapp =
+    normalizarWhatsappBrasil(
+      recebido
+    );
+
+  return {
+    whatsapp,
+
+    whatsappE164:
+      whatsapp
+        ? `+55${whatsapp}`
+        : "",
+
+    ddi:
+      "55",
+
+    country:
+      "br"
+  };
+}
+
+function whatsappPrimeiroEstagio() {
+  /*
+    A chave dedicada é imutável neste checkout:
+    apenas o popup anterior pode gravá-la.
+
+    O objeto legado fica somente como compatibilidade
+    para clientes que iniciaram o fluxo antes da correção.
+  */
+  return (
+    lerWhatsappPrimeiroEstagioDedicado() ||
+    normalizarWhatsappBrasil(
+      contexto.whatsappE164 ||
+      contexto.whatsapp
+    )
+  );
+}
+
 
 // ======================================================
 // COMUNICAÇÃO COM O HTML
@@ -651,27 +782,24 @@ function enviarInit() {
     );
 
   /*
-    O segundo passo precisa receber o WhatsApp
-    informado no primeiro pop-up para conseguir
-    compará-lo. Somente clientes já confirmados
-    seguem automaticamente.
-  */
+    O HTML já faz a confirmação dupla do WhatsApp.
 
-  const temWhatsappAnterior =
-    Boolean(
-      telefone.whatsapp
-    );
+    Cliente novo recebe o campo vazio.
+
+    Cliente já identificado recebe o número
+    e segue automaticamente.
+  */
 
   const contextoHtml = {
     ...contexto,
 
     whatsapp:
-      temWhatsappAnterior
+      clienteJaIdentificado
         ? contexto.whatsapp
         : "",
 
     whatsappE164:
-      temWhatsappAnterior
+      clienteJaIdentificado
         ? contexto.whatsappE164
         : ""
   };
@@ -687,10 +815,15 @@ function enviarInit() {
 
     autoLookup:
       clienteJaIdentificado &&
-      temWhatsappAnterior,
+      Boolean(
+        telefone.whatsapp
+      ),
 
     hasWhatsappFromPreviousStep:
-      temWhatsappAnterior,
+      clienteJaIdentificado &&
+      Boolean(
+        telefone.whatsapp
+      ),
 
     requiredFields: {
       name:
@@ -1139,63 +1272,51 @@ function enviarStatusPix(
 async function recuperarPix(
   responseInicial = {}
 ) {
-  let ultimaResposta =
-    responseInicial;
-
-  let chargeId =
-    safe(
-      responseInicial.chargeId ||
-      chargeIdAtual
-    );
+  let ultimaResposta = responseInicial;
+  let chargeId = safe(
+    responseInicial.chargeId ||
+    chargeIdAtual
+  );
 
   for (
     let tentativa = 1;
-    tentativa <=
-      PIX_RECOVERY_TENTATIVAS;
+    tentativa <= PIX_RECOVERY_TENTATIVAS;
     tentativa += 1
   ) {
-    await esperar(
-      PIX_RECOVERY_ESPERA
-    );
+    await esperar(PIX_RECOVERY_ESPERA);
 
-    const resposta =
-      await comTimeout(
+    try {
+      const resposta = await comTimeout(
         consultarCobrancaPix({
           checkoutId,
           chargeId
         }),
-
         PIX_CONSULTA_TIMEOUT,
-
         "A consulta do PIX demorou mais que o esperado."
       );
 
-    ultimaResposta =
-      resposta ||
-      ultimaResposta;
-
-    chargeId =
-      safe(
+      ultimaResposta = resposta || ultimaResposta;
+      chargeId = safe(
         resposta?.chargeId ||
         chargeId
       );
 
-    if (
-      respostaPixPronta(
-        resposta
-      )
-    ) {
-      return resposta;
-    }
+      if (respostaPixPronta(resposta)) {
+        return resposta;
+      }
 
-    if (
-      resposta &&
-      resposta.ok === false &&
-      !respostaRecuperavel(
-        resposta
-      )
-    ) {
-      return resposta;
+      if (
+        resposta &&
+        resposta.ok === false &&
+        !respostaRecuperavel(resposta)
+      ) {
+        return resposta;
+      }
+    } catch (error) {
+      console.warn(
+        "Tentativa de localizar o PIX falhou:",
+        error?.message || error
+      );
     }
   }
 
@@ -1234,131 +1355,105 @@ async function executarPollingPix(
 ) {
   if (
     !pollingPix ||
-    !chargeIdAtual
+    (
+      !chargeIdAtual &&
+      !checkoutId
+    )
   ) {
     return;
   }
 
+  if (
+    !pixConteudoEnviado &&
+    pixPollingInicio > 0 &&
+    Date.now() - pixPollingInicio >=
+      PIX_PRE_QR_LIMITE_MS
+  ) {
+    pararPollingPix();
+
+    enviarParaHtml({
+      type: "PIX_RESULT",
+      ok: false,
+      processing: false,
+      recoverable: true,
+      checkoutId,
+      chargeId: chargeIdAtual,
+      status: "timeout",
+      error:
+        "Não foi possível gerar o PIX agora. Clique em tentar novamente."
+    });
+
+    return;
+  }
+
   try {
-    const resultado =
-      await comTimeout(
-        consultarCobrancaPix({
-          checkoutId,
+    const resultado = await comTimeout(
+      consultarCobrancaPix({
+        checkoutId,
+        chargeId: chargeIdAtual
+      }),
+      PIX_CONSULTA_TIMEOUT,
+      "A atualização do PIX demorou mais que o esperado."
+    );
 
-          chargeId:
-            chargeIdAtual
-        }),
-
-        PIX_CONSULTA_TIMEOUT,
-
-        "A atualização do PIX demorou mais que o esperado."
-      );
-
-    if (
-      resultado?.chargeId
-    ) {
-      chargeIdAtual =
-        safe(
-          resultado.chargeId
-        );
+    if (resultado?.chargeId) {
+      chargeIdAtual = safe(resultado.chargeId);
     }
 
     if (resultado?.ok) {
       if (
-        respostaPixPronta(
-          resultado
-        ) &&
+        respostaPixPronta(resultado) &&
         !pixConteudoEnviado
       ) {
-        enviarResultadoPix(
-          resultado
-        );
-
+        enviarResultadoPix(resultado);
       } else {
-        enviarStatusPix(
-          resultado
-        );
+        enviarStatusPix(resultado);
       }
 
-      if (
-        resultado.approved ===
-        true
-      ) {
+      if (resultado.approved === true) {
         pararPollingPix();
 
         enviarParaHtml({
-          type:
-            "PIX_APPROVED",
-
-          ok:
-            true,
-
+          type: "PIX_APPROVED",
+          ok: true,
           checkoutId,
-
-          chargeId:
-            chargeIdAtual,
-
-          deliveryUrl:
-            urlEntrega()
+          chargeId: chargeIdAtual,
+          deliveryUrl: urlEntrega()
         });
 
-        /*
-          Pequena espera para o webhook
-          registrar a compra antes da entrega.
-        */
-
         setTimeout(
-          () => {
-            wixLocation.to(
-              urlEntrega()
-            );
-          },
-
+          () => wixLocation.to(urlEntrega()),
           750
         );
 
         return;
       }
 
-      if (
-        statusFinalPix(
-          resultado.status
-        )
-      ) {
+      if (statusFinalPix(resultado.status)) {
         pararPollingPix();
         return;
       }
     }
-
   } catch (error) {
     console.warn(
       "Consulta automática do PIX falhou:",
-      error?.message ||
-      error
+      error?.message || error
     );
   }
 
   if (
-    tentativa >=
-    PIX_POLL_MAX_TENTATIVAS
+    tentativa >= PIX_POLL_MAX_TENTATIVAS
   ) {
     pararPollingPix();
 
     enviarParaHtml({
-      type:
-        "PIX_STATUS",
-
-      ok:
-        false,
-
+      type: "PIX_STATUS",
+      ok: false,
+      processing: false,
+      recoverable: true,
       checkoutId,
-
-      chargeId:
-        chargeIdAtual,
-
-      status:
-        "timeout",
-
+      chargeId: chargeIdAtual,
+      status: "timeout",
       error:
         "O PIX continua aguardando pagamento. Atualize esta página para consultar novamente."
     });
@@ -1366,44 +1461,42 @@ async function executarPollingPix(
     return;
   }
 
-  pixPollTimer =
-    setTimeout(
-      () => {
-        executarPollingPix(
-          tentativa + 1
-        ).catch(
-          console.error
-        );
-      },
-
-      pixConteudoEnviado
-        ? PIX_POLL_INTERVALO
-        : PIX_POLL_INTERVALO_RAPIDO
-    );
+  pixPollTimer = setTimeout(
+    () => {
+      executarPollingPix(
+        tentativa + 1
+      ).catch(console.error);
+    },
+    pixConteudoEnviado
+      ? PIX_POLL_INTERVALO
+      : PIX_POLL_INTERVALO_RAPIDO
+  );
 }
 
 function iniciarPollingPix(chargeId) {
   pararPollingPix();
 
-  chargeIdAtual =
-    safe(
-      chargeId
-    );
+  chargeIdAtual = safe(
+    chargeId ||
+    chargeIdAtual
+  );
 
-  if (!chargeIdAtual) {
+  if (
+    !chargeIdAtual &&
+    !checkoutId
+  ) {
     return;
   }
 
-  pollingPix =
-    true;
+  pixPollingInicio = Date.now();
+  pollingPix = true;
 
   executarPollingPix(1)
     .catch(
       (error) => {
         console.error(
           "Falha ao iniciar consulta do PIX:",
-          error?.message ||
-          error
+          error?.message || error
         );
       }
     );
@@ -1467,47 +1560,35 @@ async function abrirPixTransparente(
     return;
   }
 
-  criandoCheckout =
-    true;
+  criandoCheckout = true;
 
   try {
-    const telefone =
-      dadosTelefone(
-        data
-      );
-
-    const clienteId =
-      safe(
-        data.clienteId ||
-        clienteConsultado?._id ||
-        clienteConsultado?.clienteId ||
-        contexto.clienteId
-      );
-
-    const nomeCliente =
-      safe(
-        data.nome ||
-        data.nomeCliente ||
-        clienteConsultado?.nome ||
-        clienteConsultado?.title ||
-        contexto.nome
-      );
-
-    const emailResult =
-      validarEmail(
-        data.email ||
-        clienteConsultado?.email ||
-        contexto.email
-      );
-
-    const documentoResult =
-      validarCpfCnpj(
-        data.cpfCnpj ||
-        data.cpf ||
-        data.cnpj ||
-        clienteConsultado?.cpfCnpj ||
-        contexto.cpfCnpj
-      );
+    const telefone = dadosTelefone(data);
+    const clienteId = safe(
+      data.clienteId ||
+      clienteConsultado?._id ||
+      clienteConsultado?.clienteId ||
+      contexto.clienteId
+    );
+    const nomeCliente = safe(
+      data.nome ||
+      data.nomeCliente ||
+      clienteConsultado?.nome ||
+      clienteConsultado?.title ||
+      contexto.nome
+    );
+    const emailResult = validarEmail(
+      data.email ||
+      clienteConsultado?.email ||
+      contexto.email
+    );
+    const documentoResult = validarCpfCnpj(
+      data.cpfCnpj ||
+      data.cpf ||
+      data.cnpj ||
+      clienteConsultado?.cpfCnpj ||
+      contexto.cpfCnpj
+    );
 
     if (
       !contexto.codigoProjeto ||
@@ -1518,43 +1599,31 @@ async function abrirPixTransparente(
         "Dados do produto incompletos."
       );
     }
-
     if (!clienteId) {
       throw new Error(
         "Cliente não identificado."
       );
     }
-
     if (!nomeCliente) {
       throw new Error(
         "Nome do cliente não identificado."
       );
     }
-
     if (!telefone.whatsapp) {
       throw new Error(
         "WhatsApp não identificado."
       );
     }
-
     if (!emailResult.ok) {
-      throw new Error(
-        emailResult.error
-      );
+      throw new Error(emailResult.error);
     }
-
     if (!documentoResult.ok) {
-      throw new Error(
-        documentoResult.error
-      );
+      throw new Error(documentoResult.error);
     }
 
     enviarParaHtml({
-      type:
-        "PIX_LOADING",
-
+      type: "PIX_LOADING",
       checkoutId,
-
       message:
         "Preparando ambiente seguro de pagamento..."
     });
@@ -1563,180 +1632,99 @@ async function abrirPixTransparente(
       checkoutId,
       clienteId,
       nomeCliente,
-
-      email:
-        emailResult.email,
-
-      cpfCnpj:
-        documentoResult.cpfCnpj,
-
-      whatsapp:
-        telefone.whatsapp,
-
-      whatsappE164:
-        telefone.whatsappE164,
-
-      ddi:
-        telefone.ddi,
-
-      country:
-        telefone.country,
-
-      codigoProjeto:
-        contexto.codigoProjeto,
-
-      codigoCheckout:
-        contexto.codigoCheckout,
-
-      sku:
-        contexto.sku,
-
-      tipoProduto:
-        contexto.tipoProduto,
-
-      produto:
-        contexto.produto,
-
-      valor:
-        contexto.valor,
-
-      img:
-        contexto.img,
-
-      ctx:
-        contexto,
-
-      returnUrl:
-        contexto.returnUrl
+      email: emailResult.email,
+      cpfCnpj: documentoResult.cpfCnpj,
+      whatsapp: telefone.whatsapp,
+      whatsappE164: telefone.whatsappE164,
+      ddi: telefone.ddi,
+      country: telefone.country,
+      codigoProjeto: contexto.codigoProjeto,
+      codigoCheckout: contexto.codigoCheckout,
+      sku: contexto.sku,
+      tipoProduto: contexto.tipoProduto,
+      produto: contexto.produto,
+      valor: contexto.valor,
+      img: contexto.img,
+      ctx: contexto,
+      returnUrl: contexto.returnUrl
     };
 
-    let resposta =
-      await comTimeout(
-        criarCobrancaPixTransparente(
-          payload
-        ),
+    let resposta;
 
+    try {
+      resposta = await comTimeout(
+        criarCobrancaPixTransparente(payload),
         PIX_CRIACAO_TIMEOUT,
-
-        "A ValidaPay demorou para responder. Tente gerar o PIX novamente."
+        "A cobrança ainda está sendo localizada."
+      );
+    } catch (error) {
+      console.warn(
+        "Criação do PIX demorou; recuperando pelo checkoutId:",
+        error?.message || error
       );
 
-    if (
-      respostaPixPronta(
-        resposta
-      )
-    ) {
-      enviarResultadoPix(
-        resposta
-      );
+      enviarStatusPix({
+        ok: true,
+        processing: true,
+        recoverable: true,
+        status: "processing",
+        error:
+          "Localizando a cobrança já criada..."
+      });
 
-      iniciarPollingPix(
-        resposta.chargeId
-      );
-
+      iniciarPollingPix("");
       return;
     }
 
-    const chargeId =
-      safe(
-        resposta?.chargeId
-      );
+    if (respostaPixPronta(resposta)) {
+      enviarResultadoPix(resposta);
+      iniciarPollingPix(resposta.chargeId);
+      return;
+    }
 
-    if (
-      respostaRecuperavel(
-        resposta
-      ) &&
-      chargeId
-    ) {
+    const chargeId = safe(
+      resposta?.chargeId
+    );
+
+    if (respostaRecuperavel(resposta)) {
       chargeIdAtual =
-        chargeId;
+        chargeId ||
+        chargeIdAtual;
 
       enviarStatusPix({
         ...resposta,
-
-        ok:
-          true,
-
-        processing:
-          true,
-
-        recoverable:
-          true
+        ok: true,
+        processing: true,
+        recoverable: true
       });
 
-      iniciarPollingPix(
-        chargeId
-      );
-
-      return;
-    }
-
-    if (
-      respostaRecuperavel(
-        resposta
-      )
-    ) {
-      resposta =
-        await comTimeout(
-          recuperarPix(
-            resposta
-          ),
-
-          PIX_RECOVERY_TIMEOUT,
-
-          "O PIX ainda está sendo preparado. Tente novamente em alguns segundos."
-        );
-    }
-
-    if (
-      respostaPixPronta(
-        resposta
-      )
-    ) {
-      enviarResultadoPix(
-        resposta
-      );
-
-      iniciarPollingPix(
-        resposta.chargeId
-      );
-
+      iniciarPollingPix(chargeId);
       return;
     }
 
     throw new Error(
       resposta?.error ||
-      "A ValidaPay ainda está finalizando o PIX. Aguarde alguns segundos."
+      "Não foi possível gerar o PIX."
     );
-
   } catch (error) {
     console.error(
       "Erro ao gerar PIX:",
-      error?.message ||
-      error,
+      error?.message || error,
       error
     );
 
     enviarParaHtml({
-      type:
-        "PIX_RESULT",
-
-      ok:
-        false,
-
+      type: "PIX_RESULT",
+      ok: false,
+      processing: false,
       checkoutId,
-
-      recoverable:
-        true,
-
+      recoverable: true,
       error:
         error?.message ||
         "Não foi possível gerar o PIX."
     });
-
   } finally {
-    criandoCheckout =
-      false;
+    criandoCheckout = false;
   }
 }
 
@@ -1784,29 +1772,33 @@ async function processarClienteEncontrado(
     safe(
       cliente._id ||
       cliente.clienteId ||
+      cliente["Cliente ID"] ||
       contexto.clienteId
     );
 
   const nomeCliente =
     safe(
       cliente.nome ||
+      cliente.nomeCliente ||
+      cliente.Nomecliente ||
       cliente.title ||
+      cliente.Title ||
       contexto.nome
     );
 
   const emailResult =
     validarEmail(
       cliente.email ||
+      cliente.Email ||
       contexto.email
     );
 
   const documentoResult =
     validarCpfCnpj(
       cliente.cpfCnpj ||
-      cliente.cpf ||
-      cliente.documentNumber ||
-      cliente.documento ||
       cliente.cpfcnpj ||
+      cliente.Cpfcnpj ||
+      cliente["CPF/CNPJ"] ||
       contexto.cpfCnpj
     );
 
@@ -1949,31 +1941,14 @@ async function consultarCliente(
 
   try {
     const telefone =
-      dadosTelefone(
+      dadosTelefoneDigitado(
         data
       );
 
-    const confirmacao =
-      resolverConfirmacaoWhatsappBrasil({
-        primeiro:
-          contexto.whatsappE164 ||
-          contexto.whatsapp,
+    const whatsappEsperado =
+      whatsappPrimeiroEstagio();
 
-        confirmacaoAnterior:
-          confirmacaoWhatsappDivergente,
-
-        confirmacaoAtual:
-          telefone.whatsapp
-      });
-
-    if (!confirmacao.ok) {
-      const semPrimeiroNumero =
-        confirmacao.reason ===
-        "PRIMEIRO_WHATSAPP_AUSENTE";
-
-      confirmacaoWhatsappDivergente =
-        confirmacao.divergente ||
-        "";
+    if (!telefone.whatsapp) {
       enviarParaHtml({
         type:
           "CUSTOMER_RESULT",
@@ -1997,58 +1972,79 @@ async function consultarCliente(
           true,
 
         error:
-          semPrimeiroNumero
-            ? "Volte ao projeto e informe seu WhatsApp antes de continuar."
-            : "O WhatsApp não confere com o primeiro número. Digite exatamente o mesmo número."
+          "WhatsApp não informado."
       });
 
       return;
     }
 
-    const telefoneConfirmado = {
-      ...telefone,
-      whatsapp:
-        confirmacao.whatsapp,
-      whatsappE164:
-        confirmacao.whatsappE164
-    };
+    if (!whatsappEsperado) {
+      enviarParaHtml({
+        type:
+          "CUSTOMER_RESULT",
 
-    confirmacaoWhatsappDivergente =
-      "";
+        ok:
+          false,
 
-    salvarIdentificacaoCheckout({
-      whatsapp:
-        confirmacao.whatsapp,
+        exists:
+          false,
 
-      whatsappE164:
-        confirmacao.whatsappE164,
+        needsName:
+          false,
 
-      whatsappConfirmado:
-        true,
+        needsEmail:
+          false,
 
-      confirmadoEm:
-        new Date().toISOString()
-    });
+        needsCpfCnpj:
+          false,
 
-    /*
-      A busca das compras começa junto com a busca do cliente.
-      Antes ela só começava depois, somando duas esperas.
-    */
-    consultaAcessosAtiva =
-      consultarAcessos({
-        clienteId:
-          contexto.clienteId,
+        needsCustomerData:
+          false,
 
-        email:
-          contexto.email,
-
-        whatsapp:
-          confirmacao.whatsapp
+        error:
+          "Não encontrei o WhatsApp da primeira etapa. Volte e informe o número novamente."
       });
+
+      return;
+    }
+
+    if (
+      telefone.whatsapp !==
+      whatsappEsperado
+    ) {
+      enviarParaHtml({
+        type:
+          "CUSTOMER_RESULT",
+
+        ok:
+          false,
+
+        exists:
+          false,
+
+        needsName:
+          false,
+
+        needsEmail:
+          false,
+
+        needsCpfCnpj:
+          false,
+
+        needsCustomerData:
+          false,
+
+        error:
+          "O WhatsApp digitado não confere com o informado na primeira etapa."
+      });
+
+      return;
+    }
+
     const cliente =
       await comTimeout(
         buscarCliente(
-          telefoneConfirmado.whatsappE164
+          telefone.whatsappE164
         ),
 
         10000,
@@ -2057,7 +2053,7 @@ async function consultarCliente(
       );
 
     whatsappConsultado =
-      telefoneConfirmado.whatsapp;
+      telefone.whatsapp;
 
     if (!cliente) {
       /*
@@ -2073,7 +2069,7 @@ async function consultarCliente(
 
     await processarClienteEncontrado(
       cliente,
-      telefoneConfirmado
+      telefone
     );
 
   } catch (error) {

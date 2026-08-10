@@ -42,6 +42,9 @@ jobs:
       - name: Restaurar avisos da entrega
         run: node scripts/restaurar-avisos-entrega.cjs
 
+      - name: Unificar regra visual de etapas
+        run: node scripts/unificar-regra-avisos.cjs
+
       - name: Instalar dependências
         run: npm install --ignore-scripts
 

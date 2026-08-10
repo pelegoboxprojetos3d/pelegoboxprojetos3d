@@ -257,16 +257,11 @@ function alterarDescricao(
 // ======================================================
 
 async function mostrarProcessamento() {
-  try {
-    await $w(IDS.galeria).hide();
-    await $w(IDS.galeria).collapse();
-  } catch (erro) {
-    console.warn(
-      "Falha ao recolher a galeria durante o processamento:",
-      erro?.message || erro
-    );
-  }
-
+  /*
+    A impressora fica visível enquanto o Make ainda prepara a imagem.
+    Não escondemos nem recolhemos a galeria por código: quando o arquivo
+    chegar à coleção, mostrarGaleria() preenche e exibe a galeria.
+  */
   try {
     await $w(IDS.processando).expand();
     await $w(IDS.processando).show();
@@ -415,7 +410,12 @@ async function esconderElementoAviso(id) {
 function pintarBoxEtapa(id, pago) {
   try {
     const box = $w(id);
-    box.style.backgroundColor = pago ? "#E8F5ED" : "#FFFFFF";
+
+    /*
+      Na entrega desktop todos os banners continuam brancos.
+      Etapa paga recebe borda verde e mantém a sombra configurada no Editor.
+    */
+    box.style.backgroundColor = "#FFFFFF";
     box.style.borderColor = pago ? CORES.compradoBorda : "#E0E0E0";
     box.style.borderWidth = pago ? "2px" : "1px";
   } catch (_) {}
@@ -423,21 +423,12 @@ function pintarBoxEtapa(id, pago) {
 
 async function mostrarAvisosEntrega() {
   const acessos = entrega?.access || {};
-  const stages = entrega?.stages || {};
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
 
   const etapas = [
-    {
-      id: IDS.boxMedidas,
-      pago: acessos.medidas === true && stages.medidas?.pago === true
-    },
-    {
-      id: IDS.boxGraficos,
-      pago: acessos.graficos === true && stages.graficos?.pago === true
-    },
-    {
-      id: IDS.boxProjeto,
-      pago: acessos.projeto === true && stages.projeto?.pago === true
-    }
+    { id: IDS.boxMedidas, pago: acessos.medidas === true },
+    { id: IDS.boxGraficos, pago: acessos.graficos === true },
+    { id: IDS.boxProjeto, pago: acessos.projeto === true }
   ];
 
   await forcarElementoVisivel(IDS.avisosEtapas);
@@ -445,7 +436,13 @@ async function mostrarAvisosEntrega() {
   for (const etapa of etapas) {
     pintarBoxEtapa(etapa.id, etapa.pago);
 
-    if (etapa.pago) {
+    /*
+      REGRA DA ENTREGA:
+      - Desktop: todos os banners aparecem; pago fica com borda verde.
+      - Mobile: o banner referente à etapa paga some e recolhe espaço.
+      - Visibilidade é aplicada diretamente pelos IDs dos boxes.
+    */
+    if (mobile && etapa.pago) {
       await esconderElementoAviso(etapa.id);
     } else {
       await forcarElementoVisivel(etapa.id);
@@ -1786,16 +1783,13 @@ async function renderizarBotoes() {
     entrega.project || {};
 
   const medidasPaga =
-    acessos.medidas === true &&
-    etapas.medidas?.pago === true;
+    acessos.medidas === true;
 
   const graficosPaga =
-    acessos.graficos === true &&
-    etapas.graficos?.pago === true;
+    acessos.graficos === true;
 
   const projetoPago =
-    acessos.projeto === true &&
-    etapas.projeto?.pago === true;
+    acessos.projeto === true;
 
   pintarBoxEtapa(IDS.boxMedidas, medidasPaga);
   pintarBoxEtapa(IDS.boxGraficos, graficosPaga);
@@ -2302,13 +2296,6 @@ $w.onReady(
     checkoutEmAndamento =
       false;
 
-    /*
-      O botão do vídeo é escondido com proteção.
-
-      Mesmo que o botão tenha qualquer problema,
-      a entrega continuará sendo carregada.
-    */
-
     await esconderBotaoVideo();
 
     ligarEventos();
@@ -2326,32 +2313,13 @@ $w.onReady(
     ).disable();
 
     /*
-      A galeria permanece Oculta + Recolhida no editor.
-      O HTML de processamento também começa escondido.
-
-      Primeiro consultamos a entrega. Só depois decidimos:
-      - arquivo pronto: abre a galeria;
-      - pagamento aprovado e arquivo pendente: mostra a impressora.
+      A impressora nostálgica começa visível em qualquer entrada válida
+      da página de entrega e permanece até o arquivo aparecer na coleção.
+      A galeria não é escondida nem recolhida por esta rotina.
+      Assim que o Make termina, renderizarEntrega() mostra a imagem e
+      esconderProcessamento() remove a impressora.
     */
-    const retornoPosPagamento =
-      safe(
-        wixLocation.query?.pos_pagamento
-      ) === "1";
-
-    if (retornoPosPagamento) {
-      /*
-        O PIX já foi aprovado no checkout.
-        Mostra a impressora imediatamente, sem tela branca,
-        enquanto o backend/Make termina a entrega.
-      */
-      await mostrarProcessamento();
-    } else {
-      /*
-        Link antigo de e-mail ou acesso direto: não pisca a
-        impressora. A galeria abre quando a entrega pronta for lida.
-      */
-      await esconderProcessamento();
-    }
+    await mostrarProcessamento();
 
     await carregarEntrega();
   }

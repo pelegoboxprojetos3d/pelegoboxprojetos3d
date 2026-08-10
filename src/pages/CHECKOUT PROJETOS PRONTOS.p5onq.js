@@ -1403,6 +1403,8 @@ function estilizarAvisoPaginaPrincipal(id, pago) {
 }
 
 async function aplicarRegraVisualAvisosPaginaPrincipal() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
   const etapas = [
     { id: IDS.avisoMedidas, pago: acessos.medidas === true },
     { id: IDS.avisoGraficos, pago: acessos.graficos === true },
@@ -1413,14 +1415,15 @@ async function aplicarRegraVisualAvisosPaginaPrincipal() {
     estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
 
     /*
-      REGRA ÚNICA EM QUALQUER DISPOSITIVO:
-      - etapa paga: aviso some e recolhe espaço;
-      - etapa não paga: aviso permanece visível;
-      - IMPORTANTE permanece sempre visível.
+      REGRA DA PÁGINA /checkoutprojetosprontos:
+      - Desktop: os três banners aparecem sempre.
+      - Desktop: pago recebe borda verde; a sombra configurada no Editor é preservada.
+      - Mobile: o banner referente à etapa paga some e recolhe o espaço.
+      - Estado vem de acessos + IDs dos banners, nunca de sessão visual.
     */
     await alternarAvisoPaginaPrincipal(
       etapa.id,
-      !etapa.pago
+      mobile ? !etapa.pago : true
     );
   }
 }

@@ -27,11 +27,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Aplicar correções de estabilidade
-        run: node scripts/aplicar-hotfix-estabilidade.cjs
-
-      - name: Aplicar revalidação final
-        run: node scripts/ajuste-final-lancamento-2.cjs
+      - name: Aplicar estabilização final
+        run: node scripts/estabilizar-fluxo-final.cjs
 
       - name: Instalar dependências
         run: npm install --ignore-scripts
@@ -48,7 +45,7 @@ jobs:
       - name: Validar código
         run: npm run lint
 
-      - name: Persistir correções no GitHub
+      - name: Persistir estabilização no GitHub
         run: |
           if git diff --quiet; then
             echo "Nenhuma alteração pendente."
@@ -57,7 +54,7 @@ jobs:
           git config user.name "PELEGO BOX PROJETOS 3D via WIX"
           git config user.email "pelegobox82@gmail.com"
           git add -A
-          git commit -m "Correções finais de lançamento"
+          git commit -m "Estabilizar fluxo final de lançamento"
           git push origin HEAD:main
 
       - name: Publicar no Wix

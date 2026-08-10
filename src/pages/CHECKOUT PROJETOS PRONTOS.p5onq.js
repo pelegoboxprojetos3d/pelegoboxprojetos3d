@@ -82,7 +82,16 @@ const IDS = {
     "#button3",
 
   valorProjeto:
-    "#txtValor3"
+    "#txtValor3",
+
+  avisoMedidas:
+    "#box1",
+
+  avisoGraficos:
+    "#box2",
+
+  avisoProjeto:
+    "#box3"
 };
 
 let projeto =
@@ -117,11 +126,7 @@ let identificacao = {
   countryName: "Brasil",
   clienteId: "",
   nome: "",
-  email: "",
-  cpfCnpj: "",
-  whatsappConfirmado: false,
-  confirmacaoWhatsappVersao: 0,
-  confirmadoEm: ""
+  email: ""
 };
 
 let acessos = {
@@ -792,28 +797,6 @@ function normalizarIdentificacaoSalva(
     email:
       normalizeEmail(
         data.email
-      ),
-
-    cpfCnpj:
-      onlyDigits(
-        data.cpfCnpj ||
-        data.cpf ||
-        data.cnpj ||
-        ""
-      ),
-
-    whatsappConfirmado:
-      data.whatsappConfirmado === true,
-
-    confirmacaoWhatsappVersao:
-      Number(
-        data.confirmacaoWhatsappVersao ||
-        0
-      ),
-
-    confirmadoEm:
-      safe(
-        data.confirmadoEm
       )
   };
 }
@@ -873,14 +856,29 @@ function lerIdentificacaoSalva() {
   return null;
 }
 
-function salvarWhatsappPrimeiroEstagio(value) {
-  const numero =
-    normalizarTelefone({
-      whatsapp: value,
-      ddi: "55"
-    }).whatsapp;
+function salvarWhatsappPrimeiroEstagio(
+  value
+) {
+  let numero =
+    onlyDigits(
+      value
+    );
 
-  if (!/^\d{10,11}$/.test(numero)) {
+  if (
+    numero.startsWith("55") &&
+    (
+      numero.length === 12 ||
+      numero.length === 13
+    )
+  ) {
+    numero =
+      numero.slice(2);
+  }
+
+  if (
+    numero.length !== 10 &&
+    numero.length !== 11
+  ) {
     return;
   }
 
@@ -900,15 +898,19 @@ function salvarWhatsappPrimeiroEstagio(value) {
 }
 
 function salvarIdentificacao() {
-  salvarWhatsappPrimeiroEstagio(
-    identificacao.whatsappE164 ||
-    identificacao.whatsapp
-  );
-
   const serialized =
     JSON.stringify(
       identificacao
     );
+
+  /*
+    Esta chave só é gravada no primeiro estágio.
+    O checkout de confirmação nunca pode alterá-la.
+  */
+  salvarWhatsappPrimeiroEstagio(
+    identificacao.whatsappE164 ||
+    identificacao.whatsapp
+  );
 
   try {
     session.setItem(
@@ -985,6 +987,74 @@ function estadoPago(
   );
 
   button.enable();
+}
+
+function ligarDestaqueAoPassarMouse(
+  buttonId,
+  avisoId
+) {
+  const button =
+    $w(buttonId);
+
+  const aviso =
+    $w(avisoId);
+
+  let corOriginal =
+    "";
+
+  let larguraOriginal =
+    0;
+
+  try {
+    corOriginal =
+      aviso.style.borderColor;
+
+    larguraOriginal =
+      aviso.style.borderWidth;
+  } catch (_) {
+    return;
+  }
+
+  button.onMouseIn(
+    () => {
+      try {
+        aviso.style.borderColor =
+          "#159447";
+
+        aviso.style.borderWidth =
+          3;
+      } catch (_) {}
+    }
+  );
+
+  button.onMouseOut(
+    () => {
+      try {
+        aviso.style.borderColor =
+          corOriginal;
+
+        aviso.style.borderWidth =
+          larguraOriginal;
+      } catch (_) {}
+    }
+  );
+}
+
+function ligarDestaquesDosAvisos() {
+  ligarDestaqueAoPassarMouse(
+    IDS.medidas,
+    IDS.avisoMedidas
+  );
+
+  ligarDestaqueAoPassarMouse(
+    IDS.graficos,
+    IDS.avisoGraficos
+  );
+
+  ligarDestaqueAoPassarMouse(
+    IDS.projeto,
+    IDS.avisoProjeto
+  );
 }
 
 
@@ -1467,20 +1537,6 @@ async function identificarCliente(
 
   cancelarPopupAgendado();
 
-  const telefoneAnterior =
-    normalizarTelefone(
-      identificacao
-    ).whatsapp;
-
-  const confirmacaoMantida =
-    identificacao.whatsappConfirmado === true &&
-    Number(
-      identificacao.confirmacaoWhatsappVersao ||
-      0
-    ) === 2 &&
-    telefoneAnterior ===
-      telefone.whatsapp;
-
   identificacao = {
     ...identificacao,
 
@@ -1501,20 +1557,7 @@ async function identificarCliente(
         data.countryName
       ) ||
       identificacao.countryName ||
-      "Brasil",
-
-    whatsappConfirmado:
-      confirmacaoMantida,
-
-    confirmacaoWhatsappVersao:
-      confirmacaoMantida
-        ? 2
-        : 0,
-
-    confirmadoEm:
-      confirmacaoMantida
-        ? safe(identificacao.confirmadoEm)
-        : ""
+      "Brasil"
   };
 
   identificado =
@@ -1625,14 +1668,7 @@ async function identificarCliente(
           resultado
         );
       }
-      identificacao.cpfCnpj =
-        safe(
-          clienteAtual.cpfCnpj ||
-          clienteAtual.cpf ||
-          clienteAtual.documentNumber ||
-          clienteAtual.documento ||
-          clienteAtual.cpfcnpj
-        );
+
     } else {
       identificacao.clienteId =
         "";
@@ -1641,9 +1677,6 @@ async function identificarCliente(
         "";
 
       identificacao.email =
-        "";
-
-      identificacao.cpfCnpj =
         "";
     }
 
@@ -1934,6 +1967,8 @@ function ligarEventos() {
   eventosLigados =
     true;
 
+  ligarDestaquesDosAvisos();
+
   $w(
     IDS.medidas
   ).onClick(
@@ -2028,45 +2063,21 @@ async function iniciarPagina() {
       ...salva
     };
 
-    const confirmacaoAtualValida =
-      salva.whatsappConfirmado === true &&
-      Number(
-        salva.confirmacaoWhatsappVersao ||
-        0
-      ) === 2;
-
-    if (confirmacaoAtualValida) {
-      identificado =
-        true;
-
-      identificarCliente(
-        salva
-      ).catch(
-        (
-          error
-        ) => {
-          console.error(
-            "Erro ao restaurar identificação:",
-            error?.message ||
-            error
-          );
-        }
-      );
-
-      return;
-    }
-
-    /*
-      Registros antigos nunca passaram pela dupla
-      confirmação corrigida. Eles refazem o primeiro
-      popup uma única vez e, depois da confirmação no
-      checkout, deixam de ser incomodados novamente.
-    */
     identificado =
-      false;
+      true;
 
-    agendarPopupWhatsapp(
-      300
+    identificarCliente(
+      salva
+    ).catch(
+      (
+        error
+      ) => {
+        console.error(
+          "Erro ao restaurar identificação:",
+          error?.message ||
+          error
+        );
+      }
     );
 
     return;

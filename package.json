@@ -6,8 +6,7 @@
     "react": "16.14.0"
   },
   "dependencies": {
-    "mercadopago": "3.1.0",
-    "qrcode": "^1.5.4"
+    "mercadopago": "3.1.0"
   },
   "scripts": {
     "postinstall": "wix sync-types",

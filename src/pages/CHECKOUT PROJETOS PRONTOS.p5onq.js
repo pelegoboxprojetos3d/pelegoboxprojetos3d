@@ -56,6 +56,9 @@ const CONFIRMACAO_FLUXO_VERSAO =
 const CHECKOUT_AUTH_KEY =
   "pp_checkout_autorizado";
 
+const ACTIVE_PIX_SESSION_KEY =
+  "pp_checkout_pix_ativo";
+
 const MANUTENCAO_ATIVA =
   true;
 
@@ -2027,6 +2030,17 @@ function montarUrlCheckout(
   const checkoutId =
     `ckpro_${Date.now().toString(36)}_` +
     Math.random().toString(16).slice(2, 12);
+
+  /*
+    O novo clique invalida imediatamente qualquer polling deixado pela
+    tentativa anterior no histórico do navegador.
+  */
+  try {
+    session.setItem(
+      ACTIVE_PIX_SESSION_KEY,
+      checkoutId
+    );
+  } catch (_) {}
 
   const parametros = {
     checkoutId,

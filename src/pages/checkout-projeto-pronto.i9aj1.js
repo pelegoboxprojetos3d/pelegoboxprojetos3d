@@ -49,6 +49,9 @@ const CONFIRMACAO_FLUXO_VERSAO =
 const CHECKOUT_AUTH_KEY =
   "pp_checkout_autorizado";
 
+const ACTIVE_PIX_SESSION_KEY =
+  "pp_checkout_pix_ativo";
+
 const CHECKOUT_AUTH_TTL_MS =
   120000;
 
@@ -108,6 +111,30 @@ function gerarCheckoutId() {
     `ckpro_${Date.now().toString(36)}_` +
     Math.random().toString(16).slice(2, 12)
   );
+}
+
+function marcarCheckoutPixAtivo(value) {
+  try {
+    session.setItem(
+      ACTIVE_PIX_SESSION_KEY,
+      safe(value)
+    );
+  } catch (_) {}
+}
+
+function checkoutPixAindaAtivo() {
+  try {
+    return (
+      Boolean(checkoutId) &&
+      safe(
+        session.getItem(
+          ACTIVE_PIX_SESSION_KEY
+        )
+      ) === safe(checkoutId)
+    );
+  } catch (_) {
+    return true;
+  }
 }
 
 function normalizarMensagem(raw) {
@@ -1266,6 +1293,10 @@ function voltarParaPaginaAnterior(
 ) {
   pararPollingPix();
 
+  if (checkoutPixAindaAtivo()) {
+    marcarCheckoutPixAtivo("");
+  }
+
   const base =
     contexto.returnUrl ||
     returnUrlProjeto(
@@ -1509,6 +1540,16 @@ function statusFinalPix(status) {
 async function executarPollingPix(
   tentativa = 1
 ) {
+  /*
+    Se o comprador voltou e iniciou outra tentativa, este checkout antigo
+    perde a posse do polling. Assim uma página preservada pelo histórico
+    não continua consultando o backend e a ValidaPay em segundo plano.
+  */
+  if (!checkoutPixAindaAtivo()) {
+    pararPollingPix();
+    return;
+  }
+
   if (
     !pollingPix ||
     (
@@ -1633,6 +1674,10 @@ async function executarPollingPix(
 function iniciarPollingPix(chargeId) {
   pararPollingPix();
 
+  if (!checkoutPixAindaAtivo()) {
+    return;
+  }
+
   chargeIdAtual = safe(
     chargeId ||
     chargeIdAtual
@@ -1713,7 +1758,10 @@ async function consultarPixAgora() {
 async function abrirPixTransparente(
   data = {}
 ) {
-  if (criandoCheckout) {
+  if (
+    criandoCheckout ||
+    !checkoutPixAindaAtivo()
+  ) {
     return;
   }
 
@@ -1830,6 +1878,10 @@ async function abrirPixTransparente(
       });
 
       iniciarPollingPix("");
+      return;
+    }
+
+    if (!checkoutPixAindaAtivo()) {
       return;
     }
 
@@ -3049,6 +3101,15 @@ $w.onReady(function () {
   checkoutId =
     safe(wixLocation.query.checkoutId) ||
     gerarCheckoutId();
+
+  /*
+    Esta tentativa passa a ser a única autorizada a manter polling ativo
+    nesta aba. Uma tentativa anterior restaurada pelo botão Voltar deixa
+    de consumir backend assim que enxergar esta nova chave.
+  */
+  marcarCheckoutPixAtivo(
+    checkoutId
+  );
 
   const html =
     $w(

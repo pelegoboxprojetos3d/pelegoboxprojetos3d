@@ -2981,19 +2981,39 @@ async function configurarSecoesInformativas(
   ];
 
   for (const etapa of secoes) {
+    /*
+      No checkout de pagamento, etapas anteriores ao produto atual
+      já são consideradas concluídas para fins VISUAIS.
+
+      Exemplos:
+      - checkout de GRAFICOS: MEDIDAS some imediatamente;
+      - checkout de PROJETO_COMPLETO: MEDIDAS e GRAFICOS somem.
+
+      A visibilidade continua sendo aplicada diretamente pelos IDs
+      dos banners. Não depende de sessão/cache visual.
+    */
+    const concluidaPeloFluxo =
+      (tipoAtual === "GRAFICOS" && etapa.tipo === "MEDIDAS") ||
+      (tipoAtual === "PROJETO_COMPLETO" &&
+        (etapa.tipo === "MEDIDAS" || etapa.tipo === "GRAFICOS"));
+
+    const pagoEfetivo =
+      etapa.pago === true ||
+      concluidaPeloFluxo;
+
     pintarAvisoEtapa(
       etapa.seletor,
-      etapa.pago,
-      !etapa.pago && etapa.tipo === tipoAtual
+      pagoEfetivo,
+      !pagoEfetivo && etapa.tipo === tipoAtual
     );
 
     /*
-      REGRA ÚNICA EM DESKTOP E MOBILE:
-      etapa paga desaparece; etapa não paga permanece visível.
+      REGRA DO /checkout-projeto-pronto EM DESKTOP E MOBILE:
+      banner de etapa já paga/concluída some e recolhe espaço.
     */
     await mostrarSecaoEtapa(
       etapa.seletor,
-      !etapa.pago
+      !pagoEfetivo
     );
   }
 

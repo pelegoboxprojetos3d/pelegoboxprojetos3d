@@ -246,24 +246,49 @@ function clientePublico(item) {
     return null;
   }
 
+  const primeiroValor = (...valores) =>
+    valores.find((valor) => safe(valor)) ?? "";
+
   const whatsapp =
     normalizarWhatsapp(
-      item.whatsapp
+      primeiroValor(
+        item.whatsapp,
+        item.Whatsapp
+      )
     );
 
   const id =
-    safe(item._id);
+    safe(
+      primeiroValor(
+        item._id,
+        item.clienteId,
+        item["Cliente ID"]
+      )
+    );
 
   return {
     _id:
       id,
 
     clienteId:
-      safe(item.clienteId) ||
-      id,
+      safe(
+        primeiroValor(
+          item.clienteId,
+          item["Cliente ID"],
+          id
+        )
+      ),
 
     nome:
-      limparNome(item.nome),
+      limparNome(
+        primeiroValor(
+          item.nome,
+          item.nomeCliente,
+          item.Nomecliente,
+          item.title,
+          item.Title
+        )
+      ),
 
     /*
       Padrão oficial usado internamente:
@@ -275,18 +300,27 @@ function clientePublico(item) {
       whatsapp,
 
     /*
-      Formato temporário para ValidaPay:
-      47988419261
+      Formato nacional sem DDI.
     */
     whatsappNacional:
       whatsappNacional(whatsapp),
 
     email:
-      limparEmail(item.email),
+      limparEmail(
+        primeiroValor(
+          item.email,
+          item.Email
+        )
+      ),
 
     cpfCnpj:
       limparCpfCnpj(
-        item.cpfCnpj
+        primeiroValor(
+          item.cpfCnpj,
+          item.cpfcnpj,
+          item.Cpfcnpj,
+          item["CPF/CNPJ"]
+        )
       ),
 
     status:

@@ -59,6 +59,11 @@ const newBlock = `  for (const etapa of secoes) {
   }
 `;
 
+if (text.includes(newBlock)) {
+  console.log('Correção do checkout já aplicada.');
+  process.exit(0);
+}
+
 if (!text.includes(oldBlock)) {
   throw new Error('Bloco esperado de banners do checkout não encontrado.');
 }

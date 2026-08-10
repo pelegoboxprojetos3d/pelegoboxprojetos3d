@@ -1521,6 +1521,7 @@ async function executarPollingPix(
 
   if (
     !pixConteudoEnviado &&
+    !chargeIdAtual &&
     pixPollingInicio > 0 &&
     Date.now() - pixPollingInicio >=
       PIX_PRE_QR_LIMITE_MS

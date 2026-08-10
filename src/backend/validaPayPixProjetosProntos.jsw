@@ -269,12 +269,12 @@ function normalizePhone(value) {
 
 
 function nationalPhone(value) {
-  const e164 =
-    normalizePhone(value);
-
-  return e164
-    ? digits(e164).slice(2)
-    : "";
+  /*
+    Apesar do nome legado desta função, a API da ValidaPay exige
+    customer.phone no formato internacional E.164.
+    Mantemos a função para não espalhar mudança desnecessária pelo arquivo.
+  */
+  return normalizePhone(value);
 }
 
 
@@ -635,6 +635,16 @@ function transientError(error) {
     /timeout|timed out|network|fetch|504/.test(
       message
     )
+  );
+}
+
+function transientChargeReadError(error) {
+  const status = Number(error?.status || 0);
+  const path = safe(error?.path);
+
+  return (
+    status === 404 &&
+    /^\/v1\/charges\/[^/]+$/i.test(path)
   );
 }
 
@@ -1128,9 +1138,8 @@ async function fetchChargeReady(
         error;
 
       if (
-        !transientError(
-          error
-        )
+        !transientError(error) &&
+        !transientChargeReadError(error)
       ) {
         throw error;
       }
@@ -2165,7 +2174,8 @@ export async function criarCobrancaPixTransparente(
 
     const recoverable =
       error?.recoverable === true ||
-      transientError(error);
+      transientError(error) ||
+      transientChargeReadError(error);
 
     try {
       await upsertSession(
@@ -2301,7 +2311,8 @@ export async function consultarCobrancaPix(
 
   } catch (error) {
     const recoverable =
-      transientError(error);
+      transientError(error) ||
+      transientChargeReadError(error);
 
     console.error(
       "ERRO CONSULTA PIX VALIDAPAY:",

@@ -1,5 +1,6 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
+import wixWindowFrontend from "wix-window-frontend";
 
 import {
   local
@@ -386,11 +387,6 @@ async function forcarElementoVisivel(id) {
     return;
   }
 
-  /*
-    Um filho pode estar com hidden/collapsed = false e ainda
-    assim não aparecer porque um ancestral está escondido ou
-    recolhido. Por isso a cadeia inteira é reaberta.
-  */
   const cadeia = [];
   let atual = elemento;
 
@@ -419,8 +415,71 @@ async function forcarElementoVisivel(id) {
   }
 }
 
+async function esconderElementoAviso(id) {
+  try {
+    const elemento = $w(id);
+
+    if (typeof elemento.hide === "function") {
+      await elemento.hide();
+    }
+
+    if (typeof elemento.collapse === "function") {
+      await elemento.collapse();
+    }
+  } catch (erro) {
+    console.warn(
+      `Não foi possível esconder o aviso ${id}:`,
+      erro?.message || erro
+    );
+  }
+}
+
 async function mostrarAvisosEntrega() {
-  const ids = [
+  const mobile =
+    wixWindowFrontend.formFactor === "Mobile";
+
+  const boxes = [
+    IDS.boxMedidas,
+    IDS.boxGraficos,
+    IDS.boxProjeto
+  ];
+
+  if (mobile) {
+    const acessos =
+      entrega?.access || {};
+
+    let proximoAviso = "";
+
+    if (!acessos.medidas) {
+      proximoAviso = IDS.boxMedidas;
+    } else if (!acessos.graficos) {
+      proximoAviso = IDS.boxGraficos;
+    } else if (!acessos.projeto) {
+      proximoAviso = IDS.boxProjeto;
+    }
+
+    for (const id of boxes) {
+      await esconderElementoAviso(id);
+    }
+
+    if (proximoAviso) {
+      await forcarElementoVisivel(IDS.avisosEtapas);
+      await forcarElementoVisivel(proximoAviso);
+    } else {
+      await esconderElementoAviso(IDS.avisosEtapas);
+    }
+
+    /*
+      O aviso IMPORTANTE continua com o comportamento atual.
+      A alteração mobile afeta somente os três cartões das etapas.
+    */
+    await forcarElementoVisivel(IDS.avisoImportante);
+    await forcarElementoVisivel("#box4");
+
+    return;
+  }
+
+  const idsDesktop = [
     IDS.avisosEtapas,
     IDS.boxMedidas,
     IDS.boxGraficos,
@@ -429,18 +488,13 @@ async function mostrarAvisosEntrega() {
     "#box4"
   ];
 
-  for (const id of ids) {
+  for (const id of idsDesktop) {
     await forcarElementoVisivel(id);
   }
 
-  /*
-    A Pro Gallery recalcula o layout ao expandir.
-    Repetimos uma vez depois desse reflow para impedir que
-    o estado visual antigo seja reaplicado pelo Wix.
-  */
   await esperar(180);
 
-  for (const id of ids) {
+  for (const id of idsDesktop) {
     await forcarElementoVisivel(id);
   }
 }
@@ -2213,6 +2267,8 @@ async function carregarEntrega() {
 
           return;
         }
+
+        await mostrarProcessamento();
 
         await mostrarProcessamento();
 

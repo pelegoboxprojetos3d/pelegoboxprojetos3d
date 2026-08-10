@@ -105,6 +105,11 @@ const newBlock = `$w.onReady(
   }
 );`;
 
+if (text.includes(newBlock)) {
+  console.log('Correção da entrega já aplicada.');
+  process.exit(0);
+}
+
 if (!text.includes(oldBlock)) {
   throw new Error('Bloco onReady esperado não encontrado.');
 }

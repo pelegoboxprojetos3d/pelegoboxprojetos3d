@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar-e-publicar:
@@ -28,66 +28,11 @@ jobs:
           node-version: "20"
           cache: npm
 
-      - name: Simplificar caminho crítico do PIX R24
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          frontend = Path('src/pages/checkout-projeto-pronto.i9aj1.js')
-          principal = Path('src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js')
-          backend = Path('src/backend/validaPayPixProjetosProntos.jsw')
-
-          f = frontend.read_text()
-          f = f.replace('const PIX_POLL_INTERVALO_RAPIDO = 750;', 'const PIX_POLL_INTERVALO_RAPIDO = 2000;')
-          f = f.replace('const PIX_CRIACAO_TIMEOUT = 6000;', 'const PIX_CRIACAO_TIMEOUT = 12000;')
-          frontend.write_text(f)
-
-          p = principal.read_text()
-          old = '''  if (!consultaConcluida) {\n    try {\n      await identificarCliente(\n        identificacao\n      );\n    } catch (error) {\n      console.error(\n        "Não foi possível atualizar o cliente:",\n        error?.message ||\n        error\n      );\n\n      return;\n    }\n  }\n\n'''
-          new = '''  /*\n    A identificação já foi feita antes. Não repetimos consulta de cliente\n    e acessos no clique, porque isso segurava a navegação para o checkout.\n    O clique deve decidir com o estado já carregado e navegar imediatamente.\n  */\n\n'''
-          if old not in p:
-              raise SystemExit('Bloco de reconsulta antes do checkout não encontrado')
-          p = p.replace(old, new, 1)
-          principal.write_text(p)
-
-          b = backend.read_text()
-          old = '''async function upsertSession(\n  checkoutId,\n  patch\n) {\n  const existing =\n    await findSession(\n      checkoutId\n    );\n'''
-          new = '''async function upsertSession(\n  checkoutId,\n  patch,\n  existingKnown = undefined\n) {\n  const existing =\n    existingKnown === undefined\n      ? await findSession(\n        checkoutId\n      )\n      : existingKnown;\n'''
-          if old not in b:
-              raise SystemExit('upsertSession original não encontrado')
-          b = b.replace(old, new, 1)
-
-          marker = '''        updatedAtDate:\n          now\n      }\n    );\n\n    const chargeBody = {'''
-          replacement = '''        updatedAtDate:\n          now\n      },\n      existing\n    );\n\n    const chargeBody = {'''
-          if marker not in b:
-              raise SystemExit('upsert inicial do PIX não encontrado')
-          b = b.replace(marker, replacement, 1)
-
-          redundant = '''    /*\n      Se o EMV ainda não chegou, devolve "processing" imediatamente.\n      O frontend continua consultando pelo chargeId sem travar o comprador.\n    */\n\n    await upsertSession(\n      checkoutId,\n      {\n        preferenceId:\n          chargeId,\n\n        validaPayChargeId:\n          chargeId,\n\n        status:\n          "pending",\n\n        updatedAtDate:\n          new Date()\n      }\n    );\n\n'''
-          if redundant not in b:
-              raise SystemExit('upsert redundante após criar cobrança não encontrado')
-          b = b.replace(redundant, '', 1)
-          backend.write_text(b)
-          PY
-
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
       - name: Validar código
         run: npm run lint
-
-      - name: Persistir simplificação PIX R24
-        run: |
-          set -euo pipefail
-          if git diff --quiet; then
-            echo "PIX R24 já aplicado."
-          else
-            git config user.name "PELEGO BOX PROJETOS 3D via WIX"
-            git config user.email "pelegobox82@gmail.com"
-            git add src/backend/validaPayPixProjetosProntos.jsw src/pages/checkout-projeto-pronto.i9aj1.js "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
-            git commit -m "Simplificar caminho crítico do PIX R24 [skip ci]"
-            git push origin HEAD:main
-          fi
 
       - name: Aguardar sincronização GitHub → Wix
         run: sleep 12

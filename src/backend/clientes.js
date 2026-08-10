@@ -1,6 +1,7 @@
 import wixData from "wix-data";
 
 const COLECAO_CLIENTES = "Campo";
+const COLECAO_SESSOES = "SessoesProjetosProntos2";
 const DDI_BRASIL = "55";
 
 function texto(valor) {
@@ -89,6 +90,166 @@ function criarVariantesWhatsapp(numero) {
  *
  * Quando encontra formato antigo, atualiza para o padrão oficial.
  */
+function primeiroValor(...valores) {
+  for (const valor of valores) {
+    const resultado = texto(valor);
+
+    if (resultado) {
+      return resultado;
+    }
+  }
+
+  return "";
+}
+
+async function buscarPorWhatsapp(
+  colecao,
+  variantes
+) {
+  const consultas = variantes.map(
+    async (variante) => {
+      try {
+        const resultado = await wixData
+          .query(colecao)
+          .eq("whatsapp", variante)
+          .limit(50)
+          .find();
+
+        return resultado.items;
+      } catch (error) {
+        console.warn(
+          `Falha ao consultar ${colecao} pelo WhatsApp:`,
+          error?.message || error
+        );
+
+        return [];
+      }
+    }
+  );
+
+  const encontrados = (
+    await Promise.all(consultas)
+  ).flat();
+
+  encontrados.sort((a, b) => {
+    const dataA = new Date(
+      a?._updatedDate ||
+      a?._createdDate ||
+      0
+    ).getTime();
+
+    const dataB = new Date(
+      b?._updatedDate ||
+      b?._createdDate ||
+      0
+    ).getTime();
+
+    return dataB - dataA;
+  });
+
+  return encontrados[0] || null;
+}
+
+async function buscarClientePorId(clienteId) {
+  const id = texto(clienteId);
+
+  if (!id) {
+    return null;
+  }
+
+  try {
+    const cliente = await wixData.get(
+      COLECAO_CLIENTES,
+      id
+    );
+
+    if (cliente) {
+      return cliente;
+    }
+  } catch (error) {
+    // O valor pode ser um clienteId legado, e não o _id.
+  }
+
+  try {
+    const resultado = await wixData
+      .query(COLECAO_CLIENTES)
+      .eq("clienteId", id)
+      .limit(1)
+      .find();
+
+    return resultado.items[0] || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function mesclarClienteComSessao(
+  cliente,
+  sessao,
+  whatsapp
+) {
+  const clienteId = primeiroValor(
+    cliente?._id,
+    cliente?.clienteId,
+    sessao?.clienteId,
+    sessao?.["Cliente ID"]
+  );
+
+  const nome = primeiroValor(
+    cliente?.nome,
+    cliente?.nomeCliente,
+    cliente?.title,
+    cliente?.Title,
+    sessao?.nomeCliente,
+    sessao?.Nomecliente,
+    sessao?.title,
+    sessao?.Title
+  );
+
+  const email = primeiroValor(
+    cliente?.email,
+    cliente?.Email,
+    sessao?.email,
+    sessao?.Email
+  );
+
+  const cpfCnpj = primeiroValor(
+    cliente?.cpfCnpj,
+    cliente?.cpfcnpj,
+    cliente?.Cpfcnpj,
+    cliente?.["CPF/CNPJ"],
+    sessao?.cpfCnpj,
+    sessao?.cpfcnpj,
+    sessao?.Cpfcnpj,
+    sessao?.["CPF/CNPJ"]
+  );
+
+  return {
+    ...(cliente || {}),
+    _id:
+      primeiroValor(
+        cliente?._id,
+        clienteId
+      ),
+    clienteId,
+    nome,
+    title:
+      primeiroValor(
+        cliente?.title,
+        cliente?.Title,
+        nome
+      ),
+    whatsapp,
+    email,
+    cpfCnpj
+  };
+}
+
+/**
+ * Procura primeiro na coleção oficial de clientes.
+ * Se o registro estiver incompleto ou ausente, recupera os dados
+ * mais recentes da sessão do checkout sem criar colunas novas.
+ */
 export async function buscarCliente(whatsapp) {
   const whatsappPadrao =
     normalizarWhatsapp(whatsapp);
@@ -98,40 +259,43 @@ export async function buscarCliente(whatsapp) {
   }
 
   const variantes =
-    criarVariantesWhatsapp(whatsapp);
+    criarVariantesWhatsapp(whatsappPadrao);
 
-  for (const variante of variantes) {
-    const resultado = await wixData
-      .query(COLECAO_CLIENTES)
-      .eq("whatsapp", variante)
-      .limit(1)
-      .find();
+  const clienteDireto =
+    await buscarPorWhatsapp(
+      COLECAO_CLIENTES,
+      variantes
+    );
 
-    if (!resultado.items.length) {
-      continue;
-    }
+  const sessao =
+    await buscarPorWhatsapp(
+      COLECAO_SESSOES,
+      variantes
+    );
 
-    const cliente = resultado.items[0];
-
-    if (cliente.whatsapp !== whatsappPadrao) {
-      cliente.whatsapp = whatsappPadrao;
-
-      return await wixData.update(
-        COLECAO_CLIENTES,
-        cliente
-      );
-    }
-
-    return cliente;
+  if (!clienteDireto && !sessao) {
+    return null;
   }
 
-  return null;
+  let cliente = clienteDireto;
+
+  if (!cliente && sessao) {
+    cliente =
+      await buscarClientePorId(
+        primeiroValor(
+          sessao.clienteId,
+          sessao["Cliente ID"]
+        )
+      );
+  }
+
+  return mesclarClienteComSessao(
+    cliente,
+    sessao,
+    whatsappPadrao
+  );
 }
 
-/**
- * Cria um cliente novo ou atualiza o registro existente.
- * Impede duplicidade causada por formatos diferentes de WhatsApp.
- */
 export async function criarCliente(dados = {}) {
   const whatsapp =
     normalizarWhatsapp(dados.whatsapp);

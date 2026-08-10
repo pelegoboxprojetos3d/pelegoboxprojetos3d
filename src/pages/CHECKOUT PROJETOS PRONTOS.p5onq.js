@@ -44,6 +44,12 @@ const SESSION_KEY =
 const LOCAL_KEY =
   "pp_identificacao_persistente";
 
+const FIRST_WHATSAPP_SESSION_KEY =
+  "pp_whatsapp_primeiro_estagio";
+
+const FIRST_WHATSAPP_LOCAL_KEY =
+  "pp_whatsapp_primeiro_estagio_persistente";
+
 const MANUTENCAO_ATIVA =
   true;
 
@@ -111,7 +117,11 @@ let identificacao = {
   countryName: "Brasil",
   clienteId: "",
   nome: "",
-  email: ""
+  email: "",
+  cpfCnpj: "",
+  whatsappConfirmado: false,
+  confirmacaoWhatsappVersao: 0,
+  confirmadoEm: ""
 };
 
 let acessos = {
@@ -782,6 +792,28 @@ function normalizarIdentificacaoSalva(
     email:
       normalizeEmail(
         data.email
+      ),
+
+    cpfCnpj:
+      onlyDigits(
+        data.cpfCnpj ||
+        data.cpf ||
+        data.cnpj ||
+        ""
+      ),
+
+    whatsappConfirmado:
+      data.whatsappConfirmado === true,
+
+    confirmacaoWhatsappVersao:
+      Number(
+        data.confirmacaoWhatsappVersao ||
+        0
+      ),
+
+    confirmadoEm:
+      safe(
+        data.confirmadoEm
       )
   };
 }
@@ -841,7 +873,38 @@ function lerIdentificacaoSalva() {
   return null;
 }
 
+function salvarWhatsappPrimeiroEstagio(value) {
+  const numero =
+    normalizarTelefone({
+      whatsapp: value,
+      ddi: "55"
+    }).whatsapp;
+
+  if (!/^\d{10,11}$/.test(numero)) {
+    return;
+  }
+
+  try {
+    session.setItem(
+      FIRST_WHATSAPP_SESSION_KEY,
+      numero
+    );
+  } catch (_) {}
+
+  try {
+    local.setItem(
+      FIRST_WHATSAPP_LOCAL_KEY,
+      numero
+    );
+  } catch (_) {}
+}
+
 function salvarIdentificacao() {
+  salvarWhatsappPrimeiroEstagio(
+    identificacao.whatsappE164 ||
+    identificacao.whatsapp
+  );
+
   const serialized =
     JSON.stringify(
       identificacao
@@ -1404,6 +1467,20 @@ async function identificarCliente(
 
   cancelarPopupAgendado();
 
+  const telefoneAnterior =
+    normalizarTelefone(
+      identificacao
+    ).whatsapp;
+
+  const confirmacaoMantida =
+    identificacao.whatsappConfirmado === true &&
+    Number(
+      identificacao.confirmacaoWhatsappVersao ||
+      0
+    ) === 2 &&
+    telefoneAnterior ===
+      telefone.whatsapp;
+
   identificacao = {
     ...identificacao,
 
@@ -1424,7 +1501,20 @@ async function identificarCliente(
         data.countryName
       ) ||
       identificacao.countryName ||
-      "Brasil"
+      "Brasil",
+
+    whatsappConfirmado:
+      confirmacaoMantida,
+
+    confirmacaoWhatsappVersao:
+      confirmacaoMantida
+        ? 2
+        : 0,
+
+    confirmadoEm:
+      confirmacaoMantida
+        ? safe(identificacao.confirmadoEm)
+        : ""
   };
 
   identificado =
@@ -1543,13 +1633,6 @@ async function identificarCliente(
           clienteAtual.documento ||
           clienteAtual.cpfcnpj
         );
-
-      identificacao.whatsappConfirmado =
-        true;
-
-      identificacao.confirmadoEm =
-        identificacao.confirmadoEm ||
-        new Date().toISOString();
     } else {
       identificacao.clienteId =
         "";

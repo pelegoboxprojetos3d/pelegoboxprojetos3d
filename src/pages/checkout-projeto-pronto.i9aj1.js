@@ -23,12 +23,12 @@ import {
 // HTML: #htmlIframeMP
 // R21 — CONTRATO ANTIGO DO HTML + RECUPERAÇÃO DO PIX
 
-const PIX_POLL_INTERVALO_RAPIDO = 750;
+const PIX_POLL_INTERVALO_RAPIDO = 600;
 const PIX_POLL_INTERVALO = 2500;
 const PIX_POLL_MAX_TENTATIVAS = 240;
-const PIX_PRE_QR_LIMITE_MS = 18000;
-const PIX_CRIACAO_TIMEOUT = 6000;
-const PIX_CONSULTA_TIMEOUT = 3000;
+const PIX_PRE_QR_LIMITE_MS = 12000;
+const PIX_CRIACAO_TIMEOUT = 5000;
+const PIX_CONSULTA_TIMEOUT = 2500;
 
 const SESSION_KEY =
   "pp_identificacao_atual";
@@ -41,6 +41,9 @@ const FIRST_WHATSAPP_SESSION_KEY =
 
 const FIRST_WHATSAPP_LOCAL_KEY =
   "pp_whatsapp_primeiro_estagio_persistente";
+
+const CONFIRMACAO_WHATSAPP_VERSAO =
+  2;
 
 const PIX_RECOVERY_TENTATIVAS = 4;
 const PIX_RECOVERY_ESPERA = 500;
@@ -603,6 +606,21 @@ function contextoDaUrl() {
         ""
       ),
 
+    whatsappConfirmado:
+      identificacao.whatsappConfirmado ===
+        true,
+
+    confirmacaoWhatsappVersao:
+      Number(
+        identificacao.confirmacaoWhatsappVersao ||
+        0
+      ),
+
+    confirmadoEm:
+      safe(
+        identificacao.confirmadoEm
+      ),
+
     returnUrl:
       safe(
         query.returnUrl
@@ -720,6 +738,84 @@ function whatsappPrimeiroEstagio() {
 }
 
 
+function confirmacaoWhatsappPersistenteValida() {
+  const primeiro =
+    whatsappPrimeiroEstagio();
+
+  const atual =
+    normalizarWhatsappBrasil(
+      contexto.whatsappE164 ||
+      contexto.whatsapp
+    );
+
+  return Boolean(
+    primeiro &&
+    atual &&
+    primeiro === atual &&
+    contexto.whatsappConfirmado === true &&
+    Number(
+      contexto.confirmacaoWhatsappVersao ||
+      0
+    ) === CONFIRMACAO_WHATSAPP_VERSAO
+  );
+}
+
+function salvarIdentificacaoCheckout(
+  patch = {}
+) {
+  const atual =
+    lerIdentificacaoSalva();
+
+  const proxima = {
+    ...(atual || {}),
+    ...(patch || {})
+  };
+
+  const numero =
+    normalizarWhatsappBrasil(
+      proxima.whatsappE164 ||
+      proxima.whatsapp
+    );
+
+  if (numero) {
+    proxima.whatsapp =
+      numero;
+
+    proxima.whatsappE164 =
+      `+55${numero}`;
+
+    proxima.ddi =
+      "55";
+
+    proxima.country =
+      "br";
+  }
+
+  const serialized =
+    JSON.stringify(
+      proxima
+    );
+
+  try {
+    session.setItem(
+      SESSION_KEY,
+      serialized
+    );
+  } catch (_) {}
+
+  try {
+    local.setItem(
+      LOCAL_KEY,
+      serialized
+    );
+  } catch (_) {}
+
+  contexto = {
+    ...contexto,
+    ...proxima
+  };
+}
+
 // ======================================================
 // COMUNICAÇÃO COM O HTML
 // ======================================================
@@ -774,32 +870,25 @@ function enviarInit() {
       contexto
     );
 
-  const clienteJaIdentificado =
-    Boolean(
-      safe(
-        contexto.clienteId
-      )
-    );
+  const confirmacaoPersistente =
+    confirmacaoWhatsappPersistenteValida();
 
   /*
-    O HTML já faz a confirmação dupla do WhatsApp.
-
-    Cliente novo recebe o campo vazio.
-
-    Cliente já identificado recebe o número
-    e segue automaticamente.
+    Enquanto a dupla confirmação ainda não tiver
+    sido concluída nesta versão, o HTML recebe
+    o telefone vazio e exibe a confirmação.
   */
 
   const contextoHtml = {
     ...contexto,
 
     whatsapp:
-      clienteJaIdentificado
+      confirmacaoPersistente
         ? contexto.whatsapp
         : "",
 
     whatsappE164:
-      clienteJaIdentificado
+      confirmacaoPersistente
         ? contexto.whatsappE164
         : ""
   };
@@ -814,13 +903,13 @@ function enviarInit() {
       "VALIDAPAY",
 
     autoLookup:
-      clienteJaIdentificado &&
+      confirmacaoPersistente &&
       Boolean(
         telefone.whatsapp
       ),
 
     hasWhatsappFromPreviousStep:
-      clienteJaIdentificado &&
+      confirmacaoPersistente &&
       Boolean(
         telefone.whatsapp
       ),
@@ -1423,7 +1512,7 @@ async function executarPollingPix(
 
         setTimeout(
           () => wixLocation.to(urlEntrega()),
-          750
+          350
         );
 
         return;
@@ -2041,6 +2130,23 @@ async function consultarCliente(
       return;
     }
 
+    salvarIdentificacaoCheckout({
+      whatsapp:
+        telefone.whatsapp,
+
+      whatsappE164:
+        telefone.whatsappE164,
+
+      whatsappConfirmado:
+        true,
+
+      confirmacaoWhatsappVersao:
+        CONFIRMACAO_WHATSAPP_VERSAO,
+
+      confirmadoEm:
+        new Date().toISOString()
+    });
+
     const cliente =
       await comTimeout(
         buscarCliente(
@@ -2428,19 +2534,9 @@ async function iniciarFluxoAutomatico() {
       contexto
     );
 
-  /*
-    Sem clienteId, o HTML pede
-    a confirmação dupla.
-
-    Não existe confirmação paralela
-    dentro da página.
-  */
-
   if (
     !telefone.whatsapp ||
-    !safe(
-      contexto.clienteId
-    )
+    !confirmacaoWhatsappPersistenteValida()
   ) {
     return;
   }
@@ -2455,16 +2551,43 @@ async function iniciarFluxoAutomatico() {
     false;
 
   try {
-    const cliente =
-      await comTimeout(
-        buscarCliente(
-          telefone.whatsappE164
-        ),
+    const clienteId =
+      safe(contexto.clienteId);
 
-        10000,
+    const nomeCliente =
+      safe(contexto.nome);
 
-        "A consulta do cliente não respondeu."
-      );
+    const emailResult =
+      validarEmail(contexto.email);
+
+    const documentoResult =
+      validarCpfCnpj(contexto.cpfCnpj);
+
+    let cliente = null;
+
+    if (
+      clienteId &&
+      nomeCliente &&
+      emailResult.ok &&
+      documentoResult.ok
+    ) {
+      cliente = {
+        _id: clienteId,
+        clienteId,
+        nome: nomeCliente,
+        email: emailResult.email,
+        cpfCnpj: documentoResult.cpfCnpj
+      };
+    } else {
+      cliente =
+        await comTimeout(
+          buscarCliente(
+            telefone.whatsappE164
+          ),
+          7000,
+          "A consulta do cliente não respondeu."
+        );
+    }
 
     if (!cliente) {
       whatsappConsultado =
@@ -2474,7 +2597,6 @@ async function iniciarFluxoAutomatico() {
         null;
 
       liberarCadastroClienteNovo();
-
       return;
     }
 
@@ -2486,8 +2608,7 @@ async function iniciarFluxoAutomatico() {
   } catch (error) {
     console.error(
       "Erro na identificação automática:",
-      error?.message ||
-      error,
+      error?.message || error,
       error
     );
 
@@ -2495,30 +2616,14 @@ async function iniciarFluxoAutomatico() {
       false;
 
     enviarParaHtml({
-      type:
-        "CUSTOMER_RESULT",
-
-      ok:
-        false,
-
-      exists:
-        false,
-
-      needsName:
-        true,
-
-      needsEmail:
-        true,
-
-      needsCpfCnpj:
-        true,
-
-      needsCustomerData:
-        true,
-
-      lookupFailed:
-        true,
-
+      type: "CUSTOMER_RESULT",
+      ok: false,
+      exists: false,
+      needsName: true,
+      needsEmail: true,
+      needsCpfCnpj: true,
+      needsCustomerData: true,
+      lookupFailed: true,
       error:
         "Não foi possível consultar o cadastro agora. Tente novamente."
     });

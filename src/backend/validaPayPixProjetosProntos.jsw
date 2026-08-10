@@ -1,6 +1,7 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import QRCode from "qrcode";
 import {
   formatarCodigoCheckout,
   normalizarWhatsappBrasil,
@@ -32,8 +33,8 @@ const SCOPES = [
 ].join(" ");
 
 const CREATE_ATTEMPTS = 3;
-const READY_ATTEMPTS = 3;
-const READY_DELAY_MS = 300;
+const READY_ATTEMPTS = 1;
+const READY_DELAY_MS = 150;
 
 const TOKEN_SAFETY_MS =
   60000;
@@ -942,6 +943,54 @@ async function upsertSession(
 }
 
 
+async function findProductReferenceSession({
+  projectCode,
+  type,
+  amount
+}) {
+  try {
+    const result =
+      await wixData
+        .query(SESSIONS)
+        .eq(
+          "codigoProjeto",
+          safe(projectCode)
+        )
+        .descending(
+          "updatedAtDate"
+        )
+        .limit(30)
+        .find(DB_OPTS);
+
+    return (
+      result.items || []
+    ).find(
+      (item) =>
+        normalizeType(
+          item?.tipoProduto
+        ) === type &&
+        sameMoney(
+          item?.valor,
+          amount
+        ) &&
+        safe(
+          item?.validaPayProductId
+        ) &&
+        safe(
+          item?.validaPayPriceId
+        )
+    ) || null;
+
+  } catch (error) {
+    console.warn(
+      "Não foi possível reutilizar referência de produto da sessão:",
+      error?.message || error
+    );
+
+    return null;
+  }
+}
+
 // ======================================================
 // PRODUTOS VALIDAPAY
 // ======================================================
@@ -1624,19 +1673,10 @@ async function createChargeWithRecovery(
           return merged;
         }
 
-        const details =
-          await fetchChargeReady(
-            chargeId,
-            2
-          );
-
-        return mergeCharge(
-          merged,
-          {
-            ...details,
-            chargeId
-          }
-        );
+        return {
+          ...merged,
+          chargeId
+        };
       }
 
     } catch (error) {
@@ -1667,21 +1707,11 @@ async function createChargeWithRecovery(
           }
         );
 
-        const details =
-          await fetchChargeReady(
-            recoveredId,
-            2
-          );
-
-        return mergeCharge(
-          merged,
-          {
-            ...details,
-
-            chargeId:
-              recoveredId
-          }
-        );
+        return {
+          ...merged,
+          chargeId:
+            recoveredId
+        };
       }
 
       if (
@@ -1744,7 +1774,7 @@ async function createChargeWithRecovery(
 }
 
 
-function publicCharge({
+async function publicCharge({
   checkoutId,
   chargeId,
   data,
@@ -1761,6 +1791,12 @@ function publicCharge({
 
   const emv =
     extractEmv(data);
+
+  const qrCode =
+    await qrCodeDataUrl(
+      emv,
+      extractQrCode(data)
+    );
 
   return {
     ok: true,
@@ -1806,8 +1842,7 @@ function publicCharge({
 
     emv,
 
-    qrCode:
-      extractQrCode(data),
+    qrCode,
 
     paidAt:
       safe(
@@ -1827,6 +1862,56 @@ function publicCharge({
   };
 }
 
+
+async function qrCodeDataUrl(
+  emv,
+  provided
+) {
+  const source =
+    safe(provided);
+
+  if (
+    /^data:image\//i.test(source) ||
+    /^https?:\/\//i.test(source)
+  ) {
+    return source;
+  }
+
+  const compact =
+    source.replace(/\s+/g, "");
+
+  if (
+    compact.length > 100 &&
+    /^[a-z0-9+/=]+$/i.test(compact)
+  ) {
+    return `data:image/png;base64,${compact}`;
+  }
+
+  const pix =
+    safe(emv);
+
+  if (!pix) {
+    return "";
+  }
+
+  try {
+    return await QRCode.toDataURL(
+      pix,
+      {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 320
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Falha ao gerar QR Code do PIX no backend:",
+      error?.message || error
+    );
+
+    return "";
+  }
+}
 
 // ======================================================
 // NOTIFICAÇÕES DE VENDA
@@ -2324,10 +2409,11 @@ export async function criarCobrancaPixTransparente(
     if (existingChargeId) {
       const charge =
         await fetchChargeReady(
-          existingChargeId
+          existingChargeId,
+          1
         );
 
-      return publicCharge({
+      return await publicCharge({
         checkoutId,
 
         chargeId:
@@ -2438,9 +2524,20 @@ export async function criarCobrancaPixTransparente(
       }
     );
 
+    const productReferenceSession =
+      existing?.validaPayProductId &&
+      existing?.validaPayPriceId
+        ? existing
+        : await findProductReferenceSession({
+          projectCode,
+          type,
+          amount
+        });
+
     const product =
       await ensureProduct({
         session:
+          productReferenceSession ||
           existing,
 
         name,
@@ -2585,7 +2682,7 @@ export async function criarCobrancaPixTransparente(
       }
     );
 
-    return publicCharge({
+    return await publicCharge({
       checkoutId,
       chargeId,
 
@@ -2704,11 +2801,11 @@ export async function consultarCobrancaPix(
     const charge =
       await fetchChargeReady(
         chargeId,
-        3
+        1
       );
 
     const result =
-      publicCharge({
+      await publicCharge({
         checkoutId,
         chargeId,
         data:

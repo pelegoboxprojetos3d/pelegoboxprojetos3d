@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Corrigir estabilizador
+        run: node scripts/corrigir-estabilizador.cjs
+
       - name: Aplicar estabilização final
         run: node scripts/estabilizar-fluxo-final.cjs
 

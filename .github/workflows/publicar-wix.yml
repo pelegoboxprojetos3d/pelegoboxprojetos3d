@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validar-e-publicar:
@@ -28,11 +28,26 @@ jobs:
           node-version: "20"
           cache: npm
 
+      - name: Aplicar regras de banners e impressora
+        run: node scripts/aplicar-regras-banners-impressora.cjs
+
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
       - name: Validar código
         run: npm run lint
+
+      - name: Persistir regras corrigidas
+        run: |
+          if git diff --quiet; then
+            echo "Código já estava corrigido."
+          else
+            git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+            git config user.email "pelegobox82@gmail.com"
+            git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+            git commit -m "Corrigir banners por página e impressora da entrega"
+            git push origin HEAD:main
+          fi
 
       - name: Aguardar sincronização GitHub → Wix
         run: sleep 12

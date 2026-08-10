@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validar-e-publicar:
@@ -36,10 +36,26 @@ jobs:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
 
       - name: Sincronizar tipos do Wix
+        continue-on-error: true
         run: npm run postinstall
+
+      - name: Aplicar hotfix de estabilidade
+        run: node scripts/aplicar-hotfix-estabilidade.cjs
 
       - name: Validar código
         run: npm run lint
+
+      - name: Persistir hotfix no GitHub
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração pendente."
+            exit 0
+          fi
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" "src/backend/validaPayPixProjetosProntos.jsw"
+          git commit -m "Estabilizar entrega e geração PIX"
+          git push origin HEAD:main
 
       - name: Publicar no Wix
         run: npx wix publish --source remote --approve-preview

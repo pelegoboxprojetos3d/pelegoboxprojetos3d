@@ -3,13 +3,13 @@ import wixWindowFrontend from "wix-window-frontend";
 // POPUP: pedir whatsapp
 // HTML EXISTENTE: #html1
 //
-// R2
+// R3
 //
-// - Sem fechamento pelo HTML.
-// - Sem CLOSE_WITHOUT_IDENTIFY.
-// - Só fecha depois de receber um WhatsApp válido.
-// - A página principal continua consultando
-//   clientes e compras.
+// - A confirmação dupla acontece dentro do HTML do popup.
+// - O Velo só fecha depois de receber VERIFY_WHATSAPP.
+// - O resultado informa à página principal que o WhatsApp
+//   já passou pela confirmação dupla.
+// - A página principal continua consultando clientes e compras.
 
 let contexto = {};
 let htmlPronto = false;
@@ -145,11 +145,6 @@ function whatsappValido(data = {}) {
 
 function fecharComWhatsapp(data = {}) {
   if (!whatsappValido(data)) {
-    /*
-      Não fecha a Lightbox se o HTML enviar
-      um telefone incompleto ou inválido.
-    */
-
     $w("#html1").postMessage({
       type: "VERIFY_ERROR",
 
@@ -225,7 +220,16 @@ function fecharComWhatsapp(data = {}) {
         safe(
           data.countryName
         ) ||
-        "Brasil"
+        "Brasil",
+
+      /*
+        VERIFY_WHATSAPP só é enviado pelo novo HTML
+        depois que as duas digitações forem iguais.
+      */
+      whatsappConfirmado: true,
+      confirmacaoWhatsappVersao: 3,
+      confirmadoEm:
+        new Date().toISOString()
     });
 }
 
@@ -261,11 +265,6 @@ $w.onReady(function () {
         return;
 
       case "VERIFY_WHATSAPP":
-        /*
-          Este é o único caminho permitido
-          para fechar a Lightbox.
-        */
-
         fecharComWhatsapp(data);
         return;
 
@@ -273,12 +272,6 @@ $w.onReady(function () {
         return;
     }
   });
-
-  /*
-    Segurança para o caso de READY chegar
-    antes de o código terminar de preparar
-    o manipulador de mensagens.
-  */
 
   setTimeout(() => {
     htmlPronto = true;

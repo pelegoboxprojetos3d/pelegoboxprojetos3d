@@ -1363,6 +1363,74 @@ function abrirDownloadPago(
 // VALORES E ACESSOS
 // ======================================================
 
+async function alternarAvisoPaginaPrincipal(id, mostrar) {
+  try {
+    const elemento = $w(id);
+
+    if (mostrar) {
+      await Promise.allSettled([
+        typeof elemento.expand === "function" ? elemento.expand() : Promise.resolve(),
+        typeof elemento.show === "function" ? elemento.show() : Promise.resolve()
+      ]);
+    } else {
+      await Promise.allSettled([
+        typeof elemento.hide === "function" ? elemento.hide() : Promise.resolve(),
+        typeof elemento.collapse === "function" ? elemento.collapse() : Promise.resolve()
+      ]);
+    }
+  } catch (error) {
+    console.warn(
+      `Falha ao alternar aviso principal ${id}:`,
+      error?.message || error
+    );
+  }
+}
+
+function estilizarAvisoPaginaPrincipal(id, pago) {
+  try {
+    const elemento = $w(id);
+
+    if (!elemento?.style) {
+      return;
+    }
+
+    /*
+      O cartão continua branco.
+      Pagamento confirmado recebe contorno verde no desktop.
+      A sombra configurada no Editor é preservada.
+    */
+    elemento.style.backgroundColor = "#FFFFFF";
+    elemento.style.borderColor = pago ? "#159447" : "#E0E0E0";
+    elemento.style.borderWidth = pago ? 2 : 1;
+  } catch (_) {}
+}
+
+async function aplicarRegraVisualAvisosPaginaPrincipal() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
+  const etapas = [
+    { id: IDS.avisoMedidas, pago: acessos.medidas === true },
+    { id: IDS.avisoGraficos, pago: acessos.graficos === true },
+    { id: IDS.avisoProjeto, pago: acessos.projeto === true }
+  ];
+
+  for (const etapa of etapas) {
+    estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
+
+    /*
+      REGRA ÚNICA:
+      - Desktop: os três avisos ficam visíveis.
+      - Mobile: aviso de etapa paga some e recolhe espaço.
+      - Mobile: etapas ainda não pagas continuam visíveis.
+      - IMPORTANTE não é tocado por esta função e permanece sempre.
+    */
+    await alternarAvisoPaginaPrincipal(
+      etapa.id,
+      mobile ? !etapa.pago : true
+    );
+  }
+}
+
 async function mostrarValoresEAcessos() {
   $w(
     IDS.valorMedidas
@@ -1495,6 +1563,8 @@ async function mostrarValoresEAcessos() {
       )
     );
   }
+
+  await aplicarRegraVisualAvisosPaginaPrincipal();
 }
 
 

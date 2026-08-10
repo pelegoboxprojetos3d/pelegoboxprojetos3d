@@ -42,6 +42,12 @@ const IDS = {
   processando:
     "#htmlProcessandoEntrega",
 
+  avisosEtapas:
+    "#textodobotaobaixaranalisegrafica",
+
+  avisoImportante:
+    "#action2",
+
   video:
     "#buttonVideoPaginaEntrega",
 
@@ -363,6 +369,33 @@ function salvarAcessosLocais(
       erro?.message ||
       erro
     );
+  }
+}
+
+
+async function mostrarAvisosEntrega() {
+  const ids = [
+    IDS.avisosEtapas,
+    IDS.avisoImportante
+  ];
+
+  for (const id of ids) {
+    try {
+      const elemento = $w(id);
+
+      if (elemento.collapsed) {
+        await elemento.expand();
+      }
+
+      if (elemento.hidden) {
+        await elemento.show();
+      }
+    } catch (erro) {
+      console.warn(
+        `Não foi possível restaurar a seção de aviso ${id}:`,
+        erro?.message || erro
+      );
+    }
   }
 }
 
@@ -1999,6 +2032,8 @@ async function renderizarEntrega(
 
   await renderizarBotoes();
 
+  await mostrarAvisosEntrega();
+
   await mostrarGaleria();
 
   await esconderProcessamento();
@@ -2132,6 +2167,8 @@ async function carregarEntrega() {
 
           return;
         }
+
+        await mostrarProcessamento();
 
         await mostrarProcessamento();
 

@@ -24,6 +24,7 @@ const DB_OPTS = {
 
 const SCOPES = [
   "pix.cob/read",
+  "pix.cob/write",
   "checkouts/read",
   "checkouts/write",
   "products/read",

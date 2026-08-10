@@ -39,11 +39,17 @@ const IDS = {
   galeria:
     "#proGallery1",
 
+  processando:
+    "#htmlProcessandoEntrega",
+
   video:
     "#buttonVideoPaginaEntrega",
 
   medidas:
     "#btnMedidas",
+
+  boxMedidas:
+    "#box1",
 
   valorMedidas:
     "#txtValor4",
@@ -51,11 +57,17 @@ const IDS = {
   graficos:
     "#btnGraficos",
 
+  boxGraficos:
+    "#box2",
+
   valorGraficos:
     "#txtValor5",
 
   projeto:
     "#btnProjeto",
+
+  boxProjeto:
+    "#box3",
 
   valorProjeto:
     "#txtValor6"
@@ -102,7 +114,7 @@ const CORES = {
 */
 
 const MAX_TENTATIVAS =
-  60;
+  150;
 
 const INTERVALO =
   2000;
@@ -234,6 +246,60 @@ function alterarDescricao(
 
 
 // ======================================================
+// PROCESSAMENTO VISUAL DA ENTREGA
+// ======================================================
+
+async function mostrarProcessamento() {
+  try {
+    await $w(IDS.galeria).hide();
+    await $w(IDS.galeria).collapse();
+  } catch (erro) {
+    console.warn(
+      "Falha ao recolher a galeria durante o processamento:",
+      erro?.message || erro
+    );
+  }
+
+  try {
+    await $w(IDS.processando).expand();
+    await $w(IDS.processando).show();
+  } catch (erro) {
+    console.warn(
+      "Falha ao mostrar o HTML de processamento:",
+      erro?.message || erro
+    );
+  }
+}
+
+async function esconderProcessamento() {
+  try {
+    await $w(IDS.processando).hide();
+    await $w(IDS.processando).collapse();
+  } catch (erro) {
+    console.warn(
+      "Falha ao esconder o HTML de processamento:",
+      erro?.message || erro
+    );
+  }
+}
+
+function entregaProcessada(resultado) {
+  const projeto = resultado?.project || {};
+  const tipo = safe(resultado?.session?.tipoProduto).toUpperCase();
+
+  if (tipo === "PROJETO_COMPLETO") {
+    return Boolean(safe(projeto.pdfProjeto));
+  }
+
+  if (tipo === "GRAFICOS") {
+    return Array.isArray(projeto.imagensGraficos) &&
+      projeto.imagensGraficos.filter(Boolean).length > 0;
+  }
+
+  return Boolean(safe(projeto.imagemMedidas));
+}
+
+// ======================================================
 // ACESSOS LOCAIS
 // ======================================================
 
@@ -305,6 +371,14 @@ function pintarBotao(
       .borderColor =
         borda;
 
+    botao.style
+      .borderRadius =
+        "999px";
+
+    botao.style
+      .borderWidth =
+        "1px";
+
   } catch (erro) {
     console.warn(
       "O modelo do botão não aceitou todas as cores:",
@@ -314,6 +388,20 @@ function pintarBotao(
   }
 }
 
+
+function marcarBoxComprado(id) {
+  try {
+    const box = $w(id);
+    box.style.backgroundColor = "#E8F5ED";
+    box.style.borderColor = CORES.compradoBorda;
+    box.style.borderWidth = "2px";
+  } catch (erro) {
+    console.warn(
+      "Não foi possível marcar a caixa da etapa como comprada:",
+      erro?.message || erro
+    );
+  }
+}
 
 async function definirComprado(
   botao,
@@ -499,6 +587,10 @@ async function mostrarGaleria() {
       IDS.galeria
     ).hide();
 
+    await $w(
+      IDS.galeria
+    ).collapse();
+
     return;
   }
 
@@ -522,6 +614,10 @@ async function mostrarGaleria() {
           ""
       })
     );
+
+  await $w(
+    IDS.galeria
+  ).expand();
 
   await $w(
     IDS.galeria
@@ -1580,6 +1676,18 @@ async function renderizarBotoes() {
   const projeto =
     entrega.project || {};
 
+  if (acessos.medidas) {
+    marcarBoxComprado(IDS.boxMedidas);
+  }
+
+  if (acessos.graficos) {
+    marcarBoxComprado(IDS.boxGraficos);
+  }
+
+  if (acessos.projeto) {
+    marcarBoxComprado(IDS.boxProjeto);
+  }
+
   const valorMedidas =
     valorEtapa(
       etapas.medidas,
@@ -1875,6 +1983,8 @@ async function renderizarEntrega(
 
   await mostrarGaleria();
 
+  await esconderProcessamento();
+
   /*
     Somente depois procura o vídeo.
 
@@ -1993,11 +2103,27 @@ async function carregarEntrega() {
       if (
         resultado.approved
       ) {
-        await renderizarEntrega(
-          resultado
+        if (
+          entregaProcessada(
+            resultado
+          )
+        ) {
+          await renderizarEntrega(
+            resultado
+          );
+
+          return;
+        }
+
+        alterarDescricao(
+          "Pagamento aprovado. Estamos preparando seus arquivos..."
         );
 
-        return;
+        await esperar(
+          INTERVALO
+        );
+
+        continue;
       }
 
       alterarDescricao(
@@ -2082,9 +2208,7 @@ $w.onReady(
       IDS.projeto
     ).disable();
 
-    await $w(
-      IDS.galeria
-    ).hide();
+    await mostrarProcessamento();
 
     await carregarEntrega();
   }

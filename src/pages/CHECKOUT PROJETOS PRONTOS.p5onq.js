@@ -750,6 +750,58 @@ function normalizarTelefone(
   };
 }
 
+function lerAcessosLocais(codigoProjeto) {
+  const codigo = onlyDigits(codigoProjeto);
+
+  if (!codigo) {
+    return null;
+  }
+
+  try {
+    const raw = local.getItem(
+      `pp_acessos_${codigo}`
+    );
+
+    if (!raw) {
+      return null;
+    }
+
+    const data = JSON.parse(raw);
+
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    return {
+      medidas: data.medidas === true,
+      graficos: data.graficos === true,
+      projeto: data.projeto === true
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function salvarAcessosLocais(codigoProjeto, access = {}) {
+  const codigo = onlyDigits(codigoProjeto);
+
+  if (!codigo) {
+    return;
+  }
+
+  try {
+    local.setItem(
+      `pp_acessos_${codigo}`,
+      JSON.stringify({
+        medidas: access.medidas === true,
+        graficos: access.graficos === true,
+        projeto: access.projeto === true,
+        atualizadoEm: new Date().toISOString()
+      })
+    );
+  } catch (_) {}
+}
+
 function normalizarIdentificacaoSalva(
   data
 ) {
@@ -1810,6 +1862,11 @@ async function identificarCliente(
         capturarDownloads(
           resultado
         );
+
+        salvarAcessosLocais(
+          codigoPublico(projeto),
+          acessos
+        );
       }
 
     } else {
@@ -2279,6 +2336,39 @@ async function iniciarPagina() {
       ) === CONFIRMACAO_FLUXO_VERSAO;
 
     if (confirmacaoAtualValida) {
+      const acessosSalvos =
+        lerAcessosLocais(
+          codigoPublico(projeto)
+        );
+
+      if (acessosSalvos) {
+        identificado = true;
+        consultaConcluida = true;
+        acessos = acessosSalvos;
+
+        clienteAtual = {
+          _id: safe(salva.clienteId),
+          clienteId: safe(salva.clienteId),
+          nome: safe(salva.nome),
+          title: safe(salva.nome),
+          email: normalizeEmail(salva.email),
+          cpfCnpj: onlyDigits(salva.cpfCnpj)
+        };
+
+        /*
+          Ao voltar do checkout, a página usa o estado que já foi validado
+          e salvo. Não dispara buscarCliente + obterAcessosProjeto em paralelo
+          com a nova criação de PIX. A validação definitiva continua no
+          checkout/backend antes de cobrar.
+        */
+        capturarDownloads({
+          access: acessos
+        });
+
+        await mostrarValoresEAcessos();
+        return;
+      }
+
       identificado =
         true;
 

@@ -13,6 +13,7 @@ import {
 const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
 const API_BASE = "https://api.validapay.com.br";
 const SESSIONS = "SessoesProjetosProntos2";
+const PRODUCT_TEMPLATE = "PP_VALIDAPAY_R27";
 const MAKE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
 const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";
 const SITE_BASE = "https://www.pelegobox.com.br";
@@ -23,6 +24,8 @@ const DB_OPTS = {
 
 const SCOPE_CHARGE_WRITE = "checkouts/write";
 const SCOPE_CHARGE_READ = "pix.cob/read";
+const SCOPE_PRODUCTS_READ = "products/read";
+const SCOPE_PRODUCTS_WRITE = "products/write";
 
 const CREATE_ATTEMPTS = 3;
 const READY_ATTEMPTS = 3;
@@ -320,6 +323,16 @@ function parseMoney(value) {
   return Number.isFinite(number)
     ? Number(number.toFixed(2))
     : 0;
+}
+
+
+function sameMoney(left, right) {
+  return (
+    Math.abs(
+      parseMoney(left) -
+      parseMoney(right)
+    ) <= 0.01
+  );
 }
 
 
@@ -787,6 +800,12 @@ async function getAccessToken(scope, force = false) {
 function scopeForRequest(path, method) {
   const verb = safe(method).toLowerCase();
 
+  if (path.startsWith("/v1/products")) {
+    return ["post", "put", "patch", "delete"].includes(verb)
+      ? SCOPE_PRODUCTS_WRITE
+      : SCOPE_PRODUCTS_READ;
+  }
+
   if (
     verb === "post" &&
     path === "/v1/charges"
@@ -944,6 +963,202 @@ async function upsertSession(
       item,
       DB_OPTS
     );
+}
+
+
+// ======================================================
+// PRODUTOS VALIDAPAY
+// ======================================================
+
+function productIdFrom(data = {}) {
+  return safe(
+    data?.productId ||
+    data?.id ||
+    data?.product?.productId ||
+    data?.product?.id
+  );
+}
+
+function pricesFrom(data = {}) {
+  if (Array.isArray(data?.prices)) {
+    return data.prices;
+  }
+
+  if (Array.isArray(data?.product?.prices)) {
+    return data.product.prices;
+  }
+
+  return [];
+}
+
+function priceIdFrom(price = {}) {
+  return safe(
+    price?.priceId ||
+    price?.id
+  );
+}
+
+async function findReusableProductMapping({
+  projectCode,
+  checkoutCode,
+  type,
+  amount,
+  name
+}) {
+  try {
+    const result = await wixData
+      .query(SESSIONS)
+      .eq("codigoProjeto", safe(projectCode))
+      .eq("tipoProduto", safe(type))
+      .descending("updatedAtDate")
+      .limit(50)
+      .find({
+        ...DB_OPTS,
+        consistentRead: true
+      });
+
+    const expectedCheckout =
+      formatarCodigoCheckout(checkoutCode);
+
+    const expectedName =
+      safe(name).toLowerCase();
+
+    const match = result.items.find((item) => (
+      safe(item?.validaPayProductId) &&
+      safe(item?.validaPayPriceId) &&
+      sameMoney(item?.valor, amount) &&
+      formatarCodigoCheckout(item?.codigoCheckout) === expectedCheckout &&
+      safe(item?.produto).toLowerCase() === expectedName
+    ));
+
+    if (!match) {
+      return null;
+    }
+
+    return {
+      productId: safe(match.validaPayProductId),
+      priceId: safe(match.validaPayPriceId),
+      reused: true
+    };
+  } catch (error) {
+    console.warn(
+      "Mapeamento local de produto ValidaPay não pôde ser reutilizado:",
+      error?.message || error
+    );
+
+    return null;
+  }
+}
+
+async function createProduct({
+  name,
+  sku,
+  projectCode,
+  checkoutCode,
+  type,
+  amount,
+  image
+}) {
+  const data = await requestValidaPay({
+    path: "/v1/products",
+    method: "post",
+    body: {
+      name,
+      description: stageLabel(type),
+      type: "ONE_TIME",
+      isActive: true,
+      metadata: {
+        origem: "PELEGO_BOX_PROJETOS_PRONTOS",
+        checkoutTemplate: PRODUCT_TEMPLATE,
+        sku,
+        codigoProjeto: projectCode,
+        codigoCheckout: checkoutCode,
+        tipoProduto: type,
+        etapa: stageLabel(type),
+        imagem: image
+      },
+      prices: [
+        {
+          title: stageLabel(type),
+          amount,
+          currency: "BRL",
+          recurrenceType: "ONE_TIME",
+          recurrenceInterval: 1
+        }
+      ]
+    }
+  });
+
+  const productId = productIdFrom(data);
+  const price =
+    pricesFrom(data).find((item) =>
+      sameMoney(item?.amount, amount)
+    ) || pricesFrom(data)[0];
+  const priceId = priceIdFrom(price);
+
+  if (!productId || !priceId) {
+    throw new Error(
+      "A ValidaPay não devolveu productId e priceId."
+    );
+  }
+
+  return {
+    productId,
+    priceId,
+    reused: false
+  };
+}
+
+async function ensureProduct({
+  session: currentSession,
+  name,
+  sku,
+  projectCode,
+  checkoutCode,
+  type,
+  amount,
+  image
+}) {
+  const savedProductId =
+    safe(currentSession?.validaPayProductId);
+  const savedPriceId =
+    safe(currentSession?.validaPayPriceId);
+
+  if (
+    savedProductId &&
+    savedPriceId &&
+    sameMoney(currentSession?.valor, amount) &&
+    safe(currentSession?.produto).toLowerCase() === safe(name).toLowerCase()
+  ) {
+    return {
+      productId: savedProductId,
+      priceId: savedPriceId,
+      reused: true
+    };
+  }
+
+  const localMapping =
+    await findReusableProductMapping({
+      projectCode,
+      checkoutCode,
+      type,
+      amount,
+      name
+    });
+
+  if (localMapping) {
+    return localMapping;
+  }
+
+  return createProduct({
+    name,
+    sku,
+    projectCode,
+    checkoutCode,
+    type,
+    amount,
+    image
+  });
 }
 
 
@@ -1951,6 +2166,33 @@ export async function criarCobrancaPixTransparente(
     const now =
       new Date();
 
+    /*
+      A documentação da ValidaPay diferencia cobrança avulsa (amount)
+      de cobrança com produto (items + priceId). Tentamos usar um produto
+      ONE_TIME reutilizável para que a fatura leve o título real. Se a
+      criação/mapeamento do produto falhar, o PIX continua disponível como
+      cobrança avulsa em vez de derrubar a venda.
+    */
+    let product = null;
+
+    try {
+      product = await ensureProduct({
+        session: existing,
+        name,
+        sku,
+        projectCode,
+        checkoutCode,
+        type,
+        amount,
+        image
+      });
+    } catch (error) {
+      console.warn(
+        "Produto ValidaPay indisponível; mantendo fallback avulso:",
+        error?.message || error
+      );
+    }
+
     await upsertSession(
       checkoutId,
       {
@@ -2022,14 +2264,14 @@ export async function criarCobrancaPixTransparente(
 
         validaPayProductId:
           safe(
-            existing
-              ?.validaPayProductId
+            product?.productId ||
+            existing?.validaPayProductId
           ),
 
         validaPayPriceId:
           safe(
-            existing
-              ?.validaPayPriceId
+            product?.priceId ||
+            existing?.validaPayPriceId
           ),
 
         validaPayChargeId:
@@ -2072,8 +2314,17 @@ export async function criarCobrancaPixTransparente(
         documentNumber:
           cpfCnpj
       },
-      amount,
 
+      ...(product?.priceId
+        ? {
+          items: [
+            {
+              priceId: product.priceId,
+              quantity: 1
+            }
+          ]
+        }
+        : { amount }),
 
       metadata: {
         origem:

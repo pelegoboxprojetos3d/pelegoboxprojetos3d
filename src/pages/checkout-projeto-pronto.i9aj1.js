@@ -137,6 +137,39 @@ function checkoutPixAindaAtivo() {
   }
 }
 
+function sincronizarTentativaComUrl() {
+  const checkoutIdUrl =
+    safe(wixLocation.query?.checkoutId);
+
+  if (
+    !checkoutIdUrl ||
+    checkoutIdUrl === checkoutId
+  ) {
+    return false;
+  }
+
+  pararPollingPix();
+
+  checkoutId = checkoutIdUrl;
+  contexto = contextoDaUrl();
+
+  chargeIdAtual = "";
+  pixConteudoEnviado = false;
+  pixPollingInicio = 0;
+  criandoCheckout = false;
+  fluxoAutomaticoIniciado = false;
+  checkoutAutorizado = false;
+  clienteConsultado = null;
+  whatsappConsultado = "";
+  acessoPendente = null;
+  initEnviado = false;
+  htmlPronto = false;
+  mensagensPendentes = [];
+
+  marcarCheckoutPixAtivo(checkoutId);
+  return true;
+}
+
 function normalizarMensagem(raw) {
   let data = raw;
 
@@ -1018,6 +1051,8 @@ function enviarInit() {
 }
 
 function liberarHtml() {
+  sincronizarTentativaComUrl();
+
   if (htmlPronto) {
     return;
   }
@@ -1758,13 +1793,19 @@ async function consultarPixAgora() {
 async function abrirPixTransparente(
   data = {}
 ) {
-  if (
-    criandoCheckout ||
-    !checkoutPixAindaAtivo()
-  ) {
+  sincronizarTentativaComUrl();
+
+  if (criandoCheckout) {
     return;
   }
 
+  /*
+    A chave compartilhada serve para encerrar polling antigo, não para
+    impedir a criação da tentativa atual. Em páginas restauradas pelo
+    histórico/BFCache, bloquear aqui podia deixar o HTML eternamente no
+    joguinho sem sequer chamar a ValidaPay.
+  */
+  marcarCheckoutPixAtivo(checkoutId);
   criandoCheckout = true;
 
   try {
@@ -2768,6 +2809,8 @@ async function enviarClienteExistente(
 // ======================================================
 
 async function iniciarFluxoAutomatico() {
+  sincronizarTentativaComUrl();
+
   if (
     fluxoAutomaticoIniciado ||
     criandoCheckout
@@ -3130,6 +3173,8 @@ $w.onReady(function () {
           data.type ||
           data.tipo
         ).toUpperCase();
+
+      sincronizarTentativaComUrl();
 
       switch (type) {
         case "READY":

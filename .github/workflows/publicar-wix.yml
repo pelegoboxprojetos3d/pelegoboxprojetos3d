@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Aplicar correções de estabilidade
+        run: node scripts/aplicar-hotfix-estabilidade.cjs
+
       - name: Instalar dependências
         run: npm install --ignore-scripts
 
@@ -39,13 +42,10 @@ jobs:
         continue-on-error: true
         run: npm run postinstall
 
-      - name: Aplicar hotfix de estabilidade
-        run: node scripts/aplicar-hotfix-estabilidade.cjs
-
       - name: Validar código
         run: npm run lint
 
-      - name: Persistir hotfix no GitHub
+      - name: Persistir correções no GitHub
         run: |
           if git diff --quiet; then
             echo "Nenhuma alteração pendente."
@@ -53,11 +53,9 @@ jobs:
           fi
           git config user.name "PELEGO BOX PROJETOS 3D via WIX"
           git config user.email "pelegobox82@gmail.com"
-          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" "src/backend/validaPayPixProjetosProntos.jsw"
-          git commit -m "Estabilizar entrega e geração PIX"
+          git add -A
+          git commit -m "Correções finais de lançamento"
           git push origin HEAD:main
 
       - name: Publicar no Wix
         run: npx wix publish --source remote --approve-preview
-
-# disparo manual de publicação 2026-08-10 01:11 BRT

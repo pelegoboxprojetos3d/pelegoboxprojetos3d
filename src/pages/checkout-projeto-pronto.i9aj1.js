@@ -368,7 +368,8 @@ function returnUrlProjeto(
 function urlEntrega() {
   return (
     "/entregaprojetosprontos" +
-    `?checkout_id=${encodeURIComponent(checkoutId)}`
+    `?checkout_id=${encodeURIComponent(checkoutId)}` +
+    "&pos_pagamento=1"
   );
 }
 

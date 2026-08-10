@@ -2233,20 +2233,6 @@ async function carregarEntrega() {
 
         await mostrarProcessamento();
 
-        await mostrarProcessamento();
-
-        await mostrarProcessamento();
-
-        await mostrarProcessamento();
-
-        await mostrarProcessamento();
-
-        await mostrarProcessamento();
-
-        await mostrarProcessamento();
-
-        await mostrarProcessamento();
-
         alterarDescricao(
           "Pagamento aprovado. Estamos preparando seus arquivos..."
         );
@@ -2348,7 +2334,25 @@ $w.onReady(
       - arquivo pronto: abre a galeria;
       - pagamento aprovado e arquivo pendente: mostra a impressora.
     */
-    await esconderProcessamento();
+    const retornoPosPagamento =
+      safe(
+        wixLocation.query?.pos_pagamento
+      ) === "1";
+
+    if (retornoPosPagamento) {
+      /*
+        O PIX já foi aprovado no checkout.
+        Mostra a impressora imediatamente, sem tela branca,
+        enquanto o backend/Make termina a entrega.
+      */
+      await mostrarProcessamento();
+    } else {
+      /*
+        Link antigo de e-mail ou acesso direto: não pisca a
+        impressora. A galeria abre quando a entrega pronta for lida.
+      */
+      await esconderProcessamento();
+    }
 
     await carregarEntrega();
   }

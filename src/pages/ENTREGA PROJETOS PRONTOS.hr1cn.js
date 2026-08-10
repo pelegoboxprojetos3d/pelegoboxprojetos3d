@@ -2133,6 +2133,8 @@ async function carregarEntrega() {
           return;
         }
 
+        await mostrarProcessamento();
+
         alterarDescricao(
           "Pagamento aprovado. Estamos preparando seus arquivos..."
         );
@@ -2226,7 +2228,15 @@ $w.onReady(
       IDS.projeto
     ).disable();
 
-    await mostrarProcessamento();
+    /*
+      A galeria permanece Oculta + Recolhida no editor.
+      O HTML de processamento também começa escondido.
+
+      Primeiro consultamos a entrega. Só depois decidimos:
+      - arquivo pronto: abre a galeria;
+      - pagamento aprovado e arquivo pendente: mostra a impressora.
+    */
+    await esconderProcessamento();
 
     await carregarEntrega();
   }

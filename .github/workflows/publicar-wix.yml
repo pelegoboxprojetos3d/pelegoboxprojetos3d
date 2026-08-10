@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar-e-publicar:
@@ -27,21 +27,6 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-
-      - name: Ocultar banners de etapas pagas
-        run: node scripts/ocultar-banners-pagos.cjs
-
-      - name: Persistir regra dos banners
-        run: |
-          if git diff --quiet; then
-            echo "Regra dos banners já está persistida."
-            exit 0
-          fi
-          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
-          git config user.email "pelegobox82@gmail.com"
-          git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" "src/pages/checkout-projeto-pronto.i9aj1.js" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          git commit -m "Ocultar banners de etapas já pagas"
-          git push origin HEAD:main
 
       - name: Instalar dependências
         run: npm ci --ignore-scripts

@@ -126,6 +126,16 @@ const MAX_TENTATIVAS =
 const INTERVALO =
   2000;
 
+/*
+  Mesmo quando a imagem já existe (por exemplo, acesso pelo botão do e-mail),
+  a impressora fica alguns segundos visível para comunicar processamento.
+*/
+const MIN_PROCESSAMENTO_VISIVEL =
+  3000;
+
+let processamentoVisivelDesde =
+  0;
+
 let entrega =
   null;
 
@@ -258,10 +268,23 @@ function alterarDescricao(
 
 async function mostrarProcessamento() {
   /*
-    A impressora fica visível enquanto o Make ainda prepara a imagem.
-    Não escondemos nem recolhemos a galeria por código: quando o arquivo
-    chegar à coleção, mostrarGaleria() preenche e exibe a galeria.
+    O HTML da impressora fica sobre a galeria no Editor.
+    Enquanto ele estiver visível, a galeria fica apenas OCULTA, sem
+    recolher o espaço. Isso evita a imagem aparecendo por baixo.
   */
+  try {
+    await $w(IDS.galeria).hide();
+  } catch (erro) {
+    console.warn(
+      "Falha ao ocultar a galeria durante o processamento:",
+      erro?.message || erro
+    );
+  }
+
+  if (!processamentoVisivelDesde) {
+    processamentoVisivelDesde = Date.now();
+  }
+
   try {
     await $w(IDS.processando).expand();
     await $w(IDS.processando).show();
@@ -275,8 +298,21 @@ async function mostrarProcessamento() {
 
 async function esconderProcessamento() {
   try {
+    if (processamentoVisivelDesde) {
+      const tempoVisivel =
+        Date.now() - processamentoVisivelDesde;
+
+      const restante =
+        MIN_PROCESSAMENTO_VISIVEL - tempoVisivel;
+
+      if (restante > 0) {
+        await esperar(restante);
+      }
+    }
+
     await $w(IDS.processando).hide();
     await $w(IDS.processando).collapse();
+    processamentoVisivelDesde = 0;
   } catch (erro) {
     console.warn(
       "Falha ao esconder o HTML de processamento:",
@@ -2088,9 +2124,13 @@ async function renderizarEntrega(
 
   await renderizarBotoes();
 
-  await mostrarGaleria();
-
+  /*
+    A impressora está sobre a galeria. Primeiro retiramos a impressora
+    (respeitando o tempo mínimo de 3 s) e só depois revelamos a imagem.
+  */
   await esconderProcessamento();
+
+  await mostrarGaleria();
 
   await mostrarAvisosEntrega();
 
@@ -2326,9 +2366,10 @@ $w.onReady(
 
     /*
       A impressora é exibida primeiro e imediatamente.
-      Depois disso começa a consulta da coleção/Make sem bloquear a
-      renderização da página. A galeria continua livre para receber a
-      imagem assim que ela aparecer na coleção.
+      A galeria fica oculta enquanto a impressora estiver por cima.
+      Depois começa a consulta da coleção/Make sem bloquear a página.
+      Mesmo se a imagem já existir (acesso pelo e-mail), a impressora
+      permanece visível por pelo menos 3 segundos antes da galeria.
     */
     mostrarProcessamento()
       .catch(

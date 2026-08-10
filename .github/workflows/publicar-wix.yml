@@ -33,6 +33,9 @@ jobs:
       - name: Aplicar estabilização final
         run: node scripts/estabilizar-fluxo-final.cjs
 
+      - name: Validar arquivos da entrega
+        run: node scripts/corrigir-processador.cjs
+
       - name: Instalar dependências
         run: npm install --ignore-scripts
 

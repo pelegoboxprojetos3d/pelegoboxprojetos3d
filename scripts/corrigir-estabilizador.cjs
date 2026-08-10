@@ -6,16 +6,8 @@ let s = fs.readFileSync(path, 'utf8');
 const start = s.indexOf("  const ensureStart = s.indexOf('async function ensureProduct({');");
 const end = s.indexOf("\n  s = s.replace(\n    `function extractChargeId", start);
 
-if (start < 0 || end < 0) {
-  if (s.includes("const oldEnsureStart = s.indexOf('async function ensureProduct({');")) {
-    console.log('Estabilizador já corrigido.');
-    process.exit(0);
-  }
-
-  throw new Error('Bloco ensureProduct do estabilizador não encontrado.');
-}
-
-const replacement = `  const oldEnsureStart = s.indexOf('async function ensureProduct({');
+if (start >= 0 && end >= 0) {
+  const replacement = `  const oldEnsureStart = s.indexOf('async function ensureProduct({');
   const oldEnsureEnd = s.indexOf('\\n\\n\\n// ======================================================\\n// COBRANÇAS VALIDAPAY', oldEnsureStart);
   assert(oldEnsureStart >= 0 && oldEnsureEnd > oldEnsureStart, 'PIX: ensureProduct não encontrado.');
 
@@ -24,6 +16,15 @@ const replacement = `  const oldEnsureStart = s.indexOf('async function ensurePr
   s = s.slice(0, oldEnsureStart) + newEnsure + s.slice(oldEnsureEnd);
 `;
 
-s = s.slice(0, start) + replacement + s.slice(end);
+  s = s.slice(0, start) + replacement + s.slice(end);
+} else if (!s.includes("const oldEnsureStart = s.indexOf('async function ensureProduct({');")) {
+  throw new Error('Bloco ensureProduct do estabilizador não encontrado.');
+}
+
+s = s.replace(
+  '\npatchProcessor();\n',
+  '\n// patchProcessor executado pelo script dedicado.\n'
+);
+
 fs.writeFileSync(path, s, 'utf8');
-console.log('Estabilizador corrigido.');
+console.log('Estabilizador corrigido e processador delegado.');

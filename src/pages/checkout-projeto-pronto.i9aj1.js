@@ -42,6 +42,15 @@ const FIRST_WHATSAPP_SESSION_KEY =
 const FIRST_WHATSAPP_LOCAL_KEY =
   "pp_whatsapp_primeiro_estagio_persistente";
 
+const CONFIRMACAO_FLUXO_VERSAO =
+  3;
+
+const CHECKOUT_AUTH_KEY =
+  "pp_checkout_autorizado";
+
+const CHECKOUT_AUTH_TTL_MS =
+  120000;
+
 const PIX_RECOVERY_TENTATIVAS = 4;
 const PIX_RECOVERY_ESPERA = 500;
 
@@ -405,6 +414,141 @@ function lerIdentificacaoSalva() {
   return {};
 }
 
+function salvarIdentificacaoCheckout(
+  patch = {}
+) {
+  const atual =
+    lerIdentificacaoSalva();
+
+  const proxima = {
+    ...(atual || {}),
+    ...(patch || {})
+  };
+
+  const numero =
+    normalizarWhatsappBrasil(
+      proxima.whatsappE164 ||
+      proxima.whatsapp
+    );
+
+  if (numero) {
+    proxima.whatsapp =
+      numero;
+
+    proxima.whatsappE164 =
+      `+55${numero}`;
+
+    proxima.ddi =
+      "55";
+
+    proxima.country =
+      "br";
+  }
+
+  const serialized =
+    JSON.stringify(proxima);
+
+  try {
+    session.setItem(
+      SESSION_KEY,
+      serialized
+    );
+  } catch (_) {}
+
+  try {
+    local.setItem(
+      LOCAL_KEY,
+      serialized
+    );
+  } catch (_) {}
+
+  contexto = {
+    ...contexto,
+    ...proxima
+  };
+}
+
+function autorizacaoCheckoutValida() {
+  try {
+    const raw =
+      session.getItem(
+        CHECKOUT_AUTH_KEY
+      );
+
+    if (!raw) {
+      return false;
+    }
+
+    const auth =
+      JSON.parse(raw);
+
+    if (
+      !auth ||
+      typeof auth !== "object"
+    ) {
+      return false;
+    }
+
+    const idade =
+      Date.now() -
+      Number(auth.criadoEm || 0);
+
+    if (
+      idade < 0 ||
+      idade > CHECKOUT_AUTH_TTL_MS
+    ) {
+      return false;
+    }
+
+    if (
+      digits(auth.codigoProjeto) !==
+      digits(contexto.codigoProjeto)
+    ) {
+      return false;
+    }
+
+    if (
+      safe(auth.tipoProduto).toUpperCase() !==
+      safe(contexto.tipoProduto).toUpperCase()
+    ) {
+      return false;
+    }
+
+    const authCliente =
+      safe(auth.clienteId);
+
+    const ctxCliente =
+      safe(contexto.clienteId);
+
+    if (
+      authCliente &&
+      ctxCliente &&
+      authCliente !== ctxCliente
+    ) {
+      return false;
+    }
+
+    return true;
+
+  } catch (_) {
+    return false;
+  }
+}
+
+function confirmacaoPersistenteValida() {
+  return Boolean(
+    normalizarWhatsappBrasil(
+      contexto.whatsappE164 ||
+      contexto.whatsapp
+    ) &&
+    contexto.whatsappConfirmado === true &&
+    Number(
+      contexto.confirmacaoWhatsappVersao ||
+      0
+    ) === CONFIRMACAO_FLUXO_VERSAO
+  );
+}
+
 function lerWhatsappPrimeiroEstagioDedicado() {
   const fontes = [
     {
@@ -603,6 +747,21 @@ function contextoDaUrl() {
         ""
       ),
 
+    whatsappConfirmado:
+      identificacao.whatsappConfirmado ===
+        true,
+
+    confirmacaoWhatsappVersao:
+      Number(
+        identificacao.confirmacaoWhatsappVersao ||
+        0
+      ),
+
+    confirmadoEm:
+      safe(
+        identificacao.confirmadoEm
+      ),
+
     returnUrl:
       safe(
         query.returnUrl
@@ -774,12 +933,8 @@ function enviarInit() {
       contexto
     );
 
-  const clienteJaIdentificado =
-    Boolean(
-      safe(
-        contexto.clienteId
-      )
-    );
+  const confirmacaoPersistente =
+    confirmacaoPersistenteValida();
 
   /*
     O HTML já faz a confirmação dupla do WhatsApp.
@@ -794,12 +949,12 @@ function enviarInit() {
     ...contexto,
 
     whatsapp:
-      clienteJaIdentificado
+      confirmacaoPersistente
         ? contexto.whatsapp
         : "",
 
     whatsappE164:
-      clienteJaIdentificado
+      confirmacaoPersistente
         ? contexto.whatsappE164
         : ""
   };
@@ -814,13 +969,13 @@ function enviarInit() {
       "VALIDAPAY",
 
     autoLookup:
-      clienteJaIdentificado &&
+      confirmacaoPersistente &&
       Boolean(
         telefone.whatsapp
       ),
 
     hasWhatsappFromPreviousStep:
-      clienteJaIdentificado &&
+      confirmacaoPersistente &&
       Boolean(
         telefone.whatsapp
       ),
@@ -1802,6 +1957,24 @@ async function processarClienteEncontrado(
       contexto.cpfCnpj
     );
 
+  salvarIdentificacaoCheckout({
+    clienteId,
+    nome:
+      nomeCliente,
+    email:
+      emailResult.ok
+        ? emailResult.email
+        : contexto.email,
+    cpfCnpj:
+      documentoResult.ok
+        ? documentoResult.cpfCnpj
+        : contexto.cpfCnpj,
+    whatsapp:
+      telefone.whatsapp,
+    whatsappE164:
+      telefone.whatsappE164
+  });
+
   const access =
     await consultarAcessos({
       clienteId,
@@ -2041,6 +2214,92 @@ async function consultarCliente(
       return;
     }
 
+    salvarIdentificacaoCheckout({
+      whatsapp:
+        telefone.whatsapp,
+
+      whatsappE164:
+        telefone.whatsappE164,
+
+      whatsappConfirmado:
+        true,
+
+      confirmacaoWhatsappVersao:
+        CONFIRMACAO_FLUXO_VERSAO,
+
+      confirmadoEm:
+        new Date().toISOString()
+    });
+
+    const emailContexto =
+      validarEmail(
+        contexto.email
+      );
+
+    const documentoContexto =
+      validarCpfCnpj(
+        contexto.cpfCnpj
+      );
+
+    if (
+      autorizacaoCheckoutValida() &&
+      safe(contexto.clienteId) &&
+      safe(contexto.nome) &&
+      emailContexto.ok &&
+      documentoContexto.ok
+    ) {
+      whatsappConsultado =
+        telefone.whatsapp;
+
+      clienteConsultado = {
+        _id:
+          contexto.clienteId,
+
+        clienteId:
+          contexto.clienteId,
+
+        nome:
+          contexto.nome,
+
+        email:
+          emailContexto.email,
+
+        cpfCnpj:
+          documentoContexto.cpfCnpj
+      };
+
+      checkoutAutorizado =
+        true;
+
+      await abrirPixTransparente({
+        clienteId:
+          contexto.clienteId,
+
+        nomeCliente:
+          contexto.nome,
+
+        email:
+          emailContexto.email,
+
+        cpfCnpj:
+          documentoContexto.cpfCnpj,
+
+        whatsapp:
+          telefone.whatsapp,
+
+        whatsappE164:
+          telefone.whatsappE164,
+
+        ddi:
+          telefone.ddi,
+
+        country:
+          telefone.country
+      });
+
+      return;
+    }
+
     const cliente =
       await comTimeout(
         buscarCliente(
@@ -2230,8 +2489,30 @@ async function cadastrarCliente(
       );
     }
 
+    salvarIdentificacaoCheckout({
+      clienteId,
+      nome,
+      email:
+        cliente.email ||
+        emailResult.email,
+      cpfCnpj:
+        documentoResult.cpfCnpj,
+      whatsapp:
+        telefone.whatsapp,
+      whatsappE164:
+        telefone.whatsappE164,
+      whatsappConfirmado:
+        true,
+      confirmacaoWhatsappVersao:
+        CONFIRMACAO_FLUXO_VERSAO,
+      confirmadoEm:
+        new Date().toISOString()
+    });
+
     const access =
-      await consultarAcessos({
+      autorizacaoCheckoutValida()
+        ? acessoVazio()
+        : await consultarAcessos({
         clienteId,
 
         email:
@@ -2428,19 +2709,9 @@ async function iniciarFluxoAutomatico() {
       contexto
     );
 
-  /*
-    Sem clienteId, o HTML pede
-    a confirmação dupla.
-
-    Não existe confirmação paralela
-    dentro da página.
-  */
-
   if (
     !telefone.whatsapp ||
-    !safe(
-      contexto.clienteId
-    )
+    !confirmacaoPersistenteValida()
   ) {
     return;
   }
@@ -2455,13 +2726,71 @@ async function iniciarFluxoAutomatico() {
     false;
 
   try {
+    const emailContexto =
+      validarEmail(
+        contexto.email
+      );
+
+    const documentoContexto =
+      validarCpfCnpj(
+        contexto.cpfCnpj
+      );
+
+    if (
+      autorizacaoCheckoutValida() &&
+      safe(contexto.clienteId) &&
+      safe(contexto.nome) &&
+      emailContexto.ok &&
+      documentoContexto.ok
+    ) {
+      clienteConsultado = {
+        _id:
+          contexto.clienteId,
+        clienteId:
+          contexto.clienteId,
+        nome:
+          contexto.nome,
+        email:
+          emailContexto.email,
+        cpfCnpj:
+          documentoContexto.cpfCnpj
+      };
+
+      whatsappConsultado =
+        telefone.whatsapp;
+
+      checkoutAutorizado =
+        true;
+
+      await abrirPixTransparente({
+        clienteId:
+          contexto.clienteId,
+        nomeCliente:
+          contexto.nome,
+        email:
+          emailContexto.email,
+        cpfCnpj:
+          documentoContexto.cpfCnpj,
+        whatsapp:
+          telefone.whatsapp,
+        whatsappE164:
+          telefone.whatsappE164,
+        ddi:
+          telefone.ddi,
+        country:
+          telefone.country
+      });
+
+      return;
+    }
+
     const cliente =
       await comTimeout(
         buscarCliente(
           telefone.whatsappE164
         ),
 
-        10000,
+        7000,
 
         "A consulta do cliente não respondeu."
       );

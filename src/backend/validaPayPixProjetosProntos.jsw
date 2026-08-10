@@ -942,6 +942,77 @@ async function upsertSession(
 }
 
 
+async function findProductReferenceSession({
+  projectCode,
+  type,
+  amount
+}) {
+  const codigo =
+    safe(projectCode);
+
+  const candidatos = [
+    codigo
+  ];
+
+  const numero =
+    Number(codigo);
+
+  if (
+    codigo &&
+    Number.isSafeInteger(numero)
+  ) {
+    candidatos.push(numero);
+  }
+
+  for (const codigoValor of candidatos) {
+    try {
+      const result =
+        await wixData
+          .query(SESSIONS)
+          .eq(
+            "codigoProjeto",
+            codigoValor
+          )
+          .descending(
+            "updatedAtDate"
+          )
+          .limit(50)
+          .find(DB_OPTS);
+
+      const match =
+        (result.items || [])
+          .find(
+            (item) =>
+              normalizeType(
+                item?.tipoProduto
+              ) === type &&
+              sameMoney(
+                item?.valor,
+                amount
+              ) &&
+              safe(
+                item?.validaPayProductId
+              ) &&
+              safe(
+                item?.validaPayPriceId
+              )
+          );
+
+      if (match) {
+        return match;
+      }
+
+    } catch (error) {
+      console.warn(
+        "Falha ao procurar referência local do produto ValidaPay:",
+        error?.message || error
+      );
+    }
+  }
+
+  return null;
+}
+
 // ======================================================
 // PRODUTOS VALIDAPAY
 // ======================================================
@@ -1257,78 +1328,28 @@ async function ensureProduct({
 }) {
   const savedProductId =
     safe(
-      session
-        ?.validaPayProductId
+      session?.validaPayProductId
     );
 
   const savedPriceId =
     safe(
-      session
-        ?.validaPayPriceId
+      session?.validaPayPriceId
     );
 
   if (
     savedProductId &&
     savedPriceId
   ) {
-    try {
-      const details =
-        await fetchProduct(
-          savedProductId
-        );
+    return {
+      productId:
+        savedProductId,
 
-      if (
-        validReusableProduct(
-          details,
-          name,
-          sku,
-          amount
-        )
-      ) {
-        const price =
-          pricesFrom(details)
-            .find(
-              (entry) =>
-                sameMoney(
-                  entry?.amount,
-                  amount
-                )
-            );
+      priceId:
+        savedPriceId,
 
-        if (
-          priceIdFrom(price) ===
-          savedPriceId
-        ) {
-          return {
-            productId:
-              savedProductId,
-
-            priceId:
-              savedPriceId,
-
-            reused: true
-          };
-        }
-      }
-
-    } catch (error) {
-      console.warn(
-        "Produto salvo não pôde ser validado:",
-        error?.message ||
-        error
-      );
-    }
-  }
-
-  const reusable =
-    await findReusableProduct(
-      name,
-      sku,
-      amount
-    );
-
-  if (reusable) {
-    return reusable;
+      reused:
+        true
+    };
   }
 
   return createProduct({
@@ -1356,6 +1377,12 @@ function extractChargeId(
       data?.id,
       data?.charge?.id,
       data?.payment?.chargeId,
+      data?.data?.chargeId,
+      data?.data?.id,
+      data?.data?.charge?.id,
+      data?.result?.chargeId,
+      data?.result?.id,
+      data?.result?.charge?.id,
       data?.error
         ?.details
         ?.chargeId,
@@ -1373,14 +1400,27 @@ function extractEmv(
     first(
       data?.pix?.emv,
       data?.emv,
-      data?.payment
-        ?.pix
-        ?.emv,
-      data?.charge
-        ?.pix
-        ?.emv,
+      data?.payment?.pix?.emv,
+      data?.charge?.pix?.emv,
+      data?.data?.pix?.emv,
+      data?.data?.emv,
+      data?.data?.charge?.pix?.emv,
+      data?.result?.pix?.emv,
+      data?.result?.emv,
+      data?.result?.charge?.pix?.emv,
       data?.pix?.copyPaste,
-      data?.copyPaste
+      data?.copyPaste,
+      data?.payment?.pix?.copyPaste,
+      data?.charge?.pix?.copyPaste,
+      data?.data?.pix?.copyPaste,
+      data?.data?.copyPaste,
+      data?.result?.pix?.copyPaste,
+      data?.result?.copyPaste,
+      data?.pixCode,
+      data?.data?.pixCode,
+      data?.result?.pixCode,
+      data?.brCode,
+      data?.brcode
     )
   );
 }
@@ -1393,12 +1433,15 @@ function extractQrCode(
     first(
       data?.pix?.qrCode,
       data?.qrCode,
-      data?.payment
-        ?.pix
-        ?.qrCode,
-      data?.charge
-        ?.pix
-        ?.qrCode
+      data?.payment?.pix?.qrCode,
+      data?.charge?.pix?.qrCode,
+      data?.data?.pix?.qrCode,
+      data?.data?.qrCode,
+      data?.result?.pix?.qrCode,
+      data?.result?.qrCode,
+      data?.qr_code,
+      data?.qrcode,
+      data?.qrCodeBase64
     )
   );
 }
@@ -1624,19 +1667,10 @@ async function createChargeWithRecovery(
           return merged;
         }
 
-        const details =
-          await fetchChargeReady(
-            chargeId,
-            2
-          );
-
-        return mergeCharge(
-          merged,
-          {
-            ...details,
-            chargeId
-          }
-        );
+        return {
+          ...merged,
+          chargeId
+        };
       }
 
     } catch (error) {
@@ -1667,21 +1701,11 @@ async function createChargeWithRecovery(
           }
         );
 
-        const details =
-          await fetchChargeReady(
-            recoveredId,
-            2
-          );
-
-        return mergeCharge(
-          merged,
-          {
-            ...details,
-
-            chargeId:
-              recoveredId
-          }
-        );
+        return {
+          ...merged,
+          chargeId:
+            recoveredId
+        };
       }
 
       if (
@@ -2324,7 +2348,8 @@ export async function criarCobrancaPixTransparente(
     if (existingChargeId) {
       const charge =
         await fetchChargeReady(
-          existingChargeId
+          existingChargeId,
+          1
         );
 
       return publicCharge({
@@ -2438,9 +2463,20 @@ export async function criarCobrancaPixTransparente(
       }
     );
 
+    const productReferenceSession =
+      existing?.validaPayProductId &&
+      existing?.validaPayPriceId
+        ? existing
+        : await findProductReferenceSession({
+          projectCode,
+          type,
+          amount
+        });
+
     const product =
       await ensureProduct({
         session:
+          productReferenceSession ||
           existing,
 
         name,

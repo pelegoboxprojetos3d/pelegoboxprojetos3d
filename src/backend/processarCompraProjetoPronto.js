@@ -928,10 +928,53 @@ export async function processarCompraProjetoPronto(
     }
   }
 
+  const arquivosFaltantes = [];
+
+  if (
+    tipoProduto === "MEDIDAS" &&
+    !safe(salvo.imagemMedidas)
+  ) {
+    arquivosFaltantes.push({
+      field: "imagemMedidas",
+      error: "A imagem de medidas não foi recebida ou importada."
+    });
+  }
+
+  if (tipoProduto === "GRAFICOS") {
+    [
+      "imagemGrafico1",
+      "imagemGrafico2",
+      "imagemGrafico3",
+      "imagemGrafico4"
+    ].forEach((field) => {
+      if (!safe(salvo[field])) {
+        arquivosFaltantes.push({
+          field,
+          error: `O arquivo ${field} não foi recebido ou importado.`
+        });
+      }
+    });
+  }
+
+  if (
+    tipoProduto === "PROJETO_COMPLETO" &&
+    !safe(salvo.arquivoProjeto)
+  ) {
+    arquivosFaltantes.push({
+      field: "arquivoProjeto",
+      error: "O PDF do projeto completo não foi recebido."
+    });
+  }
+
+  if (arquivosFaltantes.length) {
+    falhas.push(...arquivosFaltantes);
+  }
+
   salvo.statusProcessamento =
     falhas.length
       ? "PARCIAL"
       : "PROCESSADO";
+
 
   salvo.dataProcessamento =
     new Date();

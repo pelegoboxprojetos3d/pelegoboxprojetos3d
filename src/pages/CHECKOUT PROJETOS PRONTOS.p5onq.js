@@ -50,6 +50,12 @@ const FIRST_WHATSAPP_SESSION_KEY =
 const FIRST_WHATSAPP_LOCAL_KEY =
   "pp_whatsapp_primeiro_estagio_persistente";
 
+const CONFIRMACAO_FLUXO_VERSAO =
+  3;
+
+const CHECKOUT_AUTH_KEY =
+  "pp_checkout_autorizado";
+
 const MANUTENCAO_ATIVA =
   true;
 
@@ -126,7 +132,11 @@ let identificacao = {
   countryName: "Brasil",
   clienteId: "",
   nome: "",
-  email: ""
+  email: "",
+  cpfCnpj: "",
+  whatsappConfirmado: false,
+  confirmacaoWhatsappVersao: 0,
+  confirmadoEm: ""
 };
 
 let acessos = {
@@ -797,6 +807,28 @@ function normalizarIdentificacaoSalva(
     email:
       normalizeEmail(
         data.email
+      ),
+
+    cpfCnpj:
+      onlyDigits(
+        data.cpfCnpj ||
+        data.cpf ||
+        data.cnpj ||
+        ""
+      ),
+
+    whatsappConfirmado:
+      data.whatsappConfirmado === true,
+
+    confirmacaoWhatsappVersao:
+      Number(
+        data.confirmacaoWhatsappVersao ||
+        0
+      ),
+
+    confirmadoEm:
+      safe(
+        data.confirmadoEm
       )
   };
 }
@@ -1615,6 +1647,16 @@ async function identificarCliente(
           clienteAtual.email
         );
 
+      identificacao.cpfCnpj =
+        onlyDigits(
+          clienteAtual.cpfCnpj ||
+          clienteAtual.cpf ||
+          clienteAtual.documentNumber ||
+          clienteAtual.documento ||
+          clienteAtual.cpfcnpj ||
+          ""
+        );
+
       const resultado =
         await comTimeout(
           obterAcessosProjeto({
@@ -1753,6 +1795,15 @@ async function abrirPopupWhatsapp() {
       return;
     }
 
+    identificacao.whatsappConfirmado =
+      false;
+
+    identificacao.confirmacaoWhatsappVersao =
+      0;
+
+    identificacao.confirmadoEm =
+      "";
+
     await identificarCliente(
       resultado
     );
@@ -1784,6 +1835,30 @@ async function abrirPopupWhatsapp() {
   }
 }
 
+
+function salvarAutorizacaoCheckout(
+  tipoProduto
+) {
+  try {
+    session.setItem(
+      CHECKOUT_AUTH_KEY,
+      JSON.stringify({
+        codigoProjeto:
+          codigoPublico(projeto),
+
+        tipoProduto:
+          safe(tipoProduto)
+            .toUpperCase(),
+
+        clienteId:
+          safe(identificacao.clienteId),
+
+        criadoEm:
+          Date.now()
+      })
+    );
+  } catch (_) {}
+}
 
 // ======================================================
 // URL DO CHECKOUT TRANSPARENTE
@@ -1936,6 +2011,10 @@ async function abrirEtapa(
     return;
   }
 
+  salvarAutorizacaoCheckout(
+    tipoProduto
+  );
+
   const destino =
     montarUrlCheckout(
       tipoProduto
@@ -2063,21 +2142,39 @@ async function iniciarPagina() {
       ...salva
     };
 
-    identificado =
-      true;
+    const confirmacaoAtualValida =
+      salva.whatsappConfirmado === true &&
+      Number(
+        salva.confirmacaoWhatsappVersao ||
+        0
+      ) === CONFIRMACAO_FLUXO_VERSAO;
 
-    identificarCliente(
-      salva
-    ).catch(
-      (
-        error
-      ) => {
-        console.error(
-          "Erro ao restaurar identificação:",
-          error?.message ||
+    if (confirmacaoAtualValida) {
+      identificado =
+        true;
+
+      identificarCliente(
+        salva
+      ).catch(
+        (
           error
-        );
-      }
+        ) => {
+          console.error(
+            "Erro ao restaurar identificação:",
+            error?.message ||
+            error
+          );
+        }
+      );
+
+      return;
+    }
+
+    identificado =
+      false;
+
+    agendarPopupWhatsapp(
+      300
     );
 
     return;

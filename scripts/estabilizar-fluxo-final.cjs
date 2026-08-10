@@ -223,20 +223,13 @@ function patchValidaPay() {
     );
   }
 
-  const ensureStart = s.indexOf('async function ensureProduct({');
-  const ensureEnd = s.indexOf('\n\n\n// ======================================================\n// COBRANÇAS VALIDAPAY', ensureStart);
-  assert(ensureStart >= 0 && ensureEnd > ensureStart, 'PIX: ensureProduct não encontrado.');
-  const ensureCurrent = s.slice(ensureStart, ensureEnd);
+  const oldEnsureStart = s.indexOf('async function ensureProduct({');
+  const oldEnsureEnd = s.indexOf('\n\n\n// ======================================================\n// COBRANÇAS VALIDAPAY', oldEnsureStart);
+  assert(oldEnsureStart >= 0 && oldEnsureEnd > oldEnsureStart, 'PIX: ensureProduct não encontrado.');
 
-  if (!ensureCurrent.includes('session?.validaPayProductId')) {
-    throw new Error('PIX: ensureProduct em formato inesperado.');
-  }
+  const newEnsure = `async function ensureProduct({\n  session,\n  name,\n  sku,\n  projectCode,\n  checkoutCode,\n  type,\n  amount,\n  image\n}) {\n  const savedProductId =\n    safe(\n      session?.validaPayProductId\n    );\n\n  const savedPriceId =\n    safe(\n      session?.validaPayPriceId\n    );\n\n  if (\n    savedProductId &&\n    savedPriceId\n  ) {\n    return {\n      productId:\n        savedProductId,\n\n      priceId:\n        savedPriceId,\n\n      reused:\n        true\n    };\n  }\n\n  return createProduct({\n    name,\n    sku,\n    projectCode,\n    checkoutCode,\n    type,\n    amount,\n    image\n  });\n}`;
 
-  if (ensureCurrent.includes('await findReusableProduct(') || ensureCurrent.includes('await fetchProduct(')) {
-    const newEnsure = `async function ensureProduct({\n  session,\n  name,\n  sku,\n  projectCode,\n  checkoutCode,\n  type,\n  amount,\n  image\n}) {\n  const savedProductId =\n    safe(\n      session?.validaPayProductId\n    );\n\n  const savedPriceId =\n    safe(\n      session?.validaPayPriceId\n    );\n\n  if (\n    savedProductId &&\n    savedPriceId\n  ) {\n    return {\n      productId:\n        savedProductId,\n\n      priceId:\n        savedPriceId,\n\n      reused:\n        true\n    };\n  }\n\n  return createProduct({\n    name,\n    sku,\n    projectCode,\n    checkoutCode,\n    type,\n    amount,\n    image\n  });\n}`;
-
-    s = s.slice(0, ensureStart) + newEnsure + s.slice(ensureEnd);
-  }
+  s = s.slice(0, oldEnsureStart) + newEnsure + s.slice(oldEnsureEnd);
 
   s = s.replace(
     `function extractChargeId(\n  data = {}\n) {\n  return safe(\n    first(\n      data?.chargeId,\n      data?.id,\n      data?.charge?.id,\n      data?.payment?.chargeId,\n      data?.error\n        ?.details\n        ?.chargeId,\n      data?.details\n        ?.chargeId\n    )\n  );\n}`,
@@ -303,5 +296,5 @@ function patchProcessor() {
 patchMainPage();
 patchCheckoutPage();
 patchValidaPay();
-patchProcessor();
+// patchProcessor executado pelo script dedicado.
 console.log('Fluxo final estabilizado.');

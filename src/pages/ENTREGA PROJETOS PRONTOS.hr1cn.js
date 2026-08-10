@@ -262,6 +262,62 @@ function alterarDescricao(
 }
 
 
+/*
+  Enquanto os dados reais ainda não chegaram, não mostramos os textos
+  padrão do Editor (TITULO DO PROJETO, sku, Small Title etc.) nem os
+  botões das etapas. Usamos somente os IDs dos elementos, sem depender
+  do nome de seção. O espaço é preservado para evitar pulos no layout.
+*/
+const IDS_DADOS_REAIS_ENTREGA = [
+  IDS.titulo,
+  IDS.sku,
+  IDS.medidas,
+  IDS.valorMedidas,
+  IDS.graficos,
+  IDS.valorGraficos,
+  IDS.projeto,
+  IDS.valorProjeto
+];
+
+async function ocultarDadosAteCarregamento() {
+  try {
+    $w(IDS.titulo).text = "";
+    $w(IDS.sku).text = "";
+    $w(IDS.valorMedidas).text = "";
+    $w(IDS.valorGraficos).text = "";
+    $w(IDS.valorProjeto).text = "";
+  } catch (_) {}
+
+  await Promise.allSettled(
+    IDS_DADOS_REAIS_ENTREGA.map((id) => {
+      try {
+        const elemento = $w(id);
+        return typeof elemento.hide === "function"
+          ? elemento.hide()
+          : Promise.resolve();
+      } catch (_) {
+        return Promise.resolve();
+      }
+    })
+  );
+}
+
+async function mostrarDadosCarregados() {
+  await Promise.allSettled(
+    IDS_DADOS_REAIS_ENTREGA.map((id) => {
+      try {
+        const elemento = $w(id);
+        return typeof elemento.show === "function"
+          ? elemento.show()
+          : Promise.resolve();
+      } catch (_) {
+        return Promise.resolve();
+      }
+    })
+  );
+}
+
+
 // ======================================================
 // PROCESSAMENTO VISUAL DA ENTREGA
 // ======================================================
@@ -2132,6 +2188,12 @@ async function renderizarEntrega(
 
   await mostrarGaleria();
 
+  /*
+    Só agora os textos e botões recebem conteúdo real e podem aparecer.
+    Assim os placeholders do Editor nunca ficam expostos durante a espera.
+  */
+  await mostrarDadosCarregados();
+
   await mostrarAvisosEntrega();
 
   /*
@@ -2345,6 +2407,16 @@ $w.onReady(
       Tudo que pode demorar roda em segundo plano depois que o onReady
       devolve o controle para o navegador.
     */
+
+    ocultarDadosAteCarregamento()
+      .catch(
+        (erro) => {
+          console.warn(
+            "Falha ao ocultar placeholders da entrega:",
+            erro?.message || erro
+          );
+        }
+      );
 
     esconderBotaoVideo()
       .catch(

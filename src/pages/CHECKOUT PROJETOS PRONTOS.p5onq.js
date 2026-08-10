@@ -2100,21 +2100,11 @@ async function abrirEtapa(
     return;
   }
 
-  if (!consultaConcluida) {
-    try {
-      await identificarCliente(
-        identificacao
-      );
-    } catch (error) {
-      console.error(
-        "Não foi possível atualizar o cliente:",
-        error?.message ||
-        error
-      );
-
-      return;
-    }
-  }
+  /*
+    A identificação já foi feita antes. Não repetimos consulta de cliente
+    e acessos no clique, porque isso segurava a navegação para o checkout.
+    O clique deve decidir com o estado já carregado e navegar imediatamente.
+  */
 
   if (
     etapaPaga(

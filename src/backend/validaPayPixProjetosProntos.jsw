@@ -884,12 +884,15 @@ async function findSession(
 
 async function upsertSession(
   checkoutId,
-  patch
+  patch,
+  existingKnown = undefined
 ) {
   const existing =
-    await findSession(
-      checkoutId
-    );
+    existingKnown === undefined
+      ? await findSession(
+        checkoutId
+      )
+      : existingKnown;
 
   const item = {
     ...(existing || {}),
@@ -2039,7 +2042,8 @@ export async function criarCobrancaPixTransparente(
 
         updatedAtDate:
           now
-      }
+      },
+      existing
     );
 
     const chargeBody = {
@@ -2130,28 +2134,6 @@ export async function criarCobrancaPixTransparente(
 
       throw error;
     }
-
-    /*
-      Se o EMV ainda não chegou, devolve "processing" imediatamente.
-      O frontend continua consultando pelo chargeId sem travar o comprador.
-    */
-
-    await upsertSession(
-      checkoutId,
-      {
-        preferenceId:
-          chargeId,
-
-        validaPayChargeId:
-          chargeId,
-
-        status:
-          "pending",
-
-        updatedAtDate:
-          new Date()
-      }
-    );
 
     return publicCharge({
       checkoutId,

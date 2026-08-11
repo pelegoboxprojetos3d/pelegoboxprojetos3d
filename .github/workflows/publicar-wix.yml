@@ -42,6 +42,9 @@ jobs:
       - name: Usar título original na página de entrega
         run: node scripts/usar-titulo-original-entrega.cjs
 
+      - name: Corrigir persistência do Pega Zap e abertura de Baixar Medidas
+        run: node scripts/corrigir-pega-zap-identificacao.cjs
+
       - name: Validar código
         run: npm run lint
 

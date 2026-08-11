@@ -1,0 +1,443 @@
+import wixData from "wix-data";
+import { fetch } from "wix-fetch";
+import { getSecret } from "wix-secrets-backend";
+
+const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
+const API_BASE = "https://api.validapay.com.br";
+const SESSIONS = "SessoesProjetosProntos2";
+const DB = { suppressAuth: true };
+const SITE_BASE = "https://www.pelegobox.com.br";
+const MAKE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
+const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";
+
+let writeToken = "";
+let writeExpiresAt = 0;
+let readToken = "";
+let readExpiresAt = 0;
+
+const safe = value => String(value ?? "").trim();
+const digits = value => safe(value).replace(/\D/g, "");
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function first(...values) {
+  for (const value of values) if (safe(value)) return value;
+  return "";
+}
+
+function parseMoney(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? Number(value.toFixed(2)) : 0;
+  let text = safe(value).replace(/[^\d,.-]/g, "");
+  if (text.includes(",") && text.includes(".")) text = text.replace(/\./g, "").replace(",", ".");
+  else if (text.includes(",")) text = text.replace(",", ".");
+  const number = Number(text);
+  return Number.isFinite(number) ? Number(number.toFixed(2)) : 0;
+}
+
+function normalizePhone(value) {
+  let number = digits(value);
+  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);
+  return number.length === 10 || number.length === 11 ? `+55${number}` : "";
+}
+
+function normalizeType(value) {
+  const type = safe(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
+  return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(type) ? type : "MEDIDAS";
+}
+
+function decodeTitle(value) {
+  return safe(value)
+    .replace(/&amp;quot;/gi, '"')
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeStatus(value) {
+  const status = safe(value).toUpperCase();
+  if (["PAID", "APPROVED", "CONFIRMED", "SUCCEEDED"].includes(status)) return "approved";
+  if (["FAILED", "REJECTED", "DECLINED", "DENIED", "REFUSED"].includes(status)) return "rejected";
+  if (["CANCELED", "CANCELLED"].includes(status)) return "cancelled";
+  if (status === "EXPIRED") return "expired";
+  return "pending";
+}
+
+function externalTxid(checkoutId, projectCode, productType, amount) {
+  const stage = productType === "GRAFICOS" ? "G" : productType === "PROJETO_COMPLETO" ? "P" : "M";
+  const cents = Math.round(parseMoney(amount) * 100);
+  const suffix = safe(checkoutId).replace(/[^a-z0-9]/gi, "").slice(-8).toUpperCase();
+  return `PP-${digits(projectCode)}-${stage}-${cents}-${suffix}`.slice(0, 35);
+}
+
+async function readJson(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch (_) { return { raw: text }; }
+}
+
+function apiMessage(data, status) {
+  return safe(data?.error?.message || data?.error_description || data?.message ||
+    (typeof data?.error === "string" ? data.error : "") || data?.code || data?.raw) ||
+    `ValidaPay respondeu HTTP ${status}.`;
+}
+
+async function accessToken(scope, force = false) {
+  const isWrite = scope === "checkouts/write";
+  const cached = isWrite ? writeToken : readToken;
+  const expiresAt = isWrite ? writeExpiresAt : readExpiresAt;
+  if (!force && cached && Date.now() < expiresAt - 45000) return cached;
+
+  const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+  const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+  if (!clientId || !clientSecret) throw new Error("Credenciais da ValidaPay não encontradas.");
+
+  const body = [
+    "grant_type=client_credentials",
+    `client_id=${encodeURIComponent(clientId)}`,
+    `client_secret=${encodeURIComponent(clientSecret)}`,
+    `scope=${encodeURIComponent(scope)}`
+  ].join("&");
+
+  const response = await fetch(AUTH_URL, {
+    method: "post",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  const data = await readJson(response);
+  const token = safe(data?.access_token);
+  if (!response.ok || !token) throw new Error(apiMessage(data, response.status));
+
+  const expiry = Date.now() + Math.max(120, Number(data?.expires_in || 300)) * 1000;
+  if (isWrite) { writeToken = token; writeExpiresAt = expiry; }
+  else { readToken = token; readExpiresAt = expiry; }
+  return token;
+}
+
+async function requestValidaPay(path, method = "get", body) {
+  const scope = method.toLowerCase() === "post" ? "checkouts/write" : "pix.cob/read";
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const token = await accessToken(scope, attempt > 1);
+    const options = {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+    };
+    if (body !== undefined) options.body = JSON.stringify(body);
+
+    const response = await fetch(`${API_BASE}${path}`, options);
+    const data = await readJson(response);
+    if (response.ok) return { ok: true, statusCode: response.status, data };
+    if (attempt === 1 && [401, 403].includes(Number(response.status))) continue;
+    return { ok: false, statusCode: response.status, data, error: apiMessage(data, response.status) };
+  }
+  return { ok: false, statusCode: 0, data: {}, error: "Falha ao consultar a ValidaPay." };
+}
+
+async function findSession(checkoutId) {
+  if (!safe(checkoutId)) return null;
+  const result = await wixData.query(SESSIONS).eq("checkoutId", safe(checkoutId)).limit(1).find({ ...DB, consistentRead: true });
+  return result.items[0] || null;
+}
+
+async function saveSession(checkoutId, patch, known = undefined) {
+  const existing = known === undefined ? await findSession(checkoutId) : known;
+  const item = { ...(existing || {}), ...(patch || {}), checkoutId: safe(checkoutId) };
+  const whatsapp = normalizePhone(item.whatsapp || item.whatsappE164 || item.whatsApp);
+  if (whatsapp) item.whatsapp = whatsapp;
+  delete item.whatsApp;
+  delete item.whatsappE164;
+  delete item.sku;
+  delete item.codigoCheckout;
+  if (item.produto) item.produto = decodeTitle(item.produto);
+  return existing ? wixData.update(SESSIONS, item, DB) : wixData.insert(SESSIONS, item, DB);
+}
+
+function extractChargeId(data = {}) {
+  return safe(first(
+    data?.chargeId, data?.id, data?.charge?.id, data?.payment?.chargeId,
+    data?.data?.chargeId, data?.data?.id, data?.result?.chargeId, data?.result?.id,
+    data?.error?.details?.chargeId, data?.details?.chargeId
+  ));
+}
+
+function extractEmv(data = {}) {
+  return safe(first(
+    data?.pix?.emv, data?.emv, data?.payment?.pix?.emv, data?.charge?.pix?.emv,
+    data?.data?.pix?.emv, data?.data?.emv, data?.result?.pix?.emv, data?.result?.emv,
+    data?.pix?.copyPaste, data?.copyPaste, data?.pixCode, data?.brCode, data?.brcode
+  ));
+}
+
+function extractQr(data = {}) {
+  return safe(first(
+    data?.pix?.qrCode, data?.qrCode, data?.payment?.pix?.qrCode, data?.charge?.pix?.qrCode,
+    data?.data?.pix?.qrCode, data?.data?.qrCode, data?.result?.pix?.qrCode, data?.result?.qrCode,
+    data?.qr_code, data?.qrcode, data?.qrCodeBase64
+  ));
+}
+
+function publicCharge(checkoutId, chargeId, data = {}, fallbackAmount = 0) {
+  const status = normalizeStatus(first(data?.status, data?.charge?.status, data?.payment?.status, data?.data?.status));
+  const emv = extractEmv(data);
+  return {
+    ok: true,
+    provider: "VALIDAPAY",
+    paymentMethod: "PIX",
+    checkoutId: safe(checkoutId),
+    chargeId: safe(chargeId),
+    status,
+    approved: status === "approved",
+    processing: !emv && status === "pending",
+    recoverable: !emv && status === "pending",
+    amount: parseMoney(first(data?.amount, data?.value, data?.total, data?.charge?.amount, fallbackAmount)),
+    emv,
+    qrCode: extractQr(data),
+    paidAt: safe(first(data?.paidAt, data?.payment?.paidAt))
+  };
+}
+
+async function readChargeReady(checkoutId, chargeId, amount, attempts = 4) {
+  let latest = {};
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const response = await requestValidaPay(`/v1/charges/${encodeURIComponent(chargeId)}`, "get");
+    if (response.ok) {
+      latest = response.data || {};
+      if (extractEmv(latest) || normalizeStatus(first(latest?.status, latest?.charge?.status, latest?.payment?.status)) !== "pending") break;
+    } else if (![404, 408, 425, 429, 500, 502, 503, 504].includes(Number(response.statusCode))) {
+      throw new Error(response.error || "Não foi possível consultar a cobrança.");
+    }
+    if (attempt < attempts) await sleep(250);
+  }
+  return publicCharge(checkoutId, chargeId, latest, amount);
+}
+
+async function optionalSecret(name) {
+  try { return safe(await getSecret(name)); } catch (_) { return ""; }
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "post",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) throw new Error(`Webhook respondeu HTTP ${response.status}.`);
+}
+
+async function notifyApproved(checkoutId, chargeId, charge) {
+  const session = await findSession(checkoutId);
+  if (!session) return;
+
+  const amount = Number(session.valor || parseMoney(charge?.amount) || 0);
+  const payload = {
+    event: "venda_aprovada_PROJETOS_PRONTOS",
+    origem: "PELEGO_BOX_PROJETOS_PRONTOS",
+    provider: "VALIDAPAY",
+    paymentMethod: "PIX",
+    status: "approved",
+    dataISO: new Date().toISOString(),
+    checkoutId,
+    chargeId,
+    clienteId: safe(session.clienteId),
+    nome: safe(session.nomeCliente),
+    email: safe(session.email).toLowerCase(),
+    whatsapp: normalizePhone(session.whatsapp),
+    cpfCnpj: digits(session.cpfCnpj),
+    produto: decodeTitle(session.produto),
+    tipoProduto: normalizeType(session.tipoProduto),
+    codigoProjeto: safe(session.codigoProjeto),
+    img: safe(session.img),
+    valor: amount,
+    valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(checkoutId)}`
+  };
+
+  const patch = { updatedAtDate: new Date() };
+
+  if (!session.emailEnviadoEm) {
+    const makeUrl = await optionalSecret(MAKE_SECRET);
+    if (makeUrl) {
+      try { await postJson(makeUrl, payload); patch.emailEnviadoEm = new Date(); }
+      catch (error) { console.error("Falha no webhook do Make:", error?.message || error); }
+    }
+  }
+
+  if (session.chatbotVendaEnviado !== true) {
+    const chatbotUrl = await optionalSecret(CHATBOT_SECRET);
+    if (chatbotUrl) {
+      try { await postJson(chatbotUrl, payload); patch.chatbotVendaEnviado = true; }
+      catch (error) { console.error("Falha no webhook do Chatbot:", error?.message || error); }
+    }
+  }
+
+  if (patch.emailEnviadoEm || patch.chatbotVendaEnviado === true) await saveSession(checkoutId, patch, session);
+}
+
+export async function criarCobrancaPixTransparente(input = {}) {
+  const checkoutId = safe(input.checkoutId) || `ckpro_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 10)}`;
+
+  try {
+    const ctx = input.ctx || {};
+    const codigoProjeto = digits(first(input.codigoProjeto, ctx.codigoProjeto));
+    const tipoProduto = normalizeType(first(input.tipoProduto, ctx.tipoProduto));
+    const produto = decodeTitle(first(input.produto, ctx.produto, ctx.titulo, "Projeto Pronto"));
+    const valor = parseMoney(input.valor ?? ctx.valor ?? ctx.price);
+    const clienteId = safe(first(input.clienteId, ctx.clienteId));
+    const nome = decodeTitle(first(input.nomeCliente, input.nome, ctx.nomeCliente, ctx.nome));
+    const email = safe(first(input.email, ctx.email)).toLowerCase();
+    const cpfCnpj = digits(first(input.cpfCnpj, input.cpf, ctx.cpfCnpj, ctx.cpf));
+    const whatsapp = normalizePhone(first(input.whatsappE164, input.whatsapp, ctx.whatsappE164, ctx.whatsapp));
+    const img = safe(first(input.img, input.imagem, ctx.img, ctx.imagem));
+    const returnUrl = safe(first(input.returnUrl, ctx.returnUrl));
+
+    if (!codigoProjeto) return { ok: false, checkoutId, error: "Código do projeto não informado." };
+    if (!(valor > 0)) return { ok: false, checkoutId, error: "Valor inválido para gerar o Pix." };
+    if (!clienteId) return { ok: false, checkoutId, error: "Cliente não identificado." };
+    if (nome.length < 3) return { ok: false, checkoutId, error: "Nome do cliente não informado." };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)) return { ok: false, checkoutId, error: "E-mail do cliente inválido." };
+    if (![11, 14].includes(cpfCnpj.length)) return { ok: false, checkoutId, error: "CPF/CNPJ do cliente inválido." };
+    if (!whatsapp) return { ok: false, checkoutId, error: "WhatsApp do cliente inválido." };
+
+    const existing = await findSession(checkoutId);
+    const existingChargeId = safe(existing?.validaPayChargeId);
+    if (existingChargeId) return readChargeReady(checkoutId, existingChargeId, valor, 2);
+
+    const now = new Date();
+    await saveSession(checkoutId, {
+      status: "pending",
+      paymentMethod: "PIX",
+      clienteId,
+      nomeCliente: nome,
+      whatsapp,
+      email,
+      cpfCnpj,
+      codigoProjeto,
+      tipoProduto,
+      produto,
+      img,
+      valor,
+      returnUrl,
+      compraRegistrada: false,
+      validaPayChargeId: "",
+      paymentId: "",
+      createdAtDate: existing?.createdAtDate || now,
+      updatedAtDate: now
+    }, existing);
+
+    const body = {
+      paymentMethod: "pix",
+      externalId: checkoutId,
+      externalTxid: externalTxid(checkoutId, codigoProjeto, tipoProduto, valor),
+      customer: { name: nome, email, phone: whatsapp, documentNumber: cpfCnpj },
+      amount: valor,
+      metadata: {
+        origem: "PELEGO_BOX_PROJETOS_PRONTOS",
+        checkoutId,
+        clienteId,
+        codigoProjeto,
+        tipoProduto,
+        produto,
+        whatsapp,
+        cpfCnpj,
+        imagem: img,
+        returnUrl
+      }
+    };
+
+    let created = null;
+    let lastError = "";
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const response = await requestValidaPay("/v1/charges", "post", body);
+      if (response.ok) { created = response.data || {}; break; }
+
+      const recoveredId = extractChargeId(response.data || {});
+      if (response.statusCode === 409 && recoveredId) {
+        created = { ...(response.data || {}), chargeId: recoveredId };
+        break;
+      }
+
+      lastError = response.error || "Não foi possível gerar o Pix.";
+      if (![408, 425, 429, 500, 502, 503, 504].includes(Number(response.statusCode))) throw new Error(lastError);
+      if (attempt < 3) await sleep(250 * attempt);
+    }
+
+    const chargeId = extractChargeId(created || {});
+    if (!chargeId) return { ok: false, recoverable: true, processing: true, checkoutId, error: lastError || "O Pix ainda está sendo criado." };
+
+    await saveSession(checkoutId, {
+      validaPayChargeId: chargeId,
+      paymentId: chargeId,
+      status: "pending",
+      updatedAtDate: new Date()
+    });
+
+    const immediate = publicCharge(checkoutId, chargeId, created || {}, valor);
+    if (immediate.emv || immediate.approved) return immediate;
+    return readChargeReady(checkoutId, chargeId, valor, 4);
+
+  } catch (error) {
+    console.error("ERRO PIX VALIDAPAY:", error?.message || error, error);
+    return {
+      ok: false,
+      recoverable: true,
+      processing: true,
+      checkoutId,
+      error: error?.message || "Não foi possível gerar o Pix."
+    };
+  }
+}
+
+export async function consultarCobrancaPix(input = {}) {
+  try {
+    const checkoutId = safe(input.checkoutId);
+    let chargeId = safe(input.chargeId);
+    let session = null;
+
+    if (!chargeId && checkoutId) {
+      session = await findSession(checkoutId);
+      chargeId = safe(session?.validaPayChargeId);
+    }
+
+    if (!chargeId) return { ok: false, recoverable: true, processing: true, checkoutId, error: "Preparando o Pix..." };
+
+    const response = await requestValidaPay(`/v1/charges/${encodeURIComponent(chargeId)}`, "get");
+    if (!response.ok) {
+      const recoverable = [404, 408, 425, 429, 500, 502, 503, 504].includes(Number(response.statusCode));
+      return {
+        ok: false,
+        recoverable,
+        processing: recoverable,
+        checkoutId,
+        chargeId,
+        error: recoverable ? "Aguardando o QR Code..." : response.error
+      };
+    }
+
+    const result = publicCharge(checkoutId, chargeId, response.data || {}, session?.valor || 0);
+
+    if (checkoutId && result.approved) {
+      const current = session || await findSession(checkoutId);
+      await saveSession(checkoutId, {
+        status: "approved",
+        paymentId: chargeId,
+        validaPayChargeId: chargeId,
+        updatedAtDate: new Date()
+      }, current);
+      notifyApproved(checkoutId, chargeId, response.data || {}).catch(error => {
+        console.error("Falha ao notificar venda aprovada:", error?.message || error);
+      });
+    }
+
+    return result;
+  } catch (error) {
+    return {
+      ok: false,
+      recoverable: true,
+      processing: true,
+      checkoutId: safe(input.checkoutId),
+      chargeId: safe(input.chargeId),
+      error: "Aguardando retorno da ValidaPay..."
+    };
+  }
+}

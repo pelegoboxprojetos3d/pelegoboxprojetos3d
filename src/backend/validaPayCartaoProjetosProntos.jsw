@@ -1,6 +1,7 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
 
 // CARTÃO TRANSPARENTE VALIDAPAY
 // - Não grava PAN completo nem CVV.
@@ -181,7 +182,7 @@ async function saveSession(checkoutId, patch) {
   return current ? wixData.update(SESSIONS, item, DB) : wixData.insert(SESSIONS, item, DB);
 }
 
-async function reusablePriceId({ codigoProjeto, tipoProduto, valor }) {
+async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
   try {
     const r = await wixData
       .query(SESSIONS)
@@ -192,7 +193,7 @@ async function reusablePriceId({ codigoProjeto, tipoProduto, valor }) {
       .find(DB);
 
     const found = (r.items || []).find(item =>
-      safe(item?.validaPayPriceId) && Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
+      safe(item?.validaPayPriceId) && normalizarTituloProduto(item?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() && Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
     );
 
     return safe(found?.validaPayPriceId);
@@ -202,36 +203,31 @@ async function reusablePriceId({ codigoProjeto, tipoProduto, valor }) {
   }
 }
 
-function stageLabel(tipoProduto) {
-  if (tipoProduto === "GRAFICOS") return "Gráficos";
-  if (tipoProduto === "PROJETO_COMPLETO") return "Projeto Completo";
-  return "Medidas";
-}
 
 async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor }) {
   const current = await findSession(checkoutId);
-  if (safe(current?.validaPayPriceId)) return safe(current.validaPayPriceId);
+  if (safe(current?.validaPayPriceId) && normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()) return safe(current.validaPayPriceId);
 
-  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, valor });
+  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
   if (reused) {
     await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
     return reused;
   }
 
-  const label = stageLabel(tipoProduto);
   const response = await api("post", "/v1/products", {
-    name: decodeTitle(produto),
-    description: `${label} - Pelego Box Projetos Prontos`,
+    name: produto,
+    description: produto,
     type: "ONE_TIME",
     statementDescriptor: "PELEGO BOX",
     isActive: true,
     metadata: {
       origem: "PELEGO_BOX_PROJETOS_PRONTOS",
       codigoProjeto,
-      tipoProduto
+      tipoProduto,
+      codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)
     },
     prices: [{
-      title: label,
+      title: produto,
       amount: valor,
       currency: "BRL",
       recurrenceType: "ONE_TIME",
@@ -348,7 +344,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     const checkoutId = safe(input.checkoutId);
     const codigoProjeto = digits(input.codigoProjeto || ctx.codigoProjeto);
     const tipoProduto = productType(input.tipoProduto || ctx.tipoProduto);
-    const produto = decodeTitle(input.produto || ctx.produto || ctx.titulo || "Projeto Pronto");
+    const produto = tituloEtapaProjetoPronto(input.produto || ctx.produto || ctx.titulo || "Projeto Pronto", tipoProduto, codigoProjeto);
     const valor = money(input.valor ?? ctx.valor ?? ctx.price);
     const clienteId = safe(input.clienteId || ctx.clienteId);
     const nome = safe(input.nome || input.nomeCliente || ctx.nome || ctx.nomeCliente);

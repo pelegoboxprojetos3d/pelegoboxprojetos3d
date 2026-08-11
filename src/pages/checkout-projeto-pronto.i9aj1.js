@@ -1,7 +1,7 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
-import { criarCliente, buscarCliente } from "backend/clientes.web";
+import { criarCliente, buscarClienteCadastrado } from "backend/clientes.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
@@ -81,7 +81,7 @@ async function hydrateReturningCustomer() {
   ctx.skipIdentity = false;
 
   try {
-    const found = await waitTimeout(buscarCliente(n), 3500, "");
+    const found = await waitTimeout(buscarClienteCadastrado(n), 3500, "");
     if (!found) return;
 
     customer = found;

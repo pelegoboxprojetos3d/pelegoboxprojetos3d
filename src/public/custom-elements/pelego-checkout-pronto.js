@@ -14,7 +14,7 @@ const CHECKOUT_HTML = String.raw`<!doctype html>
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:transparent;color:var(--text);font-family:Arial,Helvetica,sans-serif}
-body{padding:7px}
+body{padding:7px;visibility:hidden}
 button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 .hidden{display:none!important}
@@ -502,9 +502,26 @@ function formatCpf(v){var n=cpf(v);return n.replace(/^(\d{3})(\d)/,"$1.$2").repl
 function validCpf(v){var n=cpf(v);if(n.length!==11||/^(\d)\1{10}$/.test(n))return false;var s=0,i,d;for(i=0;i<9;i++)s+=Number(n[i])*(10-i);d=(s*10)%11;if(d===10)d=0;if(d!==Number(n[9]))return false;s=0;for(i=0;i<10;i++)s+=Number(n[i])*(11-i);d=(s*10)%11;if(d===10)d=0;return d===Number(n[10])}
 function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email(v))}
 
+
+function stageDisplayTitle(value,type,projectCode){
+ var original=decodeEntities(value);
+ if(!original)return "Projeto Pronto";
+ var qm=original.match(/\b(00[1-9]|01[0-4])\b\s*$/i);
+ var q=qm?qm[1]:"";
+ var cut=original.replace(/\s*\bPELEGO\s+BOX\b[\s\S]*$/i,"").replace(/\s+/g," ").trim();
+ cut=prettyTitle(cut);
+ var found=cut.match(/^\s*#?\s*(\d+)\s+(.*)$/);
+ var code=found?found[1]:digits(projectCode);
+ var body=found?found[2]:cut;
+ body=body.replace(/^(?:Medidas\s+Projeto\s+Pronto|Gráficos\s+Projeto\s+Pronto|Graficos\s+Projeto\s+Pronto|Projeto\s+Pronto\s+Completo)\s+/i,"").trim();
+ var normalized=safe(type).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[\s-]+/g,"_");
+ var prefix=normalized==="GRAFICOS"?"Gráficos Projeto Pronto":normalized==="PROJETO_COMPLETO"?"Projeto Pronto Completo":"Medidas Projeto Pronto";
+ return [code?"#"+code:"",prefix,body,q].filter(Boolean).join(" ").replace(/\s+/g," ").trim();
+}
+
 function hydrate(ctx){
  S.ctx=ctx||{};
- E.title.textContent=prettyTitle(S.ctx.titulo||S.ctx.produto||S.ctx.name);
+ E.title.textContent=stageDisplayTitle(S.ctx.titulo||S.ctx.produto||S.ctx.name,S.ctx.tipoProduto,S.ctx.codigoProjeto);
  E.price.textContent=money(S.ctx.valor||S.ctx.price);
  var src=safe(S.ctx.imagem||S.ctx.img);
  if(src){E.img.src=src;E.img.classList.remove("hidden");E.fallback.classList.add("hidden")}else{E.img.classList.add("hidden");E.fallback.classList.remove("hidden")}
@@ -694,7 +711,7 @@ E.cardDocument.addEventListener("input",function(){this.value=digits(this.value)
 
 window.addEventListener("message",function(event){
  var d=incoming(event.data),type=safe(d.type||d.tipo||d.action).toUpperCase();if(!type)return;
- if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
+ if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
  if(["CUSTOMER_READY","DATA_SAVED","PAYMENT_READY","SHOW_PAYMENT"].indexOf(type)>=0){
    if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.");return}
    if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);showPayment();return

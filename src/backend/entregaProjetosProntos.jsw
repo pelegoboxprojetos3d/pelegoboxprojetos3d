@@ -1,5 +1,5 @@
 import wixData from "wix-data";
-import { normalizarWhatsappBrasil } from "backend/projetosProntosNormalizacao";
+import { normalizarWhatsappBrasil, normalizarTituloProduto } from "backend/projetosProntosNormalizacao";
 
 // TÍTULO NO WIX: backend/entregaProjetosProntos.jsw
 // R6 — PROJETO PELO CÓDIGO + CLIENTE CANÔNICO + ENTREGA UNIFICADA
@@ -95,10 +95,9 @@ function decodeTitle(value) {
 }
 
 function cleanProjectTitle(value) {
-  return decodeTitle(value)
-    .split(/\bPELEGO(?:\s*BOX)?\b/i)[0]
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizarTituloProduto(
+    value
+  );
 }
 
 function stripLeadingProjectCode(value) {
@@ -1233,7 +1232,7 @@ async function repairCurrentPurchase(
 }
 
 function canonicalProjectTitle(project, session) {
-  const real = decodeTitle(project?.titulo_video || session?.produto);
+  const real = normalizarTituloProduto(project?.titulo_video || session?.produto);
   if (real) return real;
   const codigoProjeto = normalizeProjectCode(session?.codigoProjeto);
   return codigoProjeto ? `Projeto #${codigoProjeto}` : "Projeto Pronto";

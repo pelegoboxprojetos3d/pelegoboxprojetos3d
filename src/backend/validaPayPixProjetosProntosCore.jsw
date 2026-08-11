@@ -1,6 +1,7 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
 
 const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
 const API_BASE = "https://api.validapay.com.br";
@@ -83,7 +84,7 @@ function apiMessage(data, status) {
 }
 
 async function accessToken(scope, force = false) {
-  const isWrite = scope === "checkouts/write";
+  const isWrite = scope.includes("write");
   const cached = isWrite ? writeToken : readToken;
   const expiresAt = isWrite ? writeExpiresAt : readExpiresAt;
   if (!force && cached && Date.now() < expiresAt - 45000) return cached;
@@ -115,7 +116,7 @@ async function accessToken(scope, force = false) {
 }
 
 async function requestValidaPay(path, method = "get", body) {
-  const scope = method.toLowerCase() === "post" ? "checkouts/write" : "pix.cob/read";
+  const scope = method.toLowerCase() === "post" ? "checkouts/write products/write checkouts/read" : "pix.cob/read";
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const token = await accessToken(scope, attempt > 1);
     const options = {
@@ -150,6 +151,81 @@ async function saveSession(checkoutId, patch, known = undefined) {
   delete item.codigoCheckout;
   if (item.produto) item.produto = decodeTitle(item.produto);
   return existing ? wixData.update(SESSIONS, item, DB) : wixData.insert(SESSIONS, item, DB);
+}
+
+async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
+  try {
+    const result = await wixData
+      .query(SESSIONS)
+      .eq("codigoProjeto", safe(codigoProjeto))
+      .eq("tipoProduto", safe(tipoProduto))
+      .descending("_updatedDate")
+      .limit(100)
+      .find(DB);
+
+    const found = (result.items || []).find(item =>
+      safe(item?.validaPayPriceId) &&
+      normalizarTituloProduto(item?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() &&
+      Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
+    );
+
+    return safe(found?.validaPayPriceId);
+  } catch (error) {
+    console.warn("Não foi possível reutilizar priceId ValidaPay no Pix:", error?.message || error);
+    return "";
+  }
+}
+
+async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor }) {
+  const current = await findSession(checkoutId);
+
+  if (
+    safe(current?.validaPayPriceId) &&
+    normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()
+  ) {
+    return safe(current.validaPayPriceId);
+  }
+
+  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
+
+  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const response = await requestValidaPay("/v1/products", "post", {
+    name: produto,
+    description: produto,
+    type: "ONE_TIME",
+    statementDescriptor: "PELEGO BOX",
+    isActive: true,
+    metadata: {
+      origem: "PELEGO_BOX_PROJETOS_PRONTOS",
+      codigoProjeto,
+      tipoProduto,
+      codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)
+    },
+    prices: [{
+      title: produto,
+      amount: valor,
+      currency: "BRL",
+      recurrenceType: "ONE_TIME",
+      recurrenceInterval: 1
+    }]
+  });
+
+  if (!response.ok) {
+    console.warn("Produto ValidaPay não pôde ser criado para o Pix:", response.error);
+    return "";
+  }
+
+  const priceId = safe(response.data?.prices?.[0]?.priceId);
+
+  if (priceId) {
+    await saveSession(checkoutId, { validaPayPriceId: priceId, updatedAtDate: new Date() });
+  }
+
+  return priceId;
 }
 
 function extractChargeId(data = {}) {
@@ -280,7 +356,7 @@ export async function criarCobrancaPixTransparente(input = {}) {
     const ctx = input.ctx || {};
     const codigoProjeto = digits(first(input.codigoProjeto, ctx.codigoProjeto));
     const tipoProduto = normalizeType(first(input.tipoProduto, ctx.tipoProduto));
-    const produto = decodeTitle(first(input.produto, ctx.produto, ctx.titulo, "Projeto Pronto"));
+    const produto = tituloEtapaProjetoPronto(first(input.produto, ctx.produto, ctx.titulo, "Projeto Pronto"), tipoProduto, codigoProjeto);
     const valor = parseMoney(input.valor ?? ctx.valor ?? ctx.price);
     const clienteId = safe(first(input.clienteId, ctx.clienteId));
     const nome = decodeTitle(first(input.nomeCliente, input.nome, ctx.nomeCliente, ctx.nome));
@@ -324,12 +400,28 @@ export async function criarCobrancaPixTransparente(input = {}) {
       updatedAtDate: now
     }, existing);
 
+    const priceId = await ensurePriceId({
+      checkoutId,
+      codigoProjeto,
+      tipoProduto,
+      produto,
+      valor
+    });
+
+    if (!priceId) {
+      return {
+        ok: false,
+        checkoutId,
+        error: "Não foi possível vincular o produto à cobrança ValidaPay. Nenhuma cobrança foi criada."
+      };
+    }
+
     const body = {
       paymentMethod: "pix",
       externalId: checkoutId,
       externalTxid: externalTxid(checkoutId, codigoProjeto, tipoProduto, valor),
       customer: { name: nome, email, phone: whatsapp, documentNumber: cpfCnpj },
-      amount: valor,
+      items: [{ priceId, quantity: 1 }],
       metadata: {
         origem: "PELEGO_BOX_PROJETOS_PRONTOS",
         checkoutId,

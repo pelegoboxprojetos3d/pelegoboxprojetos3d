@@ -353,6 +353,82 @@ export const buscarCliente =
   );
 
 
+/*
+  Consulta estrita usada SOMENTE para decidir se o checkout pode
+  pular Nome/CPF/e-mail. Não consulta SessoesProjetosProntos2.
+*/
+export const buscarClienteCadastrado =
+  webMethod(
+    Permissions.Anyone,
+
+    async (numero) => {
+      const padrao =
+        normalizarWhatsapp(
+          numero
+        );
+
+      if (!padrao) {
+        return null;
+      }
+
+      const completoSemMais =
+        padrao.replace(/^\+/, "");
+
+      const nacional =
+        completoSemMais.replace(/^55/, "");
+
+      const variantes = [
+        padrao,
+        completoSemMais,
+        nacional
+      ];
+
+      const encontrados = [];
+
+      for (const variante of variantes) {
+        try {
+          const resultado =
+            await wixData
+              .query(COLLECTION)
+              .eq(
+                "whatsapp",
+                variante
+              )
+              .limit(50)
+              .find(DB_OPTS);
+
+          encontrados.push(
+            ...(resultado.items || [])
+          );
+        } catch (erro) {
+          console.warn(
+            "Falha ao consultar cliente cadastrado:",
+            erro?.message || erro
+          );
+        }
+      }
+
+      encontrados.sort(
+        (a, b) =>
+          new Date(
+            b?._updatedDate ||
+            b?._createdDate ||
+            0
+          ).getTime() -
+          new Date(
+            a?._updatedDate ||
+            a?._createdDate ||
+            0
+          ).getTime()
+      );
+
+      return clientePublico(
+        encontrados[0] || null
+      );
+    }
+  );
+
+
 // ======================================================
 // CRIAR OU ATUALIZAR CLIENTE
 // ======================================================

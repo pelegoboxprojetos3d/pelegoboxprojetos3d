@@ -4,7 +4,7 @@ const CHECKOUT_HTML = String.raw`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Pelego Box - Checkout Projeto Pronto</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
 :root{
   --green:#159447;--green-dark:#0f7c3a;--green-soft:#f3fff6;
@@ -14,7 +14,7 @@ const CHECKOUT_HTML = String.raw`<!doctype html>
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:transparent;color:var(--text);font-family:Arial,Helvetica,sans-serif}
-body{padding:7px;visibility:hidden}
+body{padding:7px}
 button,input,select,textarea{font:inherit}
 button{cursor:pointer}
 .hidden{display:none!important}
@@ -608,13 +608,13 @@ function stopTetris(){if(S.tetris){cancelAnimationFrame(S.tetris);S.tetris=null}
 function mobilePixOrder(){
  if(window.innerWidth>680)return;
  E.topGrid.classList.add("pix-selected");
- [E.google,E.pixAuto,E.apple,E.paypal,E.notice].forEach(function(node){E.deferred.appendChild(node)});
+ [E.card,E.google,E.pixAuto,E.apple,E.paypal,E.notice].forEach(function(node){E.deferred.appendChild(node)});
  E.deferred.classList.add("active");
 }
 function restoreDesktopOrder(){
  if(window.innerWidth<=680)return;
  E.topGrid.classList.remove("pix-selected");E.deferred.classList.remove("active");
- E.left.appendChild(E.google);E.center.appendChild(E.pixAuto);E.center.appendChild(E.apple);E.center.appendChild(E.paypal);E.topGrid.appendChild(E.notice);
+ E.left.appendChild(E.card);E.left.appendChild(E.google);E.center.appendChild(E.pixAuto);E.center.appendChild(E.apple);E.center.appendChild(E.paypal);E.topGrid.appendChild(E.notice);
 }
 window.addEventListener("resize",function(){restoreDesktopOrder();restoreCardDesktop()});
 
@@ -762,7 +762,7 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML30_DYNAMIC_SIZE"});
+post({type:"READY",version:"HTML31_LAUNCH_READY"});
 })();
 </script>
 </body>
@@ -783,10 +783,25 @@ class PelegoCheckoutPronto extends HTMLElement {
     this.style.display = "block";
     // O Wix pode publicar o slot do Custom Element com largura intrínseca estreita.
     // No site publicado, usamos a viewport real para o checkout não cair no CSS mobile no desktop.
-    // A largura externa pertence ao elemento desenhado no Wix.
-    // O checkout apenas ocupa 100% desse espaço, inclusive no mobile.
-    this.style.width = "100%";
-    this.style.maxWidth = "100%";
+    /*
+      Desktop volta ao comportamento que já estava aprovado.
+      No mobile, o Wix pode manter um slot estreito: expandimos o checkout
+      até quase toda a viewport e compensamos metade da diferença para
+      continuar centralizado no mesmo eixo do elemento desenhado no Editor.
+    */
+    if (window.innerWidth <= 680) {
+      const slotWidth = this.getBoundingClientRect().width || this.offsetWidth || 0;
+      const targetWidth = Math.max(280, window.innerWidth - 8);
+      this.style.width = `${targetWidth}px`;
+      this.style.maxWidth = `${targetWidth}px`;
+      this.style.marginLeft = slotWidth > 0
+        ? `${Math.round((slotWidth - targetWidth) / 2)}px`
+        : "0";
+    } else {
+      this.style.width = "min(1000px, calc(100vw - 24px))";
+      this.style.maxWidth = "1000px";
+      this.style.marginLeft = "0";
+    }
     this.style.minWidth = "0";
     this.style.height = "220px";
     this.style.boxSizing = "border-box";

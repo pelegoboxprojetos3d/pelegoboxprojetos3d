@@ -539,9 +539,10 @@ $w.onReady(function(){
     if(type==="CHECK_PIX"){if(!polling){polling=true;pollPix(1).catch(console.error)}return;}
     if(["CLOSE","BACK","CANCEL","ACCESS_ACK"].includes(type)){back();return;}
   });
-  completarContextoPelaColecao()
-    .then(()=>hydrateReturningCustomer())
-    .catch(error => console.error("Falha ao preparar contexto do checkout:", error?.message || error))
+  Promise.allSettled([
+    completarContextoPelaColecao(),
+    hydrateReturningCustomer()
+  ])
     .finally(() => {
       contextReady=true;
       checkoutUiReady=true;

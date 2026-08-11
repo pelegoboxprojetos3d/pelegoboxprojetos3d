@@ -31,9 +31,6 @@ const IDS = {
   titulo:
     "#txtTitulo",
 
-  sku:
-    "#txtSku",
-
   descricao:
     "#txtDescricao",
 
@@ -264,13 +261,12 @@ function alterarDescricao(
 
 /*
   Enquanto os dados reais ainda não chegaram, não mostramos os textos
-  padrão do Editor (TITULO DO PROJETO, sku, Small Title etc.) nem os
+  padrão do Editor (TITULO DO PROJETO, Small Title etc.) nem os
   botões das etapas. Usamos somente os IDs dos elementos, sem depender
   do nome de seção. O espaço é preservado para evitar pulos no layout.
 */
 const IDS_DADOS_REAIS_ENTREGA = [
   IDS.titulo,
-  IDS.sku,
   IDS.medidas,
   IDS.valorMedidas,
   IDS.graficos,
@@ -282,7 +278,6 @@ const IDS_DADOS_REAIS_ENTREGA = [
 async function ocultarDadosAteCarregamento() {
   try {
     $w(IDS.titulo).text = "";
-    $w(IDS.sku).text = "";
     $w(IDS.valorMedidas).text = "";
     $w(IDS.valorGraficos).text = "";
     $w(IDS.valorProjeto).text = "";
@@ -1424,12 +1419,6 @@ function dadosCheckout(
       projeto?.thumbnail
     );
 
-  const sku =
-    safe(
-      projeto?.sku
-    ) ||
-    `PP-${codigoProjeto}`;
-
   return {
     codigoProjeto,
 
@@ -1438,8 +1427,6 @@ function dadosCheckout(
     titulo,
 
     imagem,
-
-    sku,
 
     valor:
       Number(valor)
@@ -1498,9 +1485,6 @@ function montarUrlCheckout(
 
     img:
       dados.imagem,
-
-    sku:
-      dados.sku,
 
     valor:
       String(
@@ -1819,7 +1803,7 @@ async function esconderBotaoVideo() {
       O botão do vídeo é complementar.
 
       Qualquer erro nele não pode interromper
-      título, SKU, galeria, botões ou entrega.
+      título, galeria, botões ou entrega.
     */
 
     console.warn(
@@ -2262,13 +2246,6 @@ async function renderizarEntrega(
       projeto,
       sessao
     );
-
-  $w(
-    IDS.sku
-  ).text =
-    projeto?.sku
-      ? `SKU: ${projeto.sku}`
-      : "";
 
   salvarAcessosLocais(
     projeto?.codigoProjeto,

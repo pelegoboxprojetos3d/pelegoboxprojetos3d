@@ -1,0 +1,77 @@
+name: Hotfix confirmação cartão ValidaPay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-card-confirmation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Corrigir leitura de cobrança do cartão
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'src/backend/validaPayCartaoProjetosProntos.jsw';
+          let text = fs.readFileSync(path, 'utf8');
+
+          const marker = `function isTerminalCardFailure(value) {\n  return ["rejected", "declined", "denied", "failed", "cancelled", "canceled", "expired", "refused"].includes(safe(value).toLowerCase());\n}\n`;
+          const helpers = `${marker}\nfunction extractChargeId(data = {}) {\n  return safe(\n    data?.chargeId ||\n    data?.id ||\n    data?.data?.chargeId ||\n    data?.data?.id ||\n    data?.charge?.chargeId ||\n    data?.charge?.id ||\n    data?.payment?.chargeId ||\n    data?.payment?.id ||\n    data?.result?.chargeId ||\n    data?.result?.id ||\n    data?.error?.details?.chargeId ||\n    data?.details?.chargeId\n  );\n}\n\nfunction extractChargeStatus(data = {}) {\n  return safe(\n    data?.status ||\n    data?.data?.status ||\n    data?.charge?.status ||\n    data?.payment?.status ||\n    data?.result?.status\n  ).toLowerCase();\n}\n`;
+          if (!text.includes('function extractChargeId(data = {})')) {
+            if (!text.includes(marker)) throw new Error('Marcador dos helpers do cartão não encontrado');
+            text = text.replace(marker, helpers);
+          }
+
+          text = text.replace(
+            '      const liveStatus = safe(previousData?.status).toLowerCase();',
+            '      const liveStatus = extractChargeStatus(previousData);'
+          );
+
+          text = text.replace(
+            '        const id = safe(response.data?.error?.details?.chargeId || response.data?.details?.chargeId);',
+            '        const id = extractChargeId(response.data || {});'
+          );
+
+          text = text.replace(
+            '    const id = safe(response.data?.chargeId || response.data?.id);\n    const status = safe(response.data?.status).toLowerCase();',
+            '    const id = extractChargeId(response.data || {});\n    const status = extractChargeStatus(response.data || {});'
+          );
+
+          text = text.replace(
+            '    const data=response.data?.data||response.data?.charge||response.data||{};\n    const status=safe(data.status).toLowerCase();',
+            '    const data=response.data||{};\n    const status=extractChargeStatus(data);'
+          );
+
+          fs.writeFileSync(path, text);
+          NODE
+
+      - name: Validar sintaxe básica
+        run: |
+          grep -q 'function extractChargeId' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'extractChargeStatus(response.data || {})' src/backend/validaPayCartaoProjetosProntos.jsw
+
+      - name: Gravar correção
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'Nenhuma alteração necessária.'
+            exit 0
+          fi
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/backend/validaPayCartaoProjetosProntos.jsw
+          git commit -m 'Corrige confirmação e chargeId do cartão ValidaPay'
+          git push origin main

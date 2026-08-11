@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validar-e-publicar:
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
@@ -31,8 +33,24 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
+      - name: Aplicar correção mobile da próxima etapa
+        run: node scripts/corrigir-banners-mobile-proxima-etapa.cjs
+
       - name: Validar código
         run: npm run lint
+
+      - name: Gravar hotfix mobile no repositório
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Nenhum hotfix pendente para gravar."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
+            git commit -m "Corrigir banners mobile para mostrar somente próxima etapa"
+            git push origin HEAD:main
+          fi
 
       - name: Aguardar sincronização GitHub → Wix
         run: sleep 12

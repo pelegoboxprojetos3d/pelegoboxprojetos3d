@@ -81,11 +81,20 @@ const newDeliveryStatus = [
   '    return false;',
   '  }'
 ].join("\n");
-replaceOrFail(entrega, oldDeliveryStatus, newDeliveryStatus, "liberar PARCIAL legado com arquivo");
+
+const entregaAtual = fs.readFileSync(entrega, "utf8");
+if (
+  entregaAtual.includes("A existência do arquivo da etapa é a fonte da verdade") ||
+  entregaAtual.includes("A existencia do arquivo da etapa e a fonte da verdade")
+) {
+  console.log("liberar PARCIAL legado com arquivo: substituído por regra mais nova baseada na existência do arquivo");
+} else {
+  replaceOrFail(entrega, oldDeliveryStatus, newDeliveryStatus, "liberar PARCIAL legado com arquivo");
+}
 
 const checkout = "src/pages/checkout-projeto-pronto.i9aj1.js";
 const oldCheckoutStatus = '  if (status && status !== "PROCESSADO") return false;';
 const newCheckoutStatus = '  if (status && !["PROCESSADO", "PARCIAL"].includes(status)) return false;';
 replaceOrFail(checkout, oldCheckoutStatus, newCheckoutStatus, "polling cartão compatível com 1 a 4 gráficos");
 
-console.log("Correção concluída: gráficos aceitam de 1 a 4 arquivos e entregas PARCIAL legadas podem liberar quando há arquivo real.");
+console.log("Correção concluída: gráficos aceitam de 1 a 4 arquivos e a entrega preserva a regra mais nova quando o arquivo real já existe.");

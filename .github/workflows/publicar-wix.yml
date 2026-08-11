@@ -36,19 +36,24 @@ jobs:
       - name: Aplicar regra mobile dos banners não pagos
         run: node scripts/corrigir-banners-mobile-proxima-etapa.cjs
 
+      - name: Remover SKU da página de entrega
+        run: node scripts/remover-sku-entrega.cjs
+
       - name: Validar código
         run: npm run lint
 
-      - name: Gravar hotfix mobile no repositório
+      - name: Gravar manutenção automática no repositório
         run: |
           set -euo pipefail
           if git diff --quiet; then
-            echo "Nenhum hotfix pendente para gravar."
+            echo "Nenhuma manutenção pendente para gravar."
           else
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
-            git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
-            git commit -m "Mobile: esconder banners pagos e mostrar banners não pagos"
+            git add \
+              "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
+              "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+            git commit -m "Automação: aplicar manutenção de checkout e entrega"
             git push origin HEAD:main
           fi
 

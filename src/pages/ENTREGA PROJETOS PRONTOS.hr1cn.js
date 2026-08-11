@@ -128,7 +128,7 @@ const INTERVALO =
   a impressora fica alguns segundos visível para comunicar processamento.
 */
 const MIN_PROCESSAMENTO_VISIVEL =
-  3000;
+  4000;
 
 let processamentoVisivelDesde =
   0;

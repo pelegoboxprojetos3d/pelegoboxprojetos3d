@@ -24,6 +24,11 @@ const DB_OPTS = {
   suppressAuth: true
 };
 
+const READ_OPTS = {
+  ...DB_OPTS,
+  consistentRead: true
+};
+
 function safe(value) {
   return String(value ?? "").trim();
 }
@@ -350,7 +355,7 @@ async function findOne(
       .query(collection)
       .eq(field, value)
       .limit(1)
-      .find(DB_OPTS);
+      .find(READ_OPTS);
 
     return result.items.length
       ? result.items[0]
@@ -452,7 +457,7 @@ async function findProjectByOrder(
         `#${code}`
       )
       .limit(1)
-      .find(DB_OPTS);
+      .find(READ_OPTS);
 
     return byTitle.items.length
       ? byTitle.items[0]
@@ -508,7 +513,7 @@ async function queryPurchasesByProject(
           value
         )
         .limit(1000)
-        .find(DB_OPTS);
+        .find(READ_OPTS);
 
       for (
         const item of
@@ -1296,10 +1301,12 @@ function projectPayload(
     firstMediaFromPurchases(
       purchases,
       "arquivoProjeto",
+      "arquivo_projeto",
       "pdfProjeto"
     ) ||
     mediaSource(
       project?.arquivoProjeto ||
+      project?.arquivo_projeto ||
       project?.pdfProjeto
     );
 

@@ -1,8 +1,5 @@
 import wixData from "wix-data";
-import {
-  normalizarWhatsappBrasil,
-  tituloProdutoComCodigoCheckout
-} from "backend/projetosProntosNormalizacao";
+import { normalizarWhatsappBrasil } from "backend/projetosProntosNormalizacao";
 
 // TÍTULO NO WIX: backend/entregaProjetosProntos.jsw
 // R6 — PROJETO PELO CÓDIGO + CLIENTE CANÔNICO + ENTREGA UNIFICADA
@@ -308,12 +305,6 @@ function publicSession(item) {
         item.codigoProjeto
       ),
 
-    codigoCheckout:
-      safe(item.codigoCheckout),
-
-    sku:
-      safe(item.sku),
-
     tipoProduto:
       normalizeType(
         item.tipoProduto
@@ -478,64 +469,9 @@ async function findProjectByOrder(
 }
 
 async function findProject(session) {
-  /*
-    codigoProjeto é a identidade do projeto.
-
-    codigo_checkout não é exclusivo:
-    001, 002, 003 etc. podem existir em vários projetos.
-  */
-  const codigoProjeto =
-    normalizeProjectCode(
-      session?.codigoProjeto
-    );
-
-  if (codigoProjeto) {
-    return findProjectByOrder(
-      codigoProjeto
-    );
-  }
-
-  /*
-    Compatibilidade com sessão antiga sem codigoProjeto.
-    Aceita codigo_checkout apenas se houver um único registro.
-  */
-  const codigoCheckout =
-    safe(session?.codigoCheckout);
-
-  if (!codigoCheckout) {
-    return null;
-  }
-
-  try {
-    const result = await wixData
-      .query(PROJECTS_COLLECTION)
-      .eq(
-        "codigo_checkout",
-        codigoCheckout
-      )
-      .limit(2)
-      .find(DB_OPTS);
-
-    if (result.items.length === 1) {
-      return result.items[0];
-    }
-
-    if (result.items.length > 1) {
-      console.error(
-        "codigo_checkout ambíguo:",
-        codigoCheckout
-      );
-    }
-
-    return null;
-  } catch (error) {
-    console.warn(
-      "Busca antiga por codigo_checkout falhou:",
-      error?.message || error
-    );
-
-    return null;
-  }
+  const codigoProjeto = normalizeProjectCode(session?.codigoProjeto);
+  if (!codigoProjeto) return null;
+  return findProjectByOrder(codigoProjeto);
 }
 
 async function queryPurchasesByProject(
@@ -1296,48 +1232,11 @@ async function repairCurrentPurchase(
   return purchase;
 }
 
-function canonicalProjectTitle(
-  project,
-  session
-) {
-  const codigoProjeto =
-    normalizeProjectCode(
-      session?.codigoProjeto
-    );
-
-  const base =
-    stripLeadingProjectCode(
-      project?.titulo_video
-    ) ||
-    stripLeadingProjectCode(
-      session?.produto
-    );
-
-  let title = "";
-
-  if (
-    codigoProjeto &&
-    base
-  ) {
-    title = `#${codigoProjeto} ${base}`;
-  } else if (codigoProjeto) {
-    title = `Projeto #${codigoProjeto}`;
-  } else {
-    title = (
-      cleanProjectTitle(
-        project?.titulo_video
-      ) ||
-      safe(session?.produto)
-    );
-  }
-
-  return tituloProdutoComCodigoCheckout(
-    title,
-    firstValue(
-      project?.codigo_checkout,
-      session?.codigoCheckout
-    )
-  );
+function canonicalProjectTitle(project, session) {
+  const real = decodeTitle(project?.titulo_video || session?.produto);
+  if (real) return real;
+  const codigoProjeto = normalizeProjectCode(session?.codigoProjeto);
+  return codigoProjeto ? `Projeto #${codigoProjeto}` : "Projeto Pronto";
 }
 
 function projectPayload(
@@ -1425,16 +1324,7 @@ function projectPayload(
   return {
     codigoProjeto,
 
-    codigoCheckout:
-      firstValue(
-        project?.codigo_checkout,
-        session?.codigoCheckout
-      ),
-
-    sku:
-      codigoProjeto
-        ? `PP-${codigoProjeto}`
-        : safe(session?.sku),
+    productId: safe(project?._id),
 
     titulo:
       canonicalProjectTitle(

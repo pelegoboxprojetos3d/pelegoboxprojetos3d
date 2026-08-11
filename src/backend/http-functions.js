@@ -14,7 +14,6 @@ import { getSecret } from "wix-secrets-backend";
 import { checkAbandoned } from "backend/checkAbandoned";
 import { importarImagensProjetoPronto } from "backend/processarImagensProjetosProntos";
 import { processarCompraProjetoPronto } from "backend/processarCompraProjetoPronto";
-import { tituloProdutoComCodigoCheckout } from "backend/projetosProntosNormalizacao";
 
 const DB_OPTS = {
   suppressAuth: true
@@ -1218,14 +1217,8 @@ function buildMakePayload({
     codigoProjeto:
       projectCode,
 
-    codigoCheckout:
-      safe(session?.codigoCheckout),
-
     produto:
-      tituloProdutoComCodigoCheckout(
-        session?.produto,
-        session?.codigoCheckout
-      ),
+      safe(session?.produto),
 
     tipoProduto:
       normalizeProductType(
@@ -1470,11 +1463,8 @@ export async function post_mercadoPagoWebhookPro(
         session
       );
 
-    session.produto =
-      tituloProdutoComCodigoCheckout(
-        session.produto,
-        session.codigoCheckout
-      );
+    session.produto = safe(session.produto);
+    delete session.sku;
 
     session.cpfCnpj =
       normalizeCpfCnpj(
@@ -2432,11 +2422,8 @@ export async function post_validaPayWebhookPro(
         session.whatsApp
       );
 
-    session.produto =
-      tituloProdutoComCodigoCheckout(
-        session.produto,
-        session.codigoCheckout
-      );
+    session.produto = safe(session.produto);
+    delete session.sku;
 
     session.cpfCnpj =
       normalizeCpfCnpj(

@@ -1,15 +1,12 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
-import wixWindowFrontend from "wix-window-frontend";
 import { local, session } from "wix-storage-frontend";
-import { criarCliente } from "backend/clientes.web";
+import { criarCliente, buscarCliente } from "backend/clientes.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
-import { criarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
+import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
 
-const HTML_ID = "#htmlCheckoutValidaPay";
-const ESPACO_PIX_ID = "#espacoCheckoutPix";
-const ESPACO_CARTAO_ID = "#espacoCheckoutCartao";
+const CUSTOM_ID = "#checkoutProntoCustom";
 const PROJECTS_COLLECTION = "Videosprojetos";
 const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
@@ -23,7 +20,8 @@ const CARD_DELIVERY_MAX = 80;
 let ctx = {};
 let checkoutId = "";
 let customer = null;
-let htmlReady = false;
+let checkoutUiReady = false;
+let bridgeSeq = 0;
 let contextReady = false;
 let initSent = false;
 let busy = false;
@@ -55,6 +53,42 @@ function validCpf(v) {
   s=0; for(let i=0;i<10;i++) s += Number(n[i])*(11-i);
   d=(s*10)%11; if(d===10)d=0;
   return d===Number(n[10]);
+}
+
+
+function identityComplete(value = ctx) {
+  return Boolean(
+    phone(value?.whatsappE164 || value?.whatsapp) &&
+    safe(value?.nome || value?.nomeCliente).replace(/\s+/g," ").length >= 3 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email(value?.email)) &&
+    validCpf(value?.cpfCnpj || value?.cpf)
+  );
+}
+
+async function hydrateReturningCustomer() {
+  if (identityComplete(ctx)) {
+    ctx.skipIdentity = true;
+    return;
+  }
+  const n = phone(ctx.whatsappE164 || ctx.whatsapp);
+  if (!n) { ctx.skipIdentity = false; return; }
+  try {
+    const found = await waitTimeout(buscarCliente(n), 3500, "");
+    if (found) {
+      customer = found;
+      const id = safe(found._id || found.clienteId);
+      saveIdentity({
+        clienteId:id,
+        nome:safe(found.nome || found.nomeCliente),
+        email:email(found.email),
+        cpfCnpj:cpf(found.cpfCnpj || found.cpf),
+        whatsapp:n,
+        whatsappE164:`+55${n}`,
+        whatsappConfirmado:true
+      });
+    }
+  } catch (_) {}
+  ctx.skipIdentity = identityComplete(ctx);
 }
 
 function savedIdentity() {
@@ -211,65 +245,22 @@ async function configurarBannersPagamento(tipoProduto) {
   ]);
 }
 
-async function alternarEspacoCheckout(id, expandir) {
-  try {
-    const elemento = $w(id);
-    if (expandir) {
-      if (typeof elemento.expand === "function") await elemento.expand();
-      return;
-    }
-    if (typeof elemento.collapse === "function") await elemento.collapse();
-  } catch (error) {
-    console.warn(`Falha ao alternar espaço do checkout ${id}:`, error?.message || error);
-  }
-}
-
-async function configurarEspacoCheckout(mode) {
-  const desktop = wixWindowFrontend.formFactor === "Desktop";
-  const estado = safe(mode || "COMPACT").toUpperCase();
-
-  if (!desktop) {
-    await Promise.allSettled([
-      alternarEspacoCheckout(ESPACO_PIX_ID, false),
-      alternarEspacoCheckout(ESPACO_CARTAO_ID, false)
-    ]);
-    return;
-  }
-
-  if (estado === "CARD") {
-    await Promise.allSettled([
-      alternarEspacoCheckout(ESPACO_PIX_ID, true),
-      alternarEspacoCheckout(ESPACO_CARTAO_ID, true)
-    ]);
-    return;
-  }
-
-  if (estado === "PIX") {
-    await Promise.allSettled([
-      alternarEspacoCheckout(ESPACO_PIX_ID, true),
-      alternarEspacoCheckout(ESPACO_CARTAO_ID, false)
-    ]);
-    return;
-  }
-
-  await Promise.allSettled([
-    alternarEspacoCheckout(ESPACO_PIX_ID, false),
-    alternarEspacoCheckout(ESPACO_CARTAO_ID, false)
-  ]);
-}
-
 function deliveryUrl() {
   return `/entregaprojetosprontos?checkout_id=${encodeURIComponent(checkoutId)}&pos_pagamento=1`;
 }
 
 function post(data) {
-  try { $w(HTML_ID).postMessage(data); }
-  catch(e) { console.error("HTML post:",e?.message||e); }
+  const payload = { ...(data || {}), __bridgeSeq: ++bridgeSeq };
+  try {
+    $w(CUSTOM_ID).setAttribute("checkout-message", JSON.stringify(payload));
+  } catch(e) {
+    console.error("Custom Element post:", e?.message || e);
+  }
 }
 
 function sendInit(force=false) {
   if (!contextReady) return;
-  if (!htmlReady && !force) return;
+  if (!checkoutUiReady && !force) return;
   if (initSent && !force) return;
   initSent=true;
   post({
@@ -277,6 +268,7 @@ function sendInit(force=false) {
     provider:"VALIDAPAY",
     checkoutId,
     autoLookup:false,
+    skipIdentity:ctx.skipIdentity === true,
     hasWhatsappFromPreviousStep:Boolean(ctx.whatsapp),
     hideSku:true,
     requiredFields:{name:true,email:true,cpfCnpj:true},
@@ -375,50 +367,46 @@ function stopCardPoll() {
   cardPollTimer=null;
 }
 
+function deliveryReady(result) {
+  if (result?.approved !== true) return false;
+  const project = result?.project || {};
+  const status = safe(project.statusProcessamento).toUpperCase();
+  if (status && status !== "PROCESSADO") return false;
+  const type = safe(result?.session?.tipoProduto || ctx.tipoProduto).toUpperCase();
+  if (type === "PROJETO_COMPLETO") return Boolean(safe(project.pdfProjeto));
+  if (type === "GRAFICOS") return Array.isArray(project.imagensGraficos) && project.imagensGraficos.filter(Boolean).length > 0;
+  return Boolean(safe(project.imagemMedidas));
+}
+
 async function pollCardDelivery(n=1) {
   if(!cardPolling) return;
-
   try {
-    const result=await waitTimeout(
-      buscarEntregaProjetoPronto({checkoutId}),
-      4000,
-      ""
-    );
-
-    if(result?.approved===true) {
+    const statusResult = await waitTimeout(consultarCobrancaCartaoTransparente({checkoutId, chargeId}),4500,"");
+    if(statusResult?.chargeId) chargeId = safe(statusResult.chargeId);
+    const cardStatus = safe(statusResult?.status).toLowerCase();
+    const rejected = ["rejected","declined","denied","failed","cancelled","canceled","expired","refused"].includes(cardStatus);
+    if(rejected || statusResult?.declined === true) {
       stopCardPoll();
-      post({
-        type:"CARD_RESULT",
-        ok:true,
-        accepted:true,
-        approved:true,
-        processing:false,
-        checkoutId,
-        deliveryUrl:deliveryUrl()
-      });
-      setTimeout(()=>wixLocation.to(deliveryUrl()),600);
+      post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:statusResult?.error || "Cartão não aprovado."});
       return;
     }
+    if(statusResult?.approved === true) {
+      const delivery = await waitTimeout(buscarEntregaProjetoPronto({checkoutId}),4500,"");
+      if(deliveryReady(delivery)) {
+        stopCardPoll();
+        post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,deliveryUrl:deliveryUrl()});
+        setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+        return;
+      }
+      post({type:"CARD_RESULT",ok:true,accepted:true,approved:false,paymentApproved:true,processing:true,checkoutId,chargeId,status:cardStatus || "paid",error:"Pagamento aprovado. Preparando sua entrega e os e-mails..."});
+    }
   } catch(_) {}
-
   if(n>=CARD_DELIVERY_MAX) {
     stopCardPoll();
-    post({
-      type:"CARD_RESULT",
-      ok:true,
-      accepted:true,
-      approved:false,
-      processing:true,
-      checkoutId,
-      error:"Pagamento recebido. A entrega ainda está sendo finalizada."
-    });
+    post({type:"CARD_RESULT",ok:true,accepted:true,approved:false,processing:true,checkoutId,chargeId,error:"Pagamento recebido. A entrega ainda está sendo finalizada."});
     return;
   }
-
-  cardPollTimer=setTimeout(
-    ()=>pollCardDelivery(n+1).catch(console.error),
-    CARD_DELIVERY_INTERVAL
-  );
+  cardPollTimer=setTimeout(()=>pollCardDelivery(n+1).catch(console.error),CARD_DELIVERY_INTERVAL);
 }
 
 async function pollPix(n=1) {
@@ -480,7 +468,6 @@ async function createCard(data={}) {
   busy=true;
   stopCardPoll();
   post({type:"CARD_LOADING",checkoutId,message:"Processando cartão com segurança..."});
-
   try {
     const r=await waitTimeout(criarCobrancaCartaoTransparente({
       ...basePayload(data),
@@ -488,48 +475,22 @@ async function createCard(data={}) {
       installments:Number(data.installments||1),
       cardDocument:digits(data.cardDocument || ctx.cpfCnpj)
     }),25000,"A operadora demorou para responder. Aguarde antes de tentar novamente.");
-
+    if(r?.chargeId) chargeId=safe(r.chargeId);
     const accepted=cardWasAccepted(r);
-    const readyToDeliver=
-      r?.approved===true &&
-      r?.compraRegistrada===true;
-
+    const paymentApproved=r?.approved===true;
     post({
-      type:"CARD_RESULT",
-      ok:accepted || r?.ok===true,
-      accepted,
-      approved:readyToDeliver,
-      paymentApproved:r?.approved===true,
-      processing:accepted && !readyToDeliver,
-      checkoutId,
-      chargeId:safe(r?.chargeId),
-      status:safe(r?.status),
-      cardBrand:safe(r?.cardBrand),
-      cardLastFour:safe(r?.cardLastFour),
-      deliveryUrl:deliveryUrl(),
-      error:accepted ? (readyToDeliver ? "" : "Pagamento recebido. Finalizando sua entrega e os e-mails...") : (r?.error||"")
+      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved,
+      processing:accepted || paymentApproved,checkoutId,chargeId,status:safe(r?.status),
+      cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
+      error:accepted ? (paymentApproved ? "Pagamento aprovado. Preparando sua entrega e os e-mails..." : "Pagamento recebido. Aguardando confirmação...") : (r?.error||"")
     });
-
-    if(readyToDeliver) {
-      setTimeout(()=>wixLocation.to(deliveryUrl()),600);
-      return;
-    }
-
-    if(accepted || r?.approved===true) {
+    if(accepted || paymentApproved) {
       cardPolling=true;
       pollCardDelivery(1).catch(console.error);
     }
   } catch(e) {
-    post({
-      type:"CARD_RESULT",
-      ok:false,
-      approved:false,
-      accepted:false,
-      error:e?.message||"Não foi possível processar o cartão."
-    });
-  } finally {
-    busy=false;
-  }
+    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
+  } finally { busy=false; }
 }
 
 function back() {
@@ -541,40 +502,29 @@ function back() {
 $w.onReady(function(){
   checkoutId=safe(wixLocation.query?.checkoutId) || `ckpro_${Date.now().toString(36)}_${Math.random().toString(16).slice(2,10)}`;
   ctx=contextFromUrl();
-
-  configurarEspacoCheckout("COMPACT").catch(error => {
-    console.error("Falha ao iniciar espaços dinâmicos do checkout:", error?.message || error);
-  });
-
   configurarBannersPagamento(ctx.tipoProduto).catch(error => {
     console.error("Falha ao configurar banners do checkout de pagamento:", error?.message || error);
   });
-
-  const html=$w(HTML_ID);
-
-  html.onMessage(event=>{
-    let data=event.data;
+  const checkout=$w(CUSTOM_ID);
+  checkout.on("checkout-message", event=>{
+    let data=event?.detail ?? event?.data ?? event;
     if(typeof data==="string"){ try{data=JSON.parse(data)}catch(_){data={type:data}} }
     if(data?.data && typeof data.data==="object" && !data.type) data=data.data;
     data=data && typeof data==="object" ? data : {};
     const type=safe(data.type || data.tipo || data.action).toUpperCase();
-
-    if(type==="READY"){htmlReady=true;sendInit();return;}
-    if(type==="CHECKOUT_LAYOUT"){configurarEspacoCheckout(data.mode).catch(console.error);return;}
+    if(type==="READY"){checkoutUiReady=true;sendInit();return;}
     if(type==="SAVE_CUSTOMER" || type==="CREATE_CUSTOMER"){saveCustomer(data).catch(console.error);return;}
     if(type==="CREATE_PIX" || type==="SUBMIT_PRO"){createPix(data).catch(console.error);return;}
     if(type==="CREATE_CARD"){createCard(data).catch(console.error);return;}
     if(type==="CHECK_PIX"){if(!polling){polling=true;pollPix(1).catch(console.error)}return;}
     if(["CLOSE","BACK","CANCEL","ACCESS_ACK"].includes(type)){back();return;}
   });
-
   completarContextoPelaColecao()
-    .catch(error => {
-      console.error("Falha ao carregar titulo real da coleção:", error?.message || error);
-    })
+    .then(()=>hydrateReturningCustomer())
+    .catch(error => console.error("Falha ao preparar contexto do checkout:", error?.message || error))
     .finally(() => {
       contextReady=true;
-      htmlReady=true;
+      checkoutUiReady=true;
       sendInit(true);
     });
 });

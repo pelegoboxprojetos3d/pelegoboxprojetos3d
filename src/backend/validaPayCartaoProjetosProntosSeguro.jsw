@@ -1,65 +1,7 @@
 import wixData from "wix-data";
-import {
-  criarCobrancaCartaoTransparente as criarCobrancaCartaoBase
-} from "backend/validaPayCartaoProjetosProntos.jsw";
-
-const SESSIONS = "SessoesProjetosProntos2";
-const DB = { suppressAuth: true };
-
-const safe = value => String(value ?? "").trim();
-
-async function reabrirFinalizacao(checkoutId) {
-  const id = safe(checkoutId);
-  if (!id) return;
-
-  const result = await wixData
-    .query(SESSIONS)
-    .eq("checkoutId", id)
-    .limit(1)
-    .find({ ...DB, consistentRead: true });
-
-  if (!result.items.length) return;
-
-  const session = result.items[0];
-  session.compraRegistrada = false;
-  session.status = "approved";
-  session.updatedAtDate = new Date();
-
-  delete session.whatsApp;
-  delete session.whatsappE164;
-  delete session.sku;
-  delete session.codigoCheckout;
-
-  await wixData.update(SESSIONS, session, DB);
-}
-
-export async function criarCobrancaCartaoTransparente(input = {}) {
-  const result = await criarCobrancaCartaoBase(input);
-
-  if (result?.approved !== true) {
-    return result;
-  }
-
-  const makeOk =
-    result?.make?.sent === true ||
-    result?.make?.skipped === true;
-
-  if (
-    result?.compraRegistrada === true &&
-    !makeOk
-  ) {
-    await reabrirFinalizacao(
-      result.checkoutId || input.checkoutId
-    );
-
-    return {
-      ...result,
-      compraRegistrada: false,
-      processing: true,
-      error:
-        "Pagamento aprovado. Finalizando sua entrega e os e-mails..."
-    };
-  }
-
-  return result;
-}
+import { criarCobrancaCartaoTransparente as criarCobrancaCartaoBase, consultarCobrancaCartaoTransparente as consultarCobrancaCartaoBase } from "backend/validaPayCartaoProjetosProntos.jsw";
+const SESSIONS="SessoesProjetosProntos2"; const DB={suppressAuth:true}; const safe=value=>String(value??"").trim();
+async function reabrirFinalizacao(checkoutId){const id=safe(checkoutId);if(!id)return;const r=await wixData.query(SESSIONS).eq("checkoutId",id).limit(1).find({...DB,consistentRead:true});if(!r.items.length)return;const s=r.items[0];s.compraRegistrada=false;s.status="approved";s.updatedAtDate=new Date();delete s.whatsApp;delete s.whatsappE164;delete s.sku;delete s.codigoCheckout;await wixData.update(SESSIONS,s,DB);}
+async function protegerFinalizacao(result,checkoutId){if(result?.approved!==true)return result;const makeOk=result?.make?.sent===true||result?.make?.skipped===true;if(result?.compraRegistrada===true&&!makeOk){await reabrirFinalizacao(result.checkoutId||checkoutId);return {...result,compraRegistrada:false,processing:true,error:"Pagamento aprovado. Finalizando sua entrega e os e-mails..."};}return result;}
+export async function criarCobrancaCartaoTransparente(input={}){return protegerFinalizacao(await criarCobrancaCartaoBase(input),input.checkoutId);}
+export async function consultarCobrancaCartaoTransparente(input={}){return protegerFinalizacao(await consultarCobrancaCartaoBase(input),input.checkoutId);}

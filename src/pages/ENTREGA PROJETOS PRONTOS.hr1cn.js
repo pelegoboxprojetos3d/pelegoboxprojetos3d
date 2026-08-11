@@ -1362,173 +1362,19 @@ function identidadeEntrega() {
 }
 
 
-function dadosCheckout(
-  tipo,
-  projeto,
-  valor
-) {
-  const codigoProjeto =
-    digits(
-      projeto?.codigoProjeto
-    );
-
-  const codigoCheckout =
-    safe(
-      projeto?.codigoCheckout
-    );
-
-  if (
-    !codigoProjeto ||
-    !codigoCheckout ||
-    !(Number(valor) > 0)
-  ) {
-    return null;
-  }
-
-  const titulo =
-    montarTituloCheckout(
-      tipo,
-      projeto
-    );
-
-  const imagem =
-    safe(
-      projeto?.thumbnail
-    );
-
-  return {
-    codigoProjeto,
-
-    codigoCheckout,
-
-    titulo,
-
-    imagem,
-
-    valor:
-      Number(valor)
-  };
+function dadosCheckout(tipo, projeto, valor) {
+  const codigoProjeto=digits(projeto?.codigoProjeto);
+  const numero=Number(valor||0);
+  if(!codigoProjeto||!(numero>0))return null;
+  return {tipoProduto:safe(tipo).toUpperCase(),codigoProjeto,productId:safe(projeto?.productId),titulo:safe(projeto?.titulo),imagem:safe(projeto?.thumbnail),valor:numero};
 }
 
-
-function montarUrlCheckout(
-  tipo,
-  projeto,
-  valor
-) {
-  const dados =
-    dadosCheckout(
-      tipo,
-      projeto,
-      valor
-    );
-
-  if (!dados) {
-    return "";
-  }
-
-  const identidade =
-    identidadeEntrega();
-
-  const parametros = {
-    codigoProjeto:
-      dados.codigoProjeto,
-
-    codigoCheckout:
-      dados.codigoCheckout,
-
-    codigo:
-      dados.codigoProjeto,
-
-    titulo:
-      dados.titulo,
-
-    produto:
-      dados.titulo,
-
-    name:
-      dados.titulo,
-
-    tituloOriginal:
-      safe(
-        projeto?.titulo
-      ),
-
-    productId:
-      dados.codigoCheckout,
-
-    imagem:
-      dados.imagem,
-
-    img:
-      dados.imagem,
-
-    valor:
-      String(
-        dados.valor
-      ),
-
-    price:
-      String(
-        dados.valor
-      ),
-
-    tipoProduto:
-      tipo,
-
-    clienteId:
-      identidade.clienteId,
-
-    nome:
-      identidade.nome,
-
-    email:
-      identidade.email,
-
-    whatsapp:
-      identidade.whatsapp,
-
-    whatsappE164:
-      identidade.whatsappE164,
-
-    ddi:
-      identidade.ddi,
-
-    country:
-      identidade.country,
-
-    /*
-      Ao desistir ou fechar o checkout, o cliente
-      retorna para esta mesma página de entrega.
-    */
-
-    returnUrl:
-      wixLocation.url
-  };
-
-  const query =
-    Object
-      .entries(
-        parametros
-      )
-      .map(
-        (
-          [
-            chave,
-            conteudo
-          ]
-        ) => (
-          `${encodeURIComponent(chave)}=` +
-          `${encodeURIComponent(conteudo)}`
-        )
-      )
-      .join("&");
-
-  return (
-    `/checkout-projeto-pronto?${query}`
-  );
+function montarUrlCheckout(tipo, projeto, valor) {
+  const dados=dadosCheckout(tipo,projeto,valor);if(!dados)return "";
+  const parametros={codigoProjeto:dados.codigoProjeto,codigo:dados.codigoProjeto,titulo:dados.titulo,produto:dados.titulo,name:dados.titulo,tituloOriginal:dados.titulo,productId:dados.productId,imagem:dados.imagem,img:dados.imagem,valor:dados.valor,price:dados.valor,tipoProduto:dados.tipoProduto,returnUrl:`/checkoutprojetosprontos?codigo=${dados.codigoProjeto}`};
+  const query=Object.entries(parametros).filter(([,v])=>v!==undefined&&v!==null&&String(v).trim()!=="").map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+  return `/checkout-projeto-pronto?${query}`;
 }
-
 
 async function abrirCheckout(
   tipo

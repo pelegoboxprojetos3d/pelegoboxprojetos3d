@@ -264,134 +264,74 @@ function cumulativeAccess(existing, tipoProduto) {
   return { medidas, graficos, projeto };
 }
 
+
+function processingIsStale(item) {
+  const stamp = new Date(item?.dataProcessamento || item?._updatedDate || 0).getTime();
+  return !stamp || (Date.now() - stamp) > (10 * 60 * 1000);
+}
+function shouldTriggerMake(purchase) {
+  const status = safe(purchase?.statusProcessamento).toUpperCase();
+  if (status === "PROCESSADO") return false;
+  if (status === "PROCESSANDO" && !processingIsStale(purchase)) return false;
+  return true;
+}
+async function setProcessing(purchase, status) {
+  if (!purchase?._id) return purchase;
+  return wixData.update(PURCHASES, {...purchase,statusProcessamento:status,dataProcessamento:new Date()},DB);
+}
+
 async function triggerMake({ session, purchase, paymentId }) {
+  if (!shouldTriggerMake(purchase)) return { sent:false, skipped:true, reason:"already_processing_or_done" };
   const url = safe(await getSecret(MAKE_SECRET));
-  if (!url) {
-    console.error("MAKE_WEBHOOK_PROJETOS_PRONTOS ausente.");
-    return { sent: false, error: "make_secret_missing" };
-  }
-
+  if (!url) return { sent:false, error:"make_secret_missing" };
+  let processingPurchase = purchase;
+  try { processingPurchase = await setProcessing(purchase,"PROCESSANDO"); } catch (_) {}
   const payload = {
-    event: "pagamento_aprovado_projeto_pronto",
-    clienteId: safe(session.clienteId),
-    nomeCliente: safe(session.nomeCliente),
-    email: safe(session.email).toLowerCase(),
-    whatsapp: phone(session.whatsapp),
-    cpfCnpj: digits(session.cpfCnpj),
-    codigoProjeto: digits(session.codigoProjeto),
-    produto: decodeTitle(session.produto),
-    tipoProduto: productType(session.tipoProduto),
-    valor: Number(purchase?.valor || session.valor || 0),
-    pagamento: "approved",
-    statusCompra: "approved",
-    idPagamento: safe(paymentId),
-    checkoutId: safe(session.checkoutId),
-    tokenDeEntrega: safe(session.tokenEntrega),
-    chaveCompra: safe(purchase?.chaveCompra)
+    event:"pagamento_aprovado_projeto_pronto",clienteId:safe(session.clienteId),nomeCliente:safe(session.nomeCliente),
+    email:safe(session.email).toLowerCase(),whatsapp:phone(session.whatsapp),cpfCnpj:digits(session.cpfCnpj),
+    codigoProjeto:digits(session.codigoProjeto),produto:decodeTitle(session.produto),tipoProduto:productType(session.tipoProduto),
+    valor:Number(processingPurchase?.valor || session.valor || 0),pagamento:"approved",statusCompra:"approved",
+    idPagamento:safe(paymentId),checkoutId:safe(session.checkoutId),tokenDeEntrega:safe(session.tokenEntrega),chaveCompra:safe(processingPurchase?.chaveCompra)
   };
-
   try {
-    const response = await fetch(url, {
-      method: "post",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
+    const response = await fetch(url,{method:"post",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     if (!response.ok) {
-      const text = await response.text();
-      console.error("Make recusou pagamento de cartão:", response.status, text);
-      return { sent: false, error: "make_http_error", status: response.status };
+      try { await setProcessing(processingPurchase,"PENDENTE"); } catch (_) {}
+      return {sent:false,error:"make_http_error",status:response.status};
     }
-
-    return { sent: true };
-  } catch (error) {
-    console.error("Falha ao disparar Make no cartão:", error?.message || error);
-    return { sent: false, error: "make_fetch_error" };
+    return {sent:true};
+  } catch(error) {
+    try { await setProcessing(processingPurchase,"PENDENTE"); } catch (_) {}
+    return {sent:false,error:"make_fetch_error"};
   }
 }
 
 async function finalizeApprovedCard({ checkoutId, chargeId }) {
   let session = await findSession(checkoutId);
   if (!session) throw new Error("Sessão do cartão não encontrada após aprovação.");
-
-  if (
-    session.compraRegistrada === true &&
-    safe(session.status).toLowerCase() === "approved" &&
-    (safe(session.paymentId) === safe(chargeId) || safe(session.validaPayChargeId) === safe(chargeId))
-  ) {
-    return { compraRegistrada: true, make: { skipped: true, reason: "already_registered" } };
+  const codigoProjeto=digits(session.codigoProjeto),clienteId=safe(session.clienteId),tipoProduto=productType(session.tipoProduto);
+  const chaveCompra=`${clienteId}_${codigoProjeto}`;
+  const existente=await findPurchase(chaveCompra);
+  if (session.compraRegistrada===true && safe(session.status).toLowerCase()==="approved" && existente) {
+    const make=await triggerMake({session,purchase:existente,paymentId:chargeId});
+    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make};
   }
-
-  const codigoProjeto = digits(session.codigoProjeto);
-  const clienteId = safe(session.clienteId);
-  const tipoProduto = productType(session.tipoProduto);
-  const chaveCompra = `${clienteId}_${codigoProjeto}`;
-  const existente = await findPurchase(chaveCompra);
-  const samePayment = Boolean(existente && safe(existente.idPagamento) === safe(chargeId));
-  const access = cumulativeAccess(existente, tipoProduto);
-  const now = new Date();
-
-  if (!safe(session.tokenEntrega)) session.tokenEntrega = generateDeliveryToken();
-  session.status = "approved";
-  session.paymentId = safe(chargeId);
-  session.validaPayChargeId = safe(chargeId);
-  session.compraRegistrada = false;
-  session.updatedAtDate = now;
-  await saveSession(checkoutId, session);
-
-  const previousValue = Number(existente?.valor || 0);
-  const stageValue = Number(session.valor || 0);
-  const totalValue = samePayment ? previousValue : previousValue + stageValue;
-
-  const purchase = {
-    ...(existente || {}),
-    title: `PP-${codigoProjeto} - ${safe(session.nomeCliente) || clienteId}`,
-    chaveCompra,
-    clienteId,
-    codigoProjeto,
-    tipoProduto,
-    nomeCliente: safe(session.nomeCliente),
-    email: safe(session.email).toLowerCase(),
-    whatsapp: phone(session.whatsapp),
-    cpfCnpj: digits(session.cpfCnpj),
-    checkoutId: safe(session.checkoutId),
-    tokenDeEntrega: safe(session.tokenEntrega),
-    idPagamento: safe(chargeId),
-    pagamento: "approved",
-    statusCompra: "approved",
-    valor: totalValue,
-    dataCompra: existente?.dataCompra || now,
-    dataLiberacao: now,
-    downloadMedidas: access.medidas,
-    downloadGraficos: access.graficos,
-    downloadProjeto: access.projeto,
-    statusProcessamento: samePayment ? (safe(existente?.statusProcessamento) || "PENDENTE") : "PENDENTE",
-    dataProcessamento: now
-  };
-
+  const samePayment=Boolean(existente && safe(existente.idPagamento)===safe(chargeId));
+  const access=cumulativeAccess(existente,tipoProduto),now=new Date();
+  if(!safe(session.tokenEntrega)) session.tokenEntrega=generateDeliveryToken();
+  session.status="approved";session.paymentId=safe(chargeId);session.validaPayChargeId=safe(chargeId);session.compraRegistrada=false;session.updatedAtDate=now;
+  await saveSession(checkoutId,session);
+  const previousValue=Number(existente?.valor||0),stageValue=Number(session.valor||0),totalValue=samePayment?previousValue:previousValue+stageValue;
+  const purchase={...(existente||{}),title:`PP-${codigoProjeto} - ${safe(session.nomeCliente)||clienteId}`,chaveCompra,clienteId,codigoProjeto,tipoProduto,
+    nomeCliente:safe(session.nomeCliente),email:safe(session.email).toLowerCase(),whatsapp:phone(session.whatsapp),cpfCnpj:digits(session.cpfCnpj),
+    checkoutId:safe(session.checkoutId),tokenDeEntrega:safe(session.tokenEntrega),idPagamento:safe(chargeId),pagamento:"approved",statusCompra:"approved",valor:totalValue,
+    dataCompra:existente?.dataCompra||now,dataLiberacao:now,downloadMedidas:access.medidas,downloadGraficos:access.graficos,downloadProjeto:access.projeto,
+    statusProcessamento:samePayment?(safe(existente?.statusProcessamento)||"PENDENTE"):"PENDENTE",dataProcessamento:now};
   delete purchase.whatsApp;
-
-  const savedPurchase = existente
-    ? await wixData.update(PURCHASES, purchase, DB)
-    : await wixData.insert(PURCHASES, purchase, DB);
-
-  session = await saveSession(checkoutId, {
-    status: "approved",
-    paymentId: safe(chargeId),
-    validaPayChargeId: safe(chargeId),
-    tokenEntrega: safe(session.tokenEntrega),
-    compraRegistrada: true,
-    updatedAtDate: new Date()
-  });
-
-  const make = await triggerMake({ session, purchase: savedPurchase, paymentId: chargeId });
-
-  return {
-    compraRegistrada: true,
-    purchaseId: safe(savedPurchase?._id),
-    tokenEntrega: safe(session.tokenEntrega),
-    make
-  };
+  const savedPurchase=existente?await wixData.update(PURCHASES,purchase,DB):await wixData.insert(PURCHASES,purchase,DB);
+  session=await saveSession(checkoutId,{status:"approved",paymentId:safe(chargeId),validaPayChargeId:safe(chargeId),tokenEntrega:safe(session.tokenEntrega),compraRegistrada:true,updatedAtDate:new Date()});
+  const make=await triggerMake({session,purchase:savedPurchase,paymentId:chargeId});
+  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make};
 }
 
 export async function criarCobrancaCartaoTransparente(input = {}) {
@@ -447,6 +387,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     });
 
     const priceId = await ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor });
+    if (!priceId) return { ok:false, error:"Não foi possível vincular o produto à cobrança ValidaPay. Nenhuma cobrança foi criada." };
 
     const chargePayload = {
       paymentMethod: "creditcard",
@@ -480,8 +421,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       }
     };
 
-    if (priceId) chargePayload.items = [{ priceId, quantity: 1 }];
-    else chargePayload.amount = valor;
+    chargePayload.items = [{ priceId, quantity: 1 }];
 
     const response = await api("post", "/v1/charges", chargePayload);
 
@@ -550,5 +490,35 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
   } catch (error) {
     console.error("ERRO CARTAO VALIDAPAY:", error?.message || error);
     return { ok: false, error: error?.message || "Não foi possível processar o cartão." };
+  }
+}
+
+export async function consultarCobrancaCartaoTransparente(input = {}) {
+  try {
+    const checkoutId=safe(input.checkoutId);
+    if(!checkoutId) return {ok:false,error:"checkoutId ausente."};
+    let session=await findSession(checkoutId);
+    if(!session) return {ok:false,recoverable:true,error:"Sessão do cartão ainda não localizada."};
+    const chargeId=safe(input.chargeId||session.validaPayChargeId||session.paymentId);
+    if(!chargeId) return {ok:true,recoverable:true,processing:true,checkoutId,status:safe(session.status)||"pending"};
+    if(safe(session.status).toLowerCase()==="approved") {
+      const finalization=await finalizeApprovedCard({checkoutId,chargeId});
+      return {ok:true,approved:true,checkoutId,chargeId,status:"paid",compraRegistrada:finalization.compraRegistrada===true,purchaseId:safe(finalization.purchaseId),tokenEntrega:safe(finalization.tokenEntrega),make:finalization.make};
+    }
+    const response=await api("get",`/v1/charges/${encodeURIComponent(chargeId)}`);
+    if(!response.ok) return {ok:true,recoverable:true,processing:true,checkoutId,chargeId,status:safe(session.status)||"pending",error:response.error||"Consultando confirmação do cartão..."};
+    const data=response.data?.data||response.data?.charge||response.data||{};
+    const status=safe(data.status).toLowerCase();
+    const approved=["paid","approved","succeeded"].includes(status);
+    const declined=["rejected","declined","denied","failed","cancelled","canceled","expired","refused"].includes(status);
+    await saveSession(checkoutId,{validaPayChargeId:chargeId,paymentId:chargeId,paymentMethod:"CARD",status:approved?"approved":(status||safe(session.status)||"pending"),updatedAtDate:new Date()});
+    if(approved) {
+      const finalization=await finalizeApprovedCard({checkoutId,chargeId});
+      return {ok:true,approved:true,checkoutId,chargeId,status,compraRegistrada:finalization.compraRegistrada===true,purchaseId:safe(finalization.purchaseId),tokenEntrega:safe(finalization.tokenEntrega),make:finalization.make};
+    }
+    return {ok:!declined,approved:false,declined,processing:!declined,checkoutId,chargeId,status:status||"pending",error:declined?"Cartão não aprovado.":"Aguardando confirmação do cartão..."};
+  } catch(error) {
+    console.error("CONSULTA CARTAO VALIDAPAY:",error?.message||error);
+    return {ok:true,recoverable:true,processing:true,error:"Aguardando confirmação do cartão..."};
   }
 }

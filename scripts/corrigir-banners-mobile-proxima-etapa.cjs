@@ -2,33 +2,16 @@ const fs = require("fs");
 
 const caminho = "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js";
 let codigo = fs.readFileSync(caminho, "utf8");
-let alterou = false;
 
-const regraAntiga = `async function aplicarRegraVisualAvisosPaginaPrincipal() {
-  const mobile = wixWindowFrontend.formFactor === "Mobile";
+const inicio = "async function aplicarRegraVisualAvisosPaginaPrincipal() {";
+const fim = "\n\nasync function mostrarValoresEAcessos() {";
 
-  const etapas = [
-    { id: IDS.avisoMedidas, pago: acessos.medidas === true },
-    { id: IDS.avisoGraficos, pago: acessos.graficos === true },
-    { id: IDS.avisoProjeto, pago: acessos.projeto === true }
-  ];
+const posInicio = codigo.indexOf(inicio);
+const posFim = codigo.indexOf(fim, posInicio);
 
-  for (const etapa of etapas) {
-    estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
-
-    /*
-      REGRA DA PÁGINA /checkoutprojetosprontos:
-      - Desktop: os três banners aparecem sempre.
-      - Desktop: pago recebe borda verde; a sombra configurada no Editor é preservada.
-      - Mobile: o banner referente à etapa paga some e recolhe o espaço.
-      - Estado vem de acessos + IDs dos banners, nunca de sessão visual.
-    */
-    await alternarAvisoPaginaPrincipal(
-      etapa.id,
-      mobile ? !etapa.pago : true
-    );
-  }
-}`;
+if (posInicio < 0 || posFim < 0) {
+  throw new Error("Não encontrei a função de banners mobile do checkout.");
+}
 
 const regraNova = `async function aplicarRegraVisualAvisosPaginaPrincipal() {
   const mobile = wixWindowFrontend.formFactor === "Mobile";
@@ -40,48 +23,43 @@ const regraNova = `async function aplicarRegraVisualAvisosPaginaPrincipal() {
   ];
 
   /*
-    REGRA MOBILE OFICIAL:
-    mostra SOMENTE o banner da próxima etapa que falta pagar.
-
-    nenhuma compra       -> banner Medidas
-    Medidas paga         -> banner Gráficos
-    Medidas + Gráficos   -> banner Projeto Completo
-    tudo pago            -> nenhum banner
-
-    Desktop continua mostrando os três banners.
+    REGRA MOBILE OFICIAL E ÚNICA:
+    - etapa paga: esconde e recolhe o banner;
+    - etapa não paga: mostra o banner;
+    - não depende de ser a próxima etapa disponível;
+    - desktop continua mostrando os três banners.
   */
-  const proximoBannerMobile =
-    !acessos.medidas
-      ? IDS.avisoMedidas
-      : !acessos.graficos
-        ? IDS.avisoGraficos
-        : !acessos.projeto
-          ? IDS.avisoProjeto
-          : "";
-
   for (const etapa of etapas) {
     estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
 
     await alternarAvisoPaginaPrincipal(
       etapa.id,
-      mobile
-        ? etapa.id === proximoBannerMobile
-        : true
+      mobile ? !etapa.pago : true
     );
   }
 }`;
 
-if (codigo.includes(regraAntiga)) {
-  codigo = codigo.replace(regraAntiga, regraNova);
+const atual = codigo.slice(posInicio, posFim);
+let alterou = false;
+
+if (atual !== regraNova) {
+  codigo =
+    codigo.slice(0, posInicio) +
+    regraNova +
+    codigo.slice(posFim);
   alterou = true;
-} else if (!codigo.includes("const proximoBannerMobile =")) {
-  throw new Error("Não encontrei a regra visual antiga dos banners mobile.");
 }
 
-const cacheAntigo = `        await mostrarValoresEAcessos();
+/*
+  Mantém a revalidação mobile já existente.
+  O cache serve só para pintar rápido; o backend confirma as compras
+  e corrige banners antigos logo depois.
+*/
+if (!codigo.includes("Erro ao revalidar acessos mobile:")) {
+  const cacheAntigo = `        await mostrarValoresEAcessos();
         return;`;
 
-const cacheNovo = `        await mostrarValoresEAcessos();
+  const cacheNovo = `        await mostrarValoresEAcessos();
 
         /*
           No celular, o cache serve apenas para pintar a tela rápido.
@@ -105,16 +83,17 @@ const cacheNovo = `        await mostrarValoresEAcessos();
 
         return;`;
 
-if (codigo.includes(cacheAntigo)) {
+  if (!codigo.includes(cacheAntigo)) {
+    throw new Error("Não encontrei o retorno do cache local para revalidar no mobile.");
+  }
+
   codigo = codigo.replace(cacheAntigo, cacheNovo);
   alterou = true;
-} else if (!codigo.includes("Erro ao revalidar acessos mobile:")) {
-  throw new Error("Não encontrei o retorno do cache local para revalidar no mobile.");
 }
 
 if (alterou) {
   fs.writeFileSync(caminho, codigo, "utf8");
-  console.log("Correção mobile aplicada: somente próxima etapa + revalidação do backend.");
+  console.log("Banners mobile corrigidos: pago some; não pago aparece.");
 } else {
-  console.log("Correção mobile já estava aplicada.");
+  console.log("Regra mobile já está correta: pago some; não pago aparece.");
 }

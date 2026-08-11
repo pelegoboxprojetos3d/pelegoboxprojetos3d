@@ -1,0 +1,47 @@
+name: Hotfix largura mobile checkout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-mobile-width-360.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ajustar largura mobile
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'src/public/custom-elements/pelego-checkout-pronto.js';
+          let text = fs.readFileSync(path, 'utf8');
+          const oldLine = 'const targetWidth = Math.min(320, Math.max(290, window.innerWidth - 36));';
+          const newLine = 'const targetWidth = Math.min(360, Math.max(300, window.innerWidth - 12));';
+          if (!text.includes(oldLine) && !text.includes(newLine)) throw new Error('Regra mobile esperada não encontrada');
+          text = text.replace(oldLine, newLine);
+          fs.writeFileSync(path, text);
+          NODE
+
+      - name: Validar
+        run: grep -q 'Math.min(360, Math.max(300, window.innerWidth - 12))' src/public/custom-elements/pelego-checkout-pronto.js
+
+      - name: Commit
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/public/custom-elements/pelego-checkout-pronto.js
+          git commit -m 'Alarga checkout mobile sem estourar a viewport'
+          git push origin main

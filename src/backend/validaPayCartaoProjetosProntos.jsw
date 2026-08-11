@@ -126,7 +126,7 @@ async function token(force = false) {
     "grant_type=client_credentials",
     `client_id=${encodeURIComponent(id)}`,
     `client_secret=${encodeURIComponent(secret)}`,
-    `scope=${encodeURIComponent("checkouts/write products/write checkouts/read")}`
+    `scope=${encodeURIComponent("checkouts/write products/write checkouts/read pix.cob/read")}`
   ].join("&");
 
   const response = await fetch(AUTH_URL, {
@@ -554,7 +554,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
 
     const id = safe(response.data?.chargeId || response.data?.id);
     const status = safe(response.data?.status).toLowerCase();
-    const approved = response.data?.success === true && ["paid", "approved", "succeeded"].includes(status);
+    const approved = response.data?.success !== false && isApprovedCardStatus(status);
 
     await saveSession(checkoutId, {
       validaPayChargeId: id,

@@ -411,15 +411,16 @@ async function pollCardDelivery(n=1) {
       post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:statusResult?.error || "Cartão não aprovado."});
       return;
     }
-    if(statusResult?.approved === true) {
-      const delivery = await waitTimeout(buscarEntregaProjetoPronto({checkoutId}),4500,"");
-      if(deliveryReady(delivery)) {
-        stopCardPoll();
-        post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,deliveryUrl:deliveryUrl()});
-        setTimeout(()=>wixLocation.to(deliveryUrl()),650);
-        return;
-      }
-      post({type:"CARD_RESULT",ok:true,accepted:true,approved:false,paymentApproved:true,processing:true,checkoutId,chargeId,status:cardStatus || "paid",error:"Pagamento aprovado. Preparando sua entrega e os e-mails..."});
+    if(statusResult?.approved === true || ["paid","approved","succeeded"].includes(cardStatus)) {
+      /*
+        A página de entrega já possui processamento visual e polling próprios.
+        Assim que a operadora confirmar o pagamento, saímos do checkout
+        imediatamente em vez de esperar Make/OneDrive terminar os arquivos.
+      */
+      stopCardPoll();
+      post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
+      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+      return;
     }
   } catch(_) {}
   if(n>=CARD_DELIVERY_MAX) {
@@ -502,13 +503,24 @@ async function createCard(data={}) {
     if(r?.chargeId) chargeId=safe(r.chargeId);
     const accepted=cardWasAccepted(r);
     const paymentApproved=r?.approved===true;
+    if(paymentApproved) {
+      post({
+        type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,
+        processing:false,checkoutId,chargeId,status:safe(r?.status)||"paid",
+        cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
+        error:"Pagamento aprovado. Abrindo sua entrega..."
+      });
+      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+      return;
+    }
+
     post({
-      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved,
-      processing:accepted || paymentApproved,checkoutId,chargeId,status:safe(r?.status),
+      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved:false,
+      processing:accepted,checkoutId,chargeId,status:safe(r?.status),
       cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
-      error:accepted ? (paymentApproved ? "Pagamento aprovado. Preparando sua entrega e os e-mails..." : "Pagamento recebido. Aguardando confirmação...") : (r?.error||"")
+      error:accepted ? "Pagamento recebido. Aguardando confirmação..." : (r?.error||"")
     });
-    if(accepted || paymentApproved) {
+    if(accepted) {
       cardPolling=true;
       pollCardDelivery(1).catch(console.error);
     }

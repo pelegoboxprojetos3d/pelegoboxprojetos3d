@@ -766,11 +766,25 @@ class PelegoCheckoutPronto extends HTMLElement {
     frame.setAttribute("scrolling", "no");
     frame.setAttribute("frameborder", "0");
     frame.style.cssText = "display:block;width:100%;height:220px;border:0;margin:0;padding:0;overflow:hidden;background:transparent";
-    frame.srcdoc = CHECKOUT_HTML;
     this.replaceChildren(frame);
     this._frame = frame;
     window.addEventListener("message", this._windowHandler);
-    frame.addEventListener("load", () => this._flush());
+
+    let checkoutMounted = false;
+    const mountCheckout = () => {
+      if (checkoutMounted) return;
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      checkoutMounted = true;
+      doc.open();
+      doc.write(CHECKOUT_HTML);
+      doc.close();
+      setTimeout(() => this._flush(), 0);
+    };
+
+    frame.addEventListener("load", mountCheckout, { once: true });
+    frame.src = "about:blank";
+    setTimeout(mountCheckout, 0);
   }
   disconnectedCallback() {
     window.removeEventListener("message", this._windowHandler);

@@ -107,6 +107,54 @@ function contextFromUrl() {
   };
 }
 
+const BANNERS_PAGAMENTO = {
+  medidas: "#botao1baixarmedidas",
+  graficos: "#botao2baixargraficos",
+  projeto: "#botao3projetocompleto",
+  importante: "#textoimportante"
+};
+
+async function alternarBannerPagamento(id, mostrar) {
+  try {
+    const elemento = $w(id);
+
+    if (mostrar) {
+      if (typeof elemento.expand === "function") await elemento.expand();
+      if (typeof elemento.show === "function") await elemento.show();
+      return;
+    }
+
+    if (typeof elemento.hide === "function") await elemento.hide();
+    if (typeof elemento.collapse === "function") await elemento.collapse();
+  } catch (error) {
+    console.warn(`Falha ao alternar banner do pagamento ${id}:`, error?.message || error);
+  }
+}
+
+async function configurarBannersPagamento(tipoProduto) {
+  const tipo = safe(tipoProduto || "MEDIDAS").toUpperCase();
+
+  /*
+    REGRA OFICIAL DO /checkout-projeto-pronto, igual em desktop e mobile:
+    mostrar somente banners referentes às etapas que ainda faltam pagar.
+
+    Fluxo sequencial:
+    MEDIDAS          -> mostra Medidas + Gráficos + Projeto
+    GRAFICOS         -> mostra Gráficos + Projeto
+    PROJETO_COMPLETO -> mostra somente Projeto
+  */
+  const mostrarMedidas = tipo === "MEDIDAS";
+  const mostrarGraficos = tipo === "MEDIDAS" || tipo === "GRAFICOS";
+  const mostrarProjeto = ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(tipo);
+
+  await Promise.allSettled([
+    alternarBannerPagamento(BANNERS_PAGAMENTO.medidas, mostrarMedidas),
+    alternarBannerPagamento(BANNERS_PAGAMENTO.graficos, mostrarGraficos),
+    alternarBannerPagamento(BANNERS_PAGAMENTO.projeto, mostrarProjeto),
+    alternarBannerPagamento(BANNERS_PAGAMENTO.importante, true)
+  ]);
+}
+
 function deliveryUrl() {
   return `/entregaprojetosprontos?checkout_id=${encodeURIComponent(checkoutId)}&pos_pagamento=1`;
 }
@@ -295,6 +343,11 @@ function back() {
 $w.onReady(function(){
   checkoutId=safe(wixLocation.query?.checkoutId) || `ckpro_${Date.now().toString(36)}_${Math.random().toString(16).slice(2,10)}`;
   ctx=contextFromUrl();
+
+  configurarBannersPagamento(ctx.tipoProduto).catch(error => {
+    console.error("Falha ao configurar banners do checkout de pagamento:", error?.message || error);
+  });
+
   const html=$w(HTML_ID);
 
   html.onMessage(event=>{

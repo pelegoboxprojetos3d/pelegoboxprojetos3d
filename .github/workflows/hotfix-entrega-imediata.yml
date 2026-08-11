@@ -1,0 +1,51 @@
+name: Hotfix entrega imediata por arquivo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-entrega-imediata.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Remover bloqueio por status de processamento
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+          let text = fs.readFileSync(path, 'utf8');
+          const oldBlock = `  const statusProcessamento =\n    safe(projeto.statusProcessamento)\n      .toUpperCase();\n\n  /*\n    Quando o Make já iniciou o processamento, a galeria\n    só é liberada depois de PROCESSADO. Isso impede que\n    o primeiro gráfico apareça enquanto os demais ainda\n    estão sendo importados. Registros antigos sem status\n    continuam compatíveis pela existência do arquivo.\n  */\n  /*\n    PROCESSADO é o estado ideal. PARCIAL também pode representar um\n    registro antigo que exigia quatro gráficos mesmo quando o projeto\n    possuía legitimamente apenas 1, 2 ou 3. Nesses casos, a presença do\n    arquivo da etapa abaixo é a fonte da verdade para liberar a entrega.\n  */\n  if (\n    statusProcessamento &&\n    ![\"PROCESSADO\", \"PARCIAL\"].includes(statusProcessamento)\n  ) {\n    return false;\n  }\n`;
+          const replacement = `  /*\n    A existência do arquivo da etapa é a fonte da verdade.\n    O Make/OneDrive pode ainda estar marcando PROCESSANDO quando o arquivo\n    já foi importado no Wix. Não seguramos mais a entrega por esse status.\n  */\n`;
+          if (!text.includes(oldBlock) && !text.includes('A existência do arquivo da etapa é a fonte da verdade.')) {
+            throw new Error('Bloco entregaProcessada esperado não encontrado');
+          }
+          text = text.replace(oldBlock, replacement);
+          fs.writeFileSync(path, text);
+          NODE
+
+      - name: Validar regra
+        run: |
+          grep -q 'A existência do arquivo da etapa é a fonte da verdade' 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+          grep -q 'projeto.imagensGraficos.filter(Boolean).length > 0' 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+
+      - name: Commit
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+          git commit -m 'Libera entrega quando arquivo da etapa estiver disponível'
+          git push origin main

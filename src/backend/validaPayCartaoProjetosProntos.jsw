@@ -3,12 +3,17 @@ import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
 
 // CARTÃO TRANSPARENTE VALIDAPAY
-// Não grava PAN completo nem CVV em coleção/storage/retorno.
-// Não depende de SKU nem de codigo_checkout.
+// - Não grava PAN completo nem CVV.
+// - Não depende de SKU nem de codigo_checkout.
+// - Vincula a cobrança a um produto/preço ValidaPay quando possível.
+// - Quando a ValidaPay aprova imediatamente, registra a compra e dispara o Make
+//   antes de devolver sucesso ao checkout.
 
 const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
 const API_BASE = "https://api.validapay.com.br";
 const SESSIONS = "SessoesProjetosProntos2";
+const PURCHASES = "ComprasProjetos";
+const MAKE_SECRET = "MAKE_WEBHOOK_PROJETOS_PRONTOS";
 const DB = { suppressAuth: true };
 
 let cachedToken = "";
@@ -33,7 +38,11 @@ function phone(v) {
 }
 
 function productType(v) {
-  const t = safe(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
+  const t = safe(v)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";
 }
 
@@ -70,6 +79,10 @@ function brand(v) {
   return "CARD";
 }
 
+function generateDeliveryToken() {
+  return `entpro_${Date.now().toString(36)}_${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+}
+
 async function json(response) {
   const text = await response.text();
   if (!text) return {};
@@ -77,13 +90,19 @@ async function json(response) {
 }
 
 function message(data, status) {
-  return safe(data?.error?.message || data?.error_description || data?.message ||
-    (typeof data?.error === "string" ? data.error : "") || data?.code || data?.raw) ||
-    `ValidaPay respondeu HTTP ${status}.`;
+  return safe(
+    data?.error?.message ||
+    data?.error_description ||
+    data?.message ||
+    (typeof data?.error === "string" ? data.error : "") ||
+    data?.code ||
+    data?.raw
+  ) || `ValidaPay respondeu HTTP ${status}.`;
 }
 
 async function token(force = false) {
   if (!force && cachedToken && Date.now() < tokenExpiresAt - 60000) return cachedToken;
+
   const id = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
   const secret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
   if (!id || !secret) throw new Error("Credenciais da ValidaPay não encontradas.");
@@ -92,7 +111,7 @@ async function token(force = false) {
     "grant_type=client_credentials",
     `client_id=${encodeURIComponent(id)}`,
     `client_secret=${encodeURIComponent(secret)}`,
-    `scope=${encodeURIComponent("checkouts/write")}`
+    `scope=${encodeURIComponent("checkouts/write products/write checkouts/read")}`
   ].join("&");
 
   const response = await fetch(AUTH_URL, {
@@ -100,6 +119,7 @@ async function token(force = false) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body
   });
+
   const data = await json(response);
   if (!response.ok || !safe(data?.access_token)) throw new Error(message(data, response.status));
 
@@ -108,28 +128,46 @@ async function token(force = false) {
   return cachedToken;
 }
 
-async function api(path, body) {
+async function api(method, path, body) {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const access = await token(attempt > 1);
-    const response = await fetch(`${API_BASE}${path}`, {
-      method: "post",
-      headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
+    const options = {
+      method,
+      headers: {
+        Authorization: `Bearer ${access}`,
+        "Content-Type": "application/json"
+      }
+    };
+    if (body !== undefined) options.body = JSON.stringify(body);
+
+    const response = await fetch(`${API_BASE}${path}`, options);
     const data = await json(response);
+
     if (response.ok) return { ok: true, statusCode: response.status, data };
+
     if (attempt === 1 && [401, 403].includes(Number(response.status))) {
       cachedToken = "";
       tokenExpiresAt = 0;
       continue;
     }
-    return { ok: false, statusCode: response.status, data, error: message(data, response.status) };
+
+    return {
+      ok: false,
+      statusCode: response.status,
+      data,
+      error: message(data, response.status)
+    };
   }
+
   return { ok: false, statusCode: 0, data: {}, error: "Falha ao consultar a ValidaPay." };
 }
 
 async function findSession(checkoutId) {
-  const r = await wixData.query(SESSIONS).eq("checkoutId", safe(checkoutId)).limit(1).find({ ...DB, consistentRead: true });
+  const r = await wixData
+    .query(SESSIONS)
+    .eq("checkoutId", safe(checkoutId))
+    .limit(1)
+    .find({ ...DB, consistentRead: true });
   return r.items[0] || null;
 }
 
@@ -141,6 +179,219 @@ async function saveSession(checkoutId, patch) {
   delete item.sku;
   delete item.codigoCheckout;
   return current ? wixData.update(SESSIONS, item, DB) : wixData.insert(SESSIONS, item, DB);
+}
+
+async function reusablePriceId({ codigoProjeto, tipoProduto, valor }) {
+  try {
+    const r = await wixData
+      .query(SESSIONS)
+      .eq("codigoProjeto", safe(codigoProjeto))
+      .eq("tipoProduto", safe(tipoProduto))
+      .descending("_updatedDate")
+      .limit(100)
+      .find(DB);
+
+    const found = (r.items || []).find(item =>
+      safe(item?.validaPayPriceId) && Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
+    );
+
+    return safe(found?.validaPayPriceId);
+  } catch (error) {
+    console.warn("Não foi possível reutilizar priceId ValidaPay:", error?.message || error);
+    return "";
+  }
+}
+
+function stageLabel(tipoProduto) {
+  if (tipoProduto === "GRAFICOS") return "Gráficos";
+  if (tipoProduto === "PROJETO_COMPLETO") return "Projeto Completo";
+  return "Medidas";
+}
+
+async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor }) {
+  const current = await findSession(checkoutId);
+  if (safe(current?.validaPayPriceId)) return safe(current.validaPayPriceId);
+
+  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, valor });
+  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const label = stageLabel(tipoProduto);
+  const response = await api("post", "/v1/products", {
+    name: decodeTitle(produto),
+    description: `${label} - Pelego Box Projetos Prontos`,
+    type: "ONE_TIME",
+    statementDescriptor: "PELEGO BOX",
+    isActive: true,
+    metadata: {
+      origem: "PELEGO_BOX_PROJETOS_PRONTOS",
+      codigoProjeto,
+      tipoProduto
+    },
+    prices: [{
+      title: label,
+      amount: valor,
+      currency: "BRL",
+      recurrenceType: "ONE_TIME",
+      recurrenceInterval: 1
+    }]
+  });
+
+  if (!response.ok) {
+    console.warn("Produto ValidaPay não pôde ser criado. Cobrança seguirá avulsa:", response.error);
+    return "";
+  }
+
+  const priceId = safe(response.data?.prices?.[0]?.priceId);
+  if (priceId) {
+    await saveSession(checkoutId, { validaPayPriceId: priceId, updatedAtDate: new Date() });
+  }
+  return priceId;
+}
+
+async function findPurchase(chaveCompra) {
+  if (!safe(chaveCompra)) return null;
+  const r = await wixData.query(PURCHASES).eq("chaveCompra", safe(chaveCompra)).limit(1).find(DB);
+  return r.items[0] || null;
+}
+
+function cumulativeAccess(existing, tipoProduto) {
+  const projeto = existing?.downloadProjeto === true || tipoProduto === "PROJETO_COMPLETO";
+  const graficos = existing?.downloadGraficos === true || tipoProduto === "GRAFICOS" || projeto;
+  const medidas = existing?.downloadMedidas === true || tipoProduto === "MEDIDAS" || graficos;
+  return { medidas, graficos, projeto };
+}
+
+async function triggerMake({ session, purchase, paymentId }) {
+  const url = safe(await getSecret(MAKE_SECRET));
+  if (!url) {
+    console.error("MAKE_WEBHOOK_PROJETOS_PRONTOS ausente.");
+    return { sent: false, error: "make_secret_missing" };
+  }
+
+  const payload = {
+    event: "pagamento_aprovado_projeto_pronto",
+    clienteId: safe(session.clienteId),
+    nomeCliente: safe(session.nomeCliente),
+    email: safe(session.email).toLowerCase(),
+    whatsapp: phone(session.whatsapp),
+    cpfCnpj: digits(session.cpfCnpj),
+    codigoProjeto: digits(session.codigoProjeto),
+    produto: decodeTitle(session.produto),
+    tipoProduto: productType(session.tipoProduto),
+    valor: Number(purchase?.valor || session.valor || 0),
+    pagamento: "approved",
+    statusCompra: "approved",
+    idPagamento: safe(paymentId),
+    checkoutId: safe(session.checkoutId),
+    tokenDeEntrega: safe(session.tokenEntrega),
+    chaveCompra: safe(purchase?.chaveCompra)
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "post",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Make recusou pagamento de cartão:", response.status, text);
+      return { sent: false, error: "make_http_error", status: response.status };
+    }
+
+    return { sent: true };
+  } catch (error) {
+    console.error("Falha ao disparar Make no cartão:", error?.message || error);
+    return { sent: false, error: "make_fetch_error" };
+  }
+}
+
+async function finalizeApprovedCard({ checkoutId, chargeId }) {
+  let session = await findSession(checkoutId);
+  if (!session) throw new Error("Sessão do cartão não encontrada após aprovação.");
+
+  if (
+    session.compraRegistrada === true &&
+    safe(session.status).toLowerCase() === "approved" &&
+    (safe(session.paymentId) === safe(chargeId) || safe(session.validaPayChargeId) === safe(chargeId))
+  ) {
+    return { compraRegistrada: true, make: { skipped: true, reason: "already_registered" } };
+  }
+
+  const codigoProjeto = digits(session.codigoProjeto);
+  const clienteId = safe(session.clienteId);
+  const tipoProduto = productType(session.tipoProduto);
+  const chaveCompra = `${clienteId}_${codigoProjeto}`;
+  const existente = await findPurchase(chaveCompra);
+  const samePayment = Boolean(existente && safe(existente.idPagamento) === safe(chargeId));
+  const access = cumulativeAccess(existente, tipoProduto);
+  const now = new Date();
+
+  if (!safe(session.tokenEntrega)) session.tokenEntrega = generateDeliveryToken();
+  session.status = "approved";
+  session.paymentId = safe(chargeId);
+  session.validaPayChargeId = safe(chargeId);
+  session.compraRegistrada = false;
+  session.updatedAtDate = now;
+  await saveSession(checkoutId, session);
+
+  const previousValue = Number(existente?.valor || 0);
+  const stageValue = Number(session.valor || 0);
+  const totalValue = samePayment ? previousValue : previousValue + stageValue;
+
+  const purchase = {
+    ...(existente || {}),
+    title: `PP-${codigoProjeto} - ${safe(session.nomeCliente) || clienteId}`,
+    chaveCompra,
+    clienteId,
+    codigoProjeto,
+    tipoProduto,
+    nomeCliente: safe(session.nomeCliente),
+    email: safe(session.email).toLowerCase(),
+    whatsapp: phone(session.whatsapp),
+    cpfCnpj: digits(session.cpfCnpj),
+    checkoutId: safe(session.checkoutId),
+    tokenDeEntrega: safe(session.tokenEntrega),
+    idPagamento: safe(chargeId),
+    pagamento: "approved",
+    statusCompra: "approved",
+    valor: totalValue,
+    dataCompra: existente?.dataCompra || now,
+    dataLiberacao: now,
+    downloadMedidas: access.medidas,
+    downloadGraficos: access.graficos,
+    downloadProjeto: access.projeto,
+    statusProcessamento: samePayment ? (safe(existente?.statusProcessamento) || "PENDENTE") : "PENDENTE",
+    dataProcessamento: now
+  };
+
+  delete purchase.whatsApp;
+
+  const savedPurchase = existente
+    ? await wixData.update(PURCHASES, purchase, DB)
+    : await wixData.insert(PURCHASES, purchase, DB);
+
+  session = await saveSession(checkoutId, {
+    status: "approved",
+    paymentId: safe(chargeId),
+    validaPayChargeId: safe(chargeId),
+    tokenEntrega: safe(session.tokenEntrega),
+    compraRegistrada: true,
+    updatedAtDate: new Date()
+  });
+
+  const make = await triggerMake({ session, purchase: savedPurchase, paymentId: chargeId });
+
+  return {
+    compraRegistrada: true,
+    purchaseId: safe(savedPurchase?._id),
+    tokenEntrega: safe(session.tokenEntrega),
+    make
+  };
 }
 
 export async function criarCobrancaCartaoTransparente(input = {}) {
@@ -164,7 +415,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     const email = safe(input.email || ctx.email).toLowerCase();
     const cpfCnpj = digits(input.cpfCnpj || ctx.cpfCnpj);
     const whatsapp = phone(input.whatsappE164 || input.whatsapp || ctx.whatsappE164 || ctx.whatsapp);
-    const doc = digits(input.cardDocument || cpfCnpj);
+    const cardDocument = digits(input.cardDocument || cpfCnpj);
     const installments = Math.min(12, Math.max(1, Number(input.installments || 1)));
 
     if (!checkoutId || !codigoProjeto || !(valor > 0)) return { ok: false, error: "Dados do produto incompletos." };
@@ -175,7 +426,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     if (!/^(0[1-9]|1[0-2])$/.test(month) || !/^20\d{2}$/.test(year)) return { ok: false, error: "Validade do cartão inválida." };
     if (!/^\d{3,4}$/.test(cvv)) return { ok: false, error: "CVV inválido." };
     if (holder.length < 3) return { ok: false, error: "Nome impresso no cartão inválido." };
-    if (![11, 14].includes(doc.length)) return { ok: false, error: "CPF/CNPJ do portador inválido." };
+    if (![11, 14].includes(cardDocument.length)) return { ok: false, error: "CPF/CNPJ do portador inválido." };
 
     await saveSession(checkoutId, {
       status: "pending",
@@ -195,13 +446,24 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       updatedAtDate: new Date()
     });
 
-    const response = await api("/v1/charges", {
+    const priceId = await ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor });
+
+    const chargePayload = {
       paymentMethod: "creditcard",
       externalId: checkoutId,
       externalTxid: `PP-${codigoProjeto}-CARD-${safe(checkoutId).replace(/[^a-z0-9]/gi, "").slice(-8)}`.slice(0, 35),
-      customer: { name: nome, email, documentNumber: doc, phone: whatsapp },
-      card: { number, cvv, name: holder, expiration: `${month}/${year}` },
-      amount: valor,
+      customer: {
+        name: nome,
+        email,
+        documentNumber: cpfCnpj,
+        phone: whatsapp
+      },
+      card: {
+        number,
+        cvv,
+        name: holder,
+        expiration: `${month}/${year}`
+      },
       installments,
       passFeesToCustomer: false,
       freeInstallments: 1,
@@ -212,19 +474,39 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
         codigoProjeto,
         tipoProduto,
         produto,
-        whatsapp
+        phone: whatsapp,
+        whatsapp,
+        email
       }
-    });
+    };
+
+    if (priceId) chargePayload.items = [{ priceId, quantity: 1 }];
+    else chargePayload.amount = valor;
+
+    const response = await api("post", "/v1/charges", chargePayload);
 
     if (!response.ok) {
       if (response.statusCode === 409) {
         const id = safe(response.data?.error?.details?.chargeId || response.data?.details?.chargeId);
         if (id) {
-          await saveSession(checkoutId, { validaPayChargeId: id, paymentId: id, updatedAtDate: new Date() });
-          return { ok: false, recoverable: true, chargeId: id, error: "A cobrança já foi enviada. Aguarde a confirmação antes de tentar novamente." };
+          await saveSession(checkoutId, {
+            validaPayChargeId: id,
+            paymentId: id,
+            updatedAtDate: new Date()
+          });
+          return {
+            ok: false,
+            recoverable: true,
+            chargeId: id,
+            error: "A cobrança já foi enviada. Aguarde a confirmação antes de tentar novamente."
+          };
         }
       }
-      return { ok: false, declined: response.statusCode === 402, error: response.error || "Cartão não aprovado." };
+      return {
+        ok: false,
+        declined: response.statusCode === 402,
+        error: response.error || "Cartão não aprovado."
+      };
     }
 
     const id = safe(response.data?.chargeId || response.data?.id);
@@ -239,6 +521,15 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       updatedAtDate: new Date()
     });
 
+    let finalization = {
+      compraRegistrada: false,
+      make: { skipped: true, reason: "payment_not_approved_yet" }
+    };
+
+    if (approved) {
+      finalization = await finalizeApprovedCard({ checkoutId, chargeId: id });
+    }
+
     return {
       ok: response.data?.success !== false,
       approved,
@@ -248,7 +539,13 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       cardBrand: safe(response.data?.cardBrand) || brand(number),
       cardLastFour: number.slice(-4),
       installments,
-      amount: valor
+      amount: valor,
+      productLinked: Boolean(priceId),
+      phoneSent: whatsapp,
+      compraRegistrada: finalization.compraRegistrada === true,
+      purchaseId: safe(finalization.purchaseId),
+      tokenEntrega: safe(finalization.tokenEntrega),
+      make: finalization.make
     };
   } catch (error) {
     console.error("ERRO CARTAO VALIDAPAY:", error?.message || error);

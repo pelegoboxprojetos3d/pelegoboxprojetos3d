@@ -333,10 +333,6 @@ async function mostrarProcessamento() {
     galeria em paralelo. A galeria continua sem collapse para preservar o
     espaço do layout enquanto o Make trabalha.
   */
-  if (!processamentoVisivelDesde) {
-    processamentoVisivelDesde = Date.now();
-  }
-
   const tarefas = [];
 
   try {
@@ -370,6 +366,15 @@ async function mostrarProcessamento() {
   }
 
   await Promise.allSettled(tarefas);
+
+  /*
+    O relógio começa somente depois que o HTML terminou de expandir/aparecer.
+    Assim, quando a entrega já está pronta (ex.: link aberto pelo e-mail),
+    a impressora permanece realmente visível por pelo menos 3 segundos.
+  */
+  if (!processamentoVisivelDesde) {
+    processamentoVisivelDesde = Date.now();
+  }
 }
 
 async function esconderProcessamento() {
@@ -531,6 +536,62 @@ function pintarBoxEtapa(id, pago) {
     box.style.borderColor = pago ? CORES.compradoBorda : "#E0E0E0";
     box.style.borderWidth = pago ? "2px" : "1px";
   } catch (_) {}
+}
+
+function destacarBoxEtapa(id) {
+  try {
+    const box = $w(id);
+    box.style.backgroundColor = "#FFFFFF";
+    box.style.borderColor = CORES.compradoBorda;
+    box.style.borderWidth = "2px";
+  } catch (_) {}
+}
+
+function etapaDisponivelParaCompra(tipo) {
+  const acessos = entrega?.access || {};
+
+  if (tipo === "GRAFICOS") {
+    return acessos.medidas === true && acessos.graficos !== true;
+  }
+
+  if (tipo === "PROJETO_COMPLETO") {
+    return acessos.graficos === true && acessos.projeto !== true;
+  }
+
+  return false;
+}
+
+function ligarHoverEtapa(
+  botaoId,
+  boxId,
+  tipo,
+  chaveAcesso
+) {
+  if (wixWindowFrontend.formFactor !== "Desktop") {
+    return;
+  }
+
+  try {
+    const botao = $w(botaoId);
+
+    botao.onMouseIn(() => {
+      if (etapaDisponivelParaCompra(tipo)) {
+        destacarBoxEtapa(boxId);
+      }
+    });
+
+    botao.onMouseOut(() => {
+      pintarBoxEtapa(
+        boxId,
+        entrega?.access?.[chaveAcesso] === true
+      );
+    });
+  } catch (erro) {
+    console.warn(
+      `Não foi possível ligar o hover do banner ${boxId}:`,
+      erro?.message || erro
+    );
+  }
 }
 
 async function mostrarAvisosEntrega() {
@@ -2141,6 +2202,26 @@ function ligarEventos() {
         );
       }
     }
+  );
+
+  /*
+    No desktop, o banner da próxima etapa disponível para compra
+    acompanha o hover do respectivo botão com borda verde.
+    Etapas bloqueadas não recebem destaque e etapas já pagas
+    continuam verdes normalmente.
+  */
+  ligarHoverEtapa(
+    IDS.graficos,
+    IDS.boxGraficos,
+    "GRAFICOS",
+    "graficos"
+  );
+
+  ligarHoverEtapa(
+    IDS.projeto,
+    IDS.boxProjeto,
+    "PROJETO_COMPLETO",
+    "projeto"
   );
 
   /*

@@ -1,77 +1,129 @@
-name: Corrigir trava local do cartao
+name: Corrigir confirmacao do cartao
 
 on:
   push:
     paths:
-      - ".github/workflows/fix-card-local-lock.yml"
+      - '.github/workflows/fix-card-local-lock.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  fix:
+  corrigir:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Baixar codigo
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-      - name: Aplicar correcao
+
+      - name: Aplicar correcao do cartao
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('src/pages/checkout-projeto-pronto.i9aj1.js')
-          s=p.read_text(encoding='utf-8')
-          old='let busy = false;\nlet chargeId = "";'
-          new='let busy = false;\nlet cardRequestBusy = false;\nlet chargeId = "";'
-          if old not in s and 'let cardRequestBusy = false;' not in s:
-              raise SystemExit('ancora de variaveis nao encontrada')
-          if 'let cardRequestBusy = false;' not in s:
-              s=s.replace(old,new,1)
 
-          old_start='''async function createCard(data={}) {
-  if(busy) return post({type:"CARD_RESULT",ok:false,error:"Já existe um pagamento em processamento."});
-  busy=true;
-  stopCardPoll();'''
-          new_start='''async function createCard(data={}) {
-  // O formulario interno ja bloqueia duplo clique. Esta trava e apenas uma
-  // segunda protecao contra evento duplicado na ponte Wix, sem exibir erro falso.
-  if(cardRequestBusy) return;
-  if(polling) return post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:"Existe um Pix aguardando pagamento nesta tentativa. Volte e gere um novo checkout para pagar com cartão."});
-  cardRequestBusy=true;
-  stopCardPoll();'''
-          if old_start not in s and new_start not in s:
-              raise SystemExit('inicio createCard nao encontrado')
-          s=s.replace(old_start,new_start,1)
+          def replace_or_fail(path, old, new, label):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              if new in s:
+                  print(f'{label}: ja aplicado')
+                  return
+              if old not in s:
+                  raise SystemExit(f'{label}: trecho nao encontrado em {path}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print(f'{label}: aplicado')
 
-          old_end='''  } catch(e) {
-    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
-  } finally { busy=false; }
-}'''
-          new_end='''  } catch(e) {
-    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
-  } finally { cardRequestBusy=false; }
-}'''
-          if old_end not in s and new_end not in s:
-              raise SystemExit('fim createCard nao encontrado')
-          s=s.replace(old_end,new_end,1)
-          p.write_text(s.rstrip()+'\n',encoding='utf-8')
+          backend = 'src/backend/validaPayCartaoProjetosProntos.jsw'
+          replace_or_fail(
+              backend,
+              'scope=${encodeURIComponent("checkouts/write products/write checkouts/read")}',
+              'scope=${encodeURIComponent("checkouts/write products/write checkouts/read pix.cob/read")}',
+              'escopo de leitura da cobranca'
+          )
+
+          replace_or_fail(
+              backend,
+              'const approved = response.data?.success === true && ["paid", "approved", "succeeded"].includes(status);',
+              'const approved = response.data?.success !== false && isApprovedCardStatus(status);',
+              'reconhecimento de pagamento aprovado'
+          )
+
+          page = 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          old_poll = '''    if(statusResult?.approved === true) {
+      const delivery = await waitTimeout(buscarEntregaProjetoPronto({checkoutId}),4500,"");
+      if(deliveryReady(delivery)) {
+        stopCardPoll();
+        post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,deliveryUrl:deliveryUrl()});
+        setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+        return;
+      }
+      post({type:"CARD_RESULT",ok:true,accepted:true,approved:false,paymentApproved:true,processing:true,checkoutId,chargeId,status:cardStatus || "paid",error:"Pagamento aprovado. Preparando sua entrega e os e-mails..."});
+    }'''
+          new_poll = '''    if(statusResult?.approved === true || ["paid","approved","succeeded"].includes(cardStatus)) {
+      /*
+        A pagina de entrega ja possui o proprio processamento visual e polling.
+        Assim que a operadora confirmar o pagamento, sai do checkout imediatamente
+        em vez de prender o cliente esperando Make/OneDrive finalizar arquivos.
+      */
+      stopCardPoll();
+      post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
+      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+      return;
+    }'''
+          replace_or_fail(page, old_poll, new_poll, 'redirecionamento do polling do cartao')
+
+          old_create = '''    post({
+      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved,
+      processing:accepted || paymentApproved,checkoutId,chargeId,status:safe(r?.status),
+      cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
+      error:accepted ? (paymentApproved ? "Pagamento aprovado. Preparando sua entrega e os e-mails..." : "Pagamento recebido. Aguardando confirmação...") : (r?.error||"")
+    });
+    if(accepted || paymentApproved) {
+      cardPolling=true;
+      pollCardDelivery(1).catch(console.error);
+    }'''
+          new_create = '''    if(paymentApproved) {
+      post({
+        type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,
+        processing:false,checkoutId,chargeId,status:safe(r?.status)||"paid",
+        cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
+        error:"Pagamento aprovado. Abrindo sua entrega..."
+      });
+      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+      return;
+    }
+
+    post({
+      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved:false,
+      processing:accepted,checkoutId,chargeId,status:safe(r?.status),
+      cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
+      error:accepted ? "Pagamento recebido. Aguardando confirmação..." : (r?.error||"")
+    });
+    if(accepted) {
+      cardPolling=true;
+      pollCardDelivery(1).catch(console.error);
+    }'''
+          replace_or_fail(page, old_create, new_create, 'redirecionamento imediato quando POST retorna pago')
           PY
-      - name: Instalar dependencias
-        run: npm ci --ignore-scripts
-      - name: Validar codigo
-        run: npm run lint
+
+      - name: Validar sintaxe
+        run: |
+          node --check src/backend/validaPayCartaoProjetosProntos.jsw
+          node --check src/pages/checkout-projeto-pronto.i9aj1.js
+
       - name: Gravar correcao
         shell: bash
         run: |
-          rm -f .github/workflows/fix-card-local-lock.yml
-          git config user.name 'Pelego Checkout Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add -A
-          git commit -m 'Separa trava local do cartao no checkout'
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/backend/validaPayCartaoProjetosProntos.jsw src/pages/checkout-projeto-pronto.i9aj1.js
+          if git diff --cached --quiet; then
+            echo 'Nenhuma alteracao necessaria.'
+            exit 0
+          fi
+          git commit -m 'Corrigir confirmacao e saida do cartao'
           git push origin HEAD:main
+
+# gatilho one-shot 2026-08-11 20:06

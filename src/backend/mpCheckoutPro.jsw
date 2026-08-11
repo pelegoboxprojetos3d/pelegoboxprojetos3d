@@ -19,6 +19,18 @@ function onlyDigits(v){
   return safe(v).replace(/[^\d]/g, "");
 }
 
+function truthyFlag(v){
+  const value = safe(v).trim().toLowerCase();
+
+  return (
+    v === true ||
+    value === "1" ||
+    value === "true" ||
+    value === "sim" ||
+    value === "yes"
+  );
+}
+
 function now(){
   return new Date();
 }
@@ -155,11 +167,17 @@ export async function createCheckoutProPreference(input){
   const ctx = input?.ctx || {};
 
   /*
-    PROJETOS FEITOS DO ZERO:
-    o título recebido do catálogo já contém o código do questionário.
-    SKU deixou de fazer parte deste fluxo.
+    O SKU é opcional por fluxo.
+
+    O botão COMPRAR PROJETO FEITO DO ZERO envia hideSku=true,
+    portanto não grava nem envia SKU ao Mercado Pago.
+
+    Qualquer fluxo antigo que não envie hideSku conserva
+    o comportamento anterior com SKU.
   */
+  const hideSku = truthyFlag(ctx.hideSku);
   const produto = safe(ctx.produto || ctx.name || "Produto").trim();
+  const sku = hideSku ? "" : safe(ctx.sku || "-").trim();
   const img = safe(ctx.img || "");
   const productId = safe(ctx.productId || "");
 
@@ -193,6 +211,7 @@ export async function createCheckoutProPreference(input){
     status:"pending",
 
     produto,
+    sku,
     img,
     productId,
 
@@ -235,6 +254,7 @@ export async function createCheckoutProPreference(input){
         quantity: 1,
         currency_id: "BRL",
         unit_price: valor > 0 ? valor : 1,
+        description: (!hideSku && sku) ? `SKU: ${sku}` : undefined,
         picture_url: img || undefined
       }
     ],
@@ -245,6 +265,7 @@ export async function createCheckoutProPreference(input){
       whatsappDigits,
       ddi,
       country,
+      sku: (!hideSku && sku) ? sku : undefined,
       produto,
       productId,
       img,

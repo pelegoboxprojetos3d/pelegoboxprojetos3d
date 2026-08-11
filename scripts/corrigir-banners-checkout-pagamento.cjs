@@ -27,10 +27,22 @@ if (!text.includes("configurarBannersPagamento(ctx.tipoProduto)")) {
   text = text.replace(onReadyMarker, onReadyReplacement);
 }
 
+/*
+  Catálogo e confirmação do cliente não dependem um do outro.
+  Rodar em paralelo evita somar duas esperas antes de liberar o checkout.
+*/
+const sequentialInit = `  completarContextoPelaColecao()\n    .then(()=>hydrateReturningCustomer())\n    .catch(error => console.error(\"Falha ao preparar contexto do checkout:\", error?.message || error))\n    .finally(() => {\n      contextReady=true;\n      checkoutUiReady=true;\n      sendInit(true);\n    });`;
+
+const parallelInit = `  Promise.allSettled([\n    completarContextoPelaColecao(),\n    hydrateReturningCustomer()\n  ])\n    .finally(() => {\n      contextReady=true;\n      checkoutUiReady=true;\n      sendInit(true);\n    });`;
+
+if (text.includes(sequentialInit)) {
+  text = text.replace(sequentialInit, parallelInit);
+}
+
 fs.writeFileSync(path, text);
 
 // ======================================================
-// CUSTOM ELEMENT: largura pelo Wix + altura realmente retrátil
+// CUSTOM ELEMENT: largura responsiva + altura retrátil + carregamento rápido
 // ======================================================
 
 const customPath = "src/public/custom-elements/pelego-checkout-pronto.js";
@@ -46,20 +58,55 @@ if (custom.includes(oldHeightMeasure)) {
   throw new Error("Medição de altura do Custom Element não encontrada.");
 }
 
-const oldWidthRule = `    this.style.width = \"min(1000px, calc(100vw - 24px))\";\n    this.style.maxWidth = \"1000px\";`;
-const newWidthRule = `    // A largura externa pertence ao elemento desenhado no Wix.\n    // O checkout apenas ocupa 100% desse espaço, inclusive no mobile.\n    this.style.width = \"100%\";\n    this.style.maxWidth = \"100%\";`;
+const width100 = `    // A largura externa pertence ao elemento desenhado no Wix.\n    // O checkout apenas ocupa 100% desse espaço, inclusive no mobile.\n    this.style.width = \"100%\";\n    this.style.maxWidth = \"100%\";`;
 
-if (custom.includes(oldWidthRule)) {
-  custom = custom.replace(oldWidthRule, newWidthRule);
-} else if (!custom.includes('this.style.width = "100%";')) {
+const widthOld = `    this.style.width = \"min(1000px, calc(100vw - 24px))\";\n    this.style.maxWidth = \"1000px\";`;
+
+const widthResponsive = `    /*\n      Desktop volta ao comportamento que já estava aprovado.\n      No mobile, o Wix pode manter um slot estreito: expandimos o checkout\n      até quase toda a viewport e compensamos metade da diferença para\n      continuar centralizado no mesmo eixo do elemento desenhado no Editor.\n    */\n    if (window.innerWidth <= 680) {\n      const slotWidth = this.getBoundingClientRect().width || this.offsetWidth || 0;\n      const targetWidth = Math.max(280, window.innerWidth - 8);\n      this.style.width = \`\${targetWidth}px\`;\n      this.style.maxWidth = \`\${targetWidth}px\`;\n      this.style.marginLeft = slotWidth > 0\n        ? \`\${Math.round((slotWidth - targetWidth) / 2)}px\`\n        : \"0\";\n    } else {\n      this.style.width = \"min(1000px, calc(100vw - 24px))\";\n      this.style.maxWidth = \"1000px\";\n      this.style.marginLeft = \"0\";\n    }`;
+
+if (custom.includes(width100)) {
+  custom = custom.replace(width100, widthResponsive);
+} else if (custom.includes(widthOld)) {
+  custom = custom.replace(widthOld, widthResponsive);
+} else if (!custom.includes("const targetWidth = Math.max(280, window.innerWidth - 8)")) {
   throw new Error("Regra de largura do Custom Element não encontrada.");
 }
 
+/* QRCode não pode bloquear a primeira pintura do checkout. */
 custom = custom.replace(
-  'post({type:"READY",version:"HTML29_CUSTOM_ELEMENT_HOST"});',
-  'post({type:"READY",version:"HTML30_DYNAMIC_SIZE"});'
+  '<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>',
+  '<script defer src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>'
 );
+
+/* O checkout deixa de ficar invisível enquanto aguarda consultas de backend. */
+custom = custom.replace(
+  'body{padding:7px;visibility:hidden}',
+  'body{padding:7px}'
+);
+
+/*
+  Mobile Pix: depois de escolher Pix, o Cartão desce para depois do bloco
+  do QR / Aguardando Pix. Os demais métodos continuam abaixo dele.
+*/
+const oldMobilePixOrder = `function mobilePixOrder(){\n if(window.innerWidth>680)return;\n E.topGrid.classList.add(\"pix-selected\");\n [E.google,E.pixAuto,E.apple,E.paypal,E.notice].forEach(function(node){E.deferred.appendChild(node)});\n E.deferred.classList.add(\"active\");\n}`;
+
+const newMobilePixOrder = `function mobilePixOrder(){\n if(window.innerWidth>680)return;\n E.topGrid.classList.add(\"pix-selected\");\n [E.card,E.google,E.pixAuto,E.apple,E.paypal,E.notice].forEach(function(node){E.deferred.appendChild(node)});\n E.deferred.classList.add(\"active\");\n}`;
+
+if (custom.includes(oldMobilePixOrder)) {
+  custom = custom.replace(oldMobilePixOrder, newMobilePixOrder);
+}
+
+const oldRestoreDesktop = ` E.left.appendChild(E.google);E.center.appendChild(E.pixAuto);E.center.appendChild(E.apple);E.center.appendChild(E.paypal);E.topGrid.appendChild(E.notice);`;
+const newRestoreDesktop = ` E.left.appendChild(E.card);E.left.appendChild(E.google);E.center.appendChild(E.pixAuto);E.center.appendChild(E.apple);E.center.appendChild(E.paypal);E.topGrid.appendChild(E.notice);`;
+
+if (custom.includes(oldRestoreDesktop)) {
+  custom = custom.replace(oldRestoreDesktop, newRestoreDesktop);
+}
+
+custom = custom
+  .replace('post({type:"READY",version:"HTML29_CUSTOM_ELEMENT_HOST"});', 'post({type:"READY",version:"HTML31_LAUNCH_READY"});')
+  .replace('post({type:"READY",version:"HTML30_DYNAMIC_SIZE"});', 'post({type:"READY",version:"HTML31_LAUNCH_READY"});');
 
 fs.writeFileSync(customPath, custom);
 
-console.log("Checkout atualizado: banners preservados, largura segue o Wix e altura cresce/retrai conforme Identificação, Pagamento, Pix e Cartão.");
+console.log("Checkout atualizado para lançamento: desktop restaurado, mobile mais largo/centralizado, carregamento destravado, altura retrátil e cartão abaixo do Pix no mobile.");

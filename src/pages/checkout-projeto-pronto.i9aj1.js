@@ -66,29 +66,49 @@ function identityComplete(value = ctx) {
 }
 
 async function hydrateReturningCustomer() {
-  if (identityComplete(ctx)) {
-    ctx.skipIdentity = true;
+  const n = phone(ctx.whatsappE164 || ctx.whatsapp);
+  if (!n) {
+    ctx.skipIdentity = false;
     return;
   }
-  const n = phone(ctx.whatsappE164 || ctx.whatsapp);
-  if (!n) { ctx.skipIdentity = false; return; }
+
+  /*
+    Segurança da primeira compra:
+    dados completos existentes apenas no storage do navegador não autorizam
+    pular Nome/CPF/e-mail. O pulo só acontece depois de confirmar um cadastro
+    completo recuperado pelo backend para este WhatsApp.
+  */
+  ctx.skipIdentity = false;
+
   try {
     const found = await waitTimeout(buscarCliente(n), 3500, "");
-    if (found) {
-      customer = found;
-      const id = safe(found._id || found.clienteId);
-      saveIdentity({
-        clienteId:id,
-        nome:safe(found.nome || found.nomeCliente),
-        email:email(found.email),
-        cpfCnpj:cpf(found.cpfCnpj || found.cpf),
-        whatsapp:n,
-        whatsappE164:`+55${n}`,
-        whatsappConfirmado:true
-      });
-    }
-  } catch (_) {}
-  ctx.skipIdentity = identityComplete(ctx);
+    if (!found) return;
+
+    customer = found;
+    const id = safe(found._id || found.clienteId);
+    const cadastroBackend = {
+      whatsapp:n,
+      whatsappE164:`+55${n}`,
+      nome:safe(found.nome || found.nomeCliente),
+      email:email(found.email),
+      cpfCnpj:cpf(found.cpfCnpj || found.cpf)
+    };
+
+    if (!identityComplete(cadastroBackend)) return;
+
+    saveIdentity({
+      clienteId:id,
+      nome:cadastroBackend.nome,
+      email:cadastroBackend.email,
+      cpfCnpj:cadastroBackend.cpfCnpj,
+      whatsapp:n,
+      whatsappE164:`+55${n}`,
+      whatsappConfirmado:true
+    });
+    ctx.skipIdentity = true;
+  } catch (_) {
+    ctx.skipIdentity = false;
+  }
 }
 
 function savedIdentity() {

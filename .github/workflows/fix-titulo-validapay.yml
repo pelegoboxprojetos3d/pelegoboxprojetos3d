@@ -1,0 +1,470 @@
+name: Aplicar regra final de títulos e itens ValidaPay
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fix-titulo-validapay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Aplicar normalização canônica de títulos
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          repo = Path('.')
+
+          # 1) Módulo canônico do backend.
+          norm = repo / 'src/backend/projetosProntosNormalizacao.js'
+          norm.write_text(r'''// Padrões únicos dos Projetos Prontos.
+// Centraliza WhatsApp e títulos sem depender de SKU ou codigo_checkout.
+
+function safe(value) {
+  return String(value ?? "").trim();
+}
+
+export function somenteDigitos(value) {
+  return safe(value).replace(/\D/g, "");
+}
+
+export function normalizarWhatsappBrasil(value) {
+  let numero = somenteDigitos(value);
+
+  if (
+    numero.startsWith("55") &&
+    (numero.length === 12 || numero.length === 13)
+  ) {
+    numero = numero.slice(2);
+  }
+
+  if (numero.length !== 10 && numero.length !== 11) {
+    return "";
+  }
+
+  return `+55${numero}`;
+}
+
+export function telefoneNacionalBrasil(value) {
+  const e164 = normalizarWhatsappBrasil(value);
+  return e164 ? somenteDigitos(e164).slice(2) : "";
+}
+
+const PALAVRAS_MENORES = new Set([
+  "a", "as", "o", "os", "e", "de", "da", "das", "do", "dos",
+  "em", "na", "nas", "no", "nos", "para", "por", "com", "sem"
+]);
+
+const SIGLAS = new Set([
+  "dsp", "eros", "jbl", "kc", "mdf", "pdf", "pix", "rms", "sds"
+]);
+
+function decodificarTitulo(value) {
+  return safe(value)
+    .replace(/&amp;quot;/gi, '"')
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function capitalizarToken(token, index) {
+  if (!token) return token;
+  if (/\d/.test(token)) return token.toUpperCase();
+
+  const minusculo = token.toLocaleLowerCase("pt-BR");
+  if (SIGLAS.has(minusculo)) return minusculo.toUpperCase();
+  if (index > 0 && PALAVRAS_MENORES.has(minusculo)) return minusculo;
+
+  return (
+    minusculo.charAt(0).toLocaleUpperCase("pt-BR") +
+    minusculo.slice(1)
+  );
+}
+
+export function extrairCodigoQuestionarioTitulo(value) {
+  const titulo = decodificarTitulo(value);
+  const match = titulo.match(/\b(00[1-9]|01[0-4])\b\s*$/i);
+  return match ? match[1] : "";
+}
+
+export function normalizarTituloProduto(value) {
+  const original = decodificarTitulo(value);
+  const codigoQuestionario = extrairCodigoQuestionarioTitulo(original);
+
+  const semMarcaFinal = original
+    .replace(/\s*\bPELEGO\s+BOX\b[\s\S]*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const natural = semMarcaFinal
+    .split(" ")
+    .filter(Boolean)
+    .map(capitalizarToken)
+    .join(" ")
+    .trim();
+
+  if (!codigoQuestionario) return natural;
+  if (new RegExp(`\\b${codigoQuestionario}\\b\\s*$`).test(natural)) return natural;
+  return `${natural} ${codigoQuestionario}`.trim();
+}
+
+function normalizarTipoProduto(value) {
+  const tipo = safe(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (tipo === "GRAFICO" || tipo === "GRAFICOS") return "GRAFICOS";
+  if (tipo === "PROJETO" || tipo === "COMPLETO" || tipo === "PROJETO_COMPLETO") {
+    return "PROJETO_COMPLETO";
+  }
+  return "MEDIDAS";
+}
+
+export function tituloEtapaProjetoPronto(value, tipoProduto, codigoProjeto = "") {
+  const base = normalizarTituloProduto(value) || "Projeto Pronto";
+  const codigoQuestionario = extrairCodigoQuestionarioTitulo(base);
+
+  let semQuestionario = base;
+  if (codigoQuestionario) {
+    semQuestionario = semQuestionario
+      .replace(new RegExp(`\\s+${codigoQuestionario}\\s*$`), "")
+      .trim();
+  }
+
+  const encontrado = semQuestionario.match(/^\s*#?\s*(\d+)\s+(.*)$/);
+  const codigo = encontrado ? encontrado[1] : somenteDigitos(codigoProjeto);
+  let corpo = encontrado ? encontrado[2] : semQuestionario;
+
+  corpo = corpo
+    .replace(
+      /^(?:Medidas\s+Projeto\s+Pronto|Gráficos\s+Projeto\s+Pronto|Graficos\s+Projeto\s+Pronto|Projeto\s+Pronto\s+Completo)\s+/i,
+      ""
+    )
+    .trim();
+
+  const tipo = normalizarTipoProduto(tipoProduto);
+  const prefixo = tipo === "GRAFICOS"
+    ? "Gráficos Projeto Pronto"
+    : tipo === "PROJETO_COMPLETO"
+      ? "Projeto Pronto Completo"
+      : "Medidas Projeto Pronto";
+
+  return [
+    codigo ? `#${codigo}` : "",
+    prefixo,
+    corpo,
+    codigoQuestionario
+  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+''', encoding='utf-8')
+
+          # Segurança: ninguém deve depender das funções antigas ligadas a codigo_checkout.
+          legacy = []
+          for p in (repo / 'src').rglob('*'):
+              if not p.is_file() or p == norm:
+                  continue
+              if p.suffix not in {'.js', '.jsw'}:
+                  continue
+              text = p.read_text(encoding='utf-8', errors='ignore')
+              if 'tituloProdutoComCodigoCheckout' in text or 'formatarCodigoCheckout' in text:
+                  legacy.append(str(p))
+          if legacy:
+              raise SystemExit('Dependência antiga de codigo_checkout encontrada: ' + ', '.join(legacy))
+
+          # 2) Página do checkout: título visual e payload da etapa.
+          page = repo / 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          s = page.read_text(encoding='utf-8')
+          marker = 'function identityComplete(value = ctx) {'
+          if marker not in s:
+              raise SystemExit('Marcador identityComplete não encontrado')
+
+          helper = r'''
+function decodeProductTitle(value) {
+  return safe(value)
+    .replace(/&amp;quot;/gi, '"')
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const TITLE_SMALL_WORDS = new Set([
+  "a", "as", "o", "os", "e", "de", "da", "das", "do", "dos",
+  "em", "na", "nas", "no", "nos", "para", "por", "com", "sem"
+]);
+const TITLE_ACRONYMS = new Set(["dsp", "eros", "jbl", "kc", "mdf", "pdf", "pix", "rms", "sds"]);
+
+function titleToken(token, index) {
+  if (!token) return token;
+  if (/\d/.test(token)) return token.toUpperCase();
+  const low = token.toLocaleLowerCase("pt-BR");
+  if (TITLE_ACRONYMS.has(low)) return low.toUpperCase();
+  if (index > 0 && TITLE_SMALL_WORDS.has(low)) return low;
+  return low.charAt(0).toLocaleUpperCase("pt-BR") + low.slice(1);
+}
+
+function questionCodeFromTitle(value) {
+  const match = decodeProductTitle(value).match(/\b(00[1-9]|01[0-4])\b\s*$/i);
+  return match ? match[1] : "";
+}
+
+function baseProjectTitle(value) {
+  const original = decodeProductTitle(value);
+  const questionCode = questionCodeFromTitle(original);
+  const cut = original
+    .replace(/\s*\bPELEGO\s+BOX\b[\s\S]*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const natural = cut.split(" ").filter(Boolean).map(titleToken).join(" ").trim();
+  if (!questionCode || new RegExp(`\\b${questionCode}\\b\\s*$`).test(natural)) return natural;
+  return `${natural} ${questionCode}`.trim();
+}
+
+function stageProjectTitle(value, type, projectCode = "") {
+  const base = baseProjectTitle(value) || "Projeto Pronto";
+  const questionCode = questionCodeFromTitle(base);
+  let bodyWithCode = questionCode
+    ? base.replace(new RegExp(`\\s+${questionCode}\\s*$`), "").trim()
+    : base;
+  const found = bodyWithCode.match(/^\s*#?\s*(\d+)\s+(.*)$/);
+  const code = found ? found[1] : digits(projectCode);
+  let body = found ? found[2] : bodyWithCode;
+  body = body.replace(/^(?:Medidas\s+Projeto\s+Pronto|Gráficos\s+Projeto\s+Pronto|Graficos\s+Projeto\s+Pronto|Projeto\s+Pronto\s+Completo)\s+/i, "").trim();
+  const normalizedType = safe(type).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
+  const prefix = normalizedType === "GRAFICOS"
+    ? "Gráficos Projeto Pronto"
+    : normalizedType === "PROJETO_COMPLETO"
+      ? "Projeto Pronto Completo"
+      : "Medidas Projeto Pronto";
+  return [code ? `#${code}` : "", prefix, body, questionCode].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+'''
+          if 'function stageProjectTitle(' not in s:
+              s = s.replace(marker, helper + marker, 1)
+
+          old_context = '''  const project=digits(q.codigoProjeto || q.ordemVideo || q.codigo);\n  const number=phone(s.whatsappE164 || s.whatsapp);\n  const product=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");\n  return {\n    codigoProjeto:project,\n    produto:product,\n    titulo:product,'''
+          new_context = '''  const project=digits(q.codigoProjeto || q.ordemVideo || q.codigo);\n  const number=phone(s.whatsappE164 || s.whatsapp);\n  const tipoProduto=safe(q.tipoProduto || "MEDIDAS").toUpperCase();\n  const productRaw=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");\n  const product=stageProjectTitle(productRaw,tipoProduto,project);\n  return {\n    codigoProjeto:project,\n    produto:product,\n    titulo:product,'''
+          if old_context not in s:
+              raise SystemExit('Trecho contextFromUrl esperado não encontrado')
+          s = s.replace(old_context, new_context, 1)
+          s = s.replace('tipoProduto:safe(q.tipoProduto || "MEDIDAS").toUpperCase(),', 'tipoProduto,', 1)
+
+          old_collection = '''  if (tituloReal) {\n    ctx.titulo = tituloReal;\n    ctx.produto = tituloReal;\n  }'''
+          new_collection = '''  if (tituloReal) {\n    const tituloEtapa = stageProjectTitle(tituloReal, ctx.tipoProduto, ctx.codigoProjeto);\n    ctx.titulo = tituloEtapa;\n    ctx.produto = tituloEtapa;\n  }'''
+          if old_collection not in s:
+              raise SystemExit('Trecho de título da coleção esperado não encontrado')
+          s = s.replace(old_collection, new_collection, 1)
+          page.write_text(s.rstrip() + '\n', encoding='utf-8')
+
+          # 3) Cartão: produto ValidaPay com título exato e sem reaproveitar priceId antigo.
+          card = repo / 'src/backend/validaPayCartaoProjetosProntos.jsw'
+          s = card.read_text(encoding='utf-8')
+          import_marker = 'import { getSecret } from "wix-secrets-backend";'
+          if 'tituloEtapaProjetoPronto' not in s:
+              s = s.replace(import_marker, import_marker + '\nimport { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";', 1)
+          s = s.replace(
+              'const produto = decodeTitle(input.produto || ctx.produto || ctx.titulo || "Projeto Pronto");',
+              'const produto = tituloEtapaProjetoPronto(input.produto || ctx.produto || ctx.titulo || "Projeto Pronto", tipoProduto, codigoProjeto);',
+              1
+          )
+          s = s.replace(
+              'async function reusablePriceId({ codigoProjeto, tipoProduto, valor }) {',
+              'async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {',
+              1
+          )
+          s = s.replace(
+              'safe(item?.validaPayPriceId) && Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01',
+              'safe(item?.validaPayPriceId) && normalizarTituloProduto(item?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() && Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01',
+              1
+          )
+          s = s.replace(
+              'if (safe(current?.validaPayPriceId)) return safe(current.validaPayPriceId);',
+              'if (safe(current?.validaPayPriceId) && normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()) return safe(current.validaPayPriceId);',
+              1
+          )
+          s = s.replace(
+              'const reused = await reusablePriceId({ codigoProjeto, tipoProduto, valor });',
+              'const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });',
+              1
+          )
+          s = s.replace('name: decodeTitle(produto),', 'name: produto,', 1)
+          s = s.replace('description: `${label} - Pelego Box Projetos Prontos`,', 'description: produto,', 1)
+          s = s.replace('title: label,\n      amount: valor,', 'title: produto,\n      amount: valor,', 1)
+          s = s.replace(
+              'tipoProduto\n    },',
+              'tipoProduto,\n      codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)\n    },',
+              1
+          )
+          card.write_text(s.rstrip() + '\n', encoding='utf-8')
+
+          # 4) Pix: também deixa de ser cobrança avulsa e usa item de produto.
+          pix = repo / 'src/backend/validaPayPixProjetosProntosCore.jsw'
+          s = pix.read_text(encoding='utf-8')
+          if 'tituloEtapaProjetoPronto' not in s:
+              s = s.replace(import_marker, import_marker + '\nimport { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";', 1)
+          s = s.replace('const isWrite = scope === "checkouts/write";', 'const isWrite = scope.includes("write");', 1)
+          s = s.replace(
+              'const scope = method.toLowerCase() === "post" ? "checkouts/write" : "pix.cob/read";',
+              'const scope = method.toLowerCase() === "post" ? "checkouts/write products/write checkouts/read" : "pix.cob/read";',
+              1
+          )
+
+          insert_after = '''async function saveSession(checkoutId, patch, known = undefined) {\n  const existing = known === undefined ? await findSession(checkoutId) : known;\n  const item = { ...(existing || {}), ...(patch || {}), checkoutId: safe(checkoutId) };\n  const whatsapp = normalizePhone(item.whatsapp || item.whatsappE164 || item.whatsApp);\n  if (whatsapp) item.whatsapp = whatsapp;\n  delete item.whatsApp;\n  delete item.whatsappE164;\n  delete item.sku;\n  delete item.codigoCheckout;\n  if (item.produto) item.produto = decodeTitle(item.produto);\n  return existing ? wixData.update(SESSIONS, item, DB) : wixData.insert(SESSIONS, item, DB);\n}\n'''
+          pix_helpers = r'''
+async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
+  try {
+    const result = await wixData
+      .query(SESSIONS)
+      .eq("codigoProjeto", safe(codigoProjeto))
+      .eq("tipoProduto", safe(tipoProduto))
+      .descending("_updatedDate")
+      .limit(100)
+      .find(DB);
+
+    const found = (result.items || []).find(item =>
+      safe(item?.validaPayPriceId) &&
+      normalizarTituloProduto(item?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() &&
+      Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
+    );
+
+    return safe(found?.validaPayPriceId);
+  } catch (error) {
+    console.warn("Não foi possível reutilizar priceId ValidaPay no Pix:", error?.message || error);
+    return "";
+  }
+}
+
+async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor }) {
+  const current = await findSession(checkoutId);
+  if (
+    safe(current?.validaPayPriceId) &&
+    normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()
+  ) {
+    return safe(current.validaPayPriceId);
+  }
+
+  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
+  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const response = await requestValidaPay("/v1/products", "post", {
+    name: produto,
+    description: produto,
+    type: "ONE_TIME",
+    statementDescriptor: "PELEGO BOX",
+    isActive: true,
+    metadata: {
+      origem: "PELEGO_BOX_PROJETOS_PRONTOS",
+      codigoProjeto,
+      tipoProduto,
+      codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)
+    },
+    prices: [{
+      title: produto,
+      amount: valor,
+      currency: "BRL",
+      recurrenceType: "ONE_TIME",
+      recurrenceInterval: 1
+    }]
+  });
+
+  if (!response.ok) {
+    console.warn("Produto ValidaPay não pôde ser criado para o Pix:", response.error);
+    return "";
+  }
+
+  const priceId = safe(response.data?.prices?.[0]?.priceId);
+  if (priceId) {
+    await saveSession(checkoutId, { validaPayPriceId: priceId, updatedAtDate: new Date() });
+  }
+  return priceId;
+}
+'''
+          if 'async function ensurePriceId({' not in s:
+              if insert_after not in s:
+                  raise SystemExit('saveSession do Pix não encontrado')
+              s = s.replace(insert_after, insert_after + pix_helpers, 1)
+
+          s = s.replace(
+              'const produto = decodeTitle(first(input.produto, ctx.produto, ctx.titulo, "Projeto Pronto"));',
+              'const produto = tituloEtapaProjetoPronto(first(input.produto, ctx.produto, ctx.titulo, "Projeto Pronto"), tipoProduto, codigoProjeto);',
+              1
+          )
+
+          old_body_marker = '''    const body = {\n      paymentMethod: "pix",'''
+          new_body_marker = '''    const priceId = await ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor });\n    if (!priceId) {\n      return { ok: false, checkoutId, error: "Não foi possível vincular o produto à cobrança ValidaPay. Nenhuma cobrança foi criada." };\n    }\n\n    const body = {\n      paymentMethod: "pix",'''
+          if old_body_marker not in s:
+              raise SystemExit('Body Pix esperado não encontrado')
+          s = s.replace(old_body_marker, new_body_marker, 1)
+          s = s.replace('      amount: valor,\n      metadata: {', '      items: [{ priceId, quantity: 1 }],\n      metadata: {', 1)
+          pix.write_text(s.rstrip() + '\n', encoding='utf-8')
+
+          # 5) Entrega: título visível também usa a mesma regra e preserva 001-014.
+          delivery = repo / 'src/backend/entregaProjetosProntos.jsw'
+          s = delivery.read_text(encoding='utf-8')
+          s = s.replace(
+              'import { normalizarWhatsappBrasil } from "backend/projetosProntosNormalizacao";',
+              'import { normalizarWhatsappBrasil, normalizarTituloProduto } from "backend/projetosProntosNormalizacao";',
+              1
+          )
+          old_clean = '''function cleanProjectTitle(value) {\n  return decodeTitle(value)\n    .split(/\\bPELEGO(?:\\s*BOX)?\\b/i)[0]\n    .replace(/\\s+/g, " ")\n    .trim();\n}'''
+          new_clean = '''function cleanProjectTitle(value) {\n  return normalizarTituloProduto(value);\n}'''
+          if old_clean not in s:
+              raise SystemExit('cleanProjectTitle esperado não encontrado')
+          s = s.replace(old_clean, new_clean, 1)
+          s = s.replace(
+              'const real = decodeTitle(project?.titulo_video || session?.produto);',
+              'const real = normalizarTituloProduto(project?.titulo_video || session?.produto);',
+              1
+          )
+          delivery.write_text(s.rstrip() + '\n', encoding='utf-8')
+
+          # Verificações textuais antes do lint.
+          examples = {
+            'raw': '#1819 BOOKSHELF DUAS VIAS 1X 6" AUDIOPHONIC CLUB KC 6.3 PELEGO BOX PROJETOS 3D FEITO DO ZERO 009',
+          }
+          print('Arquivos alterados com sucesso.')
+          PY
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar código
+        run: npm run lint
+      - name: Validar regras críticas
+        shell: bash
+        run: |
+          grep -q 'tituloEtapaProjetoPronto' src/backend/projetosProntosNormalizacao.js
+          grep -q 'PELEGO\\s+BOX' src/backend/projetosProntosNormalizacao.js
+          grep -q 'items: \[{ priceId, quantity: 1 }\]' src/backend/validaPayPixProjetosProntosCore.jsw
+          grep -q 'items = \[{ priceId, quantity: 1 }\]' src/backend/validaPayCartaoProjetosProntos.jsw
+          ! grep -R 'tituloProdutoComCodigoCheckout\|formatarCodigoCheckout' src --include='*.js' --include='*.jsw'
+      - name: Gravar correção
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-titulo-validapay.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Padroniza títulos e vincula produtos nas cobranças ValidaPay'
+          git push origin HEAD:main

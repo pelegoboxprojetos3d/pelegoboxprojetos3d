@@ -39,6 +39,9 @@ jobs:
       - name: Remover SKU da página de entrega
         run: node scripts/remover-sku-entrega.cjs
 
+      - name: Usar título original na página de entrega
+        run: node scripts/usar-titulo-original-entrega.cjs
+
       - name: Validar código
         run: npm run lint
 

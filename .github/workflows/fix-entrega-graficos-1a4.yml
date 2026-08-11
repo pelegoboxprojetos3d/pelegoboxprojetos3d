@@ -1,0 +1,122 @@
+name: Corrigir entrega de 1 a 4 gráficos
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-entrega-graficos-1a4.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar correção de entrega
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          function replaceOrFail(path, before, after, label) {
+            let text = fs.readFileSync(path, 'utf8');
+            if (!text.includes(before)) {
+              if (text.includes(after)) {
+                console.log(label + ': já aplicado');
+                return;
+              }
+              throw new Error(label + ': trecho não encontrado em ' + path);
+            }
+            text = text.replace(before, after);
+            fs.writeFileSync(path, text);
+            console.log(label + ': aplicado');
+          }
+
+          const processamento = 'src/backend/processarCompraProjetoPronto.js';
+          const oldGraphics = `  if (tipoProduto === "GRAFICOS") {
+    [
+      "imagemGrafico1",
+      "imagemGrafico2",
+      "imagemGrafico3",
+      "imagemGrafico4"
+    ].forEach((field) => {
+      if (!safe(salvo[field])) {
+        arquivosFaltantes.push({
+          field,
+          error: \`O arquivo \${field} não foi recebido ou importado.\`
+        });
+      }
+    });
+  }`;
+          const newGraphics = `  if (tipoProduto === "GRAFICOS") {
+    /*
+      Um projeto pode possuir 1, 2, 3 ou 4 análises gráficas.
+      Não exigir quatro arquivos fixos: a etapa está completa quando
+      pelo menos um gráfico foi efetivamente recebido/importado.
+      Falhas reais de importação continuam registradas em \"falhas\".
+    */
+    const graficosDisponiveis = [
+      "imagemGrafico1",
+      "imagemGrafico2",
+      "imagemGrafico3",
+      "imagemGrafico4"
+    ].filter((field) => safe(salvo[field]));
+
+    if (!graficosDisponiveis.length) {
+      arquivosFaltantes.push({
+        field: "imagemGrafico1",
+        error: "Nenhuma análise gráfica foi recebida ou importada."
+      });
+    }
+  }`;
+          replaceOrFail(processamento, oldGraphics, newGraphics, 'regra 1 a 4 gráficos');
+
+          const entrega = 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+          const oldDeliveryStatus = `  if (
+    statusProcessamento &&
+    statusProcessamento !== "PROCESSADO"
+  ) {
+    return false;
+  }`;
+          const newDeliveryStatus = `  /*
+    PROCESSADO é o estado ideal. PARCIAL também pode representar um
+    registro antigo que exigia quatro gráficos mesmo quando o projeto
+    possuía legitimamente apenas 1, 2 ou 3. Nesses casos, a presença do
+    arquivo da etapa abaixo é a fonte da verdade para liberar a entrega.
+  */
+  if (
+    statusProcessamento &&
+    !["PROCESSADO", "PARCIAL"].includes(statusProcessamento)
+  ) {
+    return false;
+  }`;
+          replaceOrFail(entrega, oldDeliveryStatus, newDeliveryStatus, 'liberar PARCIAL legado com arquivo');
+
+          const checkout = 'src/pages/checkout-projeto-pronto.i9aj1.js';
+          const oldCheckoutStatus = `  if (status && status !== "PROCESSADO") return false;`;
+          const newCheckoutStatus = `  if (status && !["PROCESSADO", "PARCIAL"].includes(status)) return false;`;
+          replaceOrFail(checkout, oldCheckoutStatus, newCheckoutStatus, 'polling cartão compatível com 1 a 4 gráficos');
+          NODE
+
+      - name: Validar sintaxe
+        run: |
+          node --check src/backend/processarCompraProjetoPronto.js
+          node --check "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          node --check src/pages/checkout-projeto-pronto.i9aj1.js
+
+      - name: Gravar correção
+        run: |
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/processarCompraProjetoPronto.js "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" src/pages/checkout-projeto-pronto.i9aj1.js
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+            exit 0
+          fi
+          git commit -m "Corrigir entrega de projetos com 1 a 4 gráficos"
+          git push origin HEAD:main

@@ -33,7 +33,7 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Aplicar correção mobile da próxima etapa
+      - name: Aplicar regra mobile dos banners não pagos
         run: node scripts/corrigir-banners-mobile-proxima-etapa.cjs
 
       - name: Validar código
@@ -48,7 +48,7 @@ jobs:
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
             git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
-            git commit -m "Corrigir banners mobile para mostrar somente próxima etapa"
+            git commit -m "Mobile: esconder banners pagos e mostrar banners não pagos"
             git push origin HEAD:main
           fi
 

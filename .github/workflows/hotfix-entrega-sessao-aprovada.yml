@@ -27,114 +27,160 @@ jobs:
           backend = Path('src/backend/entregaProjetosProntos.jsw')
           text = backend.read_text(encoding='utf-8')
 
-          gate = '''  if (!safeSession.compraRegistrada) {
-    return {
-      ok: true,
-      approved: false,
-      status: "processing",
-
-      session: {
-        checkoutId:
-          safeSession.checkoutId
-      }
-    };
-  }
-
-'''
+          gate = (
+              '  if (!safeSession.compraRegistrada) {\n'
+              '    return {\n'
+              '      ok: true,\n'
+              '      approved: false,\n'
+              '      status: "processing",\n\n'
+              '      session: {\n'
+              '        checkoutId:\n'
+              '          safeSession.checkoutId\n'
+              '      }\n'
+              '    };\n'
+              '  }\n\n'
+          )
+          replacement_gate = (
+              '  /*\n'
+              '    A aprovacao da ValidaPay e a fonte de verdade do pagamento.\n'
+              '    compraRegistrada pode ficar false enquanto Make/OneDrive termina o\n'
+              '    processamento, portanto esse sinal nao pode bloquear a pagina de entrega.\n'
+              '  */\n\n'
+          )
           if gate not in text:
               raise SystemExit('Gate compraRegistrada nao encontrado')
-          text = text.replace(gate, '''  /*
-    A aprovacao da ValidaPay e a fonte de verdade do pagamento.
-    compraRegistrada pode ficar false enquanto Make/OneDrive termina o
-    processamento, portanto esse sinal nao pode bloquear a pagina de entrega.
-  */
+          text = text.replace(gate, replacement_gate, 1)
 
-''', 1)
-
-          old_result = '''  const result =
-    resolveAccessFromPurchases({
-      purchases:
-        allPurchases,
-
-      clienteId:
-        safeSession.clienteId,
-
-      email:
-        safeSession.email,
-
-      whatsapp:
-        safeSession.whatsapp,
-
-      paymentId:
-        safeSession.paymentId
-    });
-
-  const projectData =
-'''
-          new_result = '''  const result =
-    resolveAccessFromPurchases({
-      purchases:
-        allPurchases,
-
-      clienteId:
-        safeSession.clienteId,
-
-      email:
-        safeSession.email,
-
-      whatsapp:
-        safeSession.whatsapp,
-
-      paymentId:
-        safeSession.paymentId
-    });
-
-  /*
-    Mesmo antes do callback do Make gravar a compra, a sessao aprovada ja
-    libera cumulativamente a etapa paga. Isso faz os botoes aparecerem e
-    evita que Pix e Cartao fiquem presos na impressora por compraRegistrada.
-  */
-  const currentType =
-    normalizeType(
-      safeSession.tipoProduto
-    );
-
-  const effectiveAccess = {
-    ...result.access,
-    medidas: true,
-    graficos:
-      result.access.graficos === true ||
-      currentType === "GRAFICOS" ||
-      currentType === "PROJETO_COMPLETO",
-    projeto:
-      result.access.projeto === true ||
-      currentType === "PROJETO_COMPLETO"
-  };
-
-  effectiveAccess.podeComprarMedidas =
-    !effectiveAccess.medidas;
-  effectiveAccess.podeComprarGraficos =
-    effectiveAccess.medidas &&
-    !effectiveAccess.graficos;
-  effectiveAccess.podeComprarProjeto =
-    effectiveAccess.graficos &&
-    !effectiveAccess.projeto;
-
-  const projectData =
-'''
+          old_result = (
+              '  const result =\n'
+              '    resolveAccessFromPurchases({\n'
+              '      purchases:\n'
+              '        allPurchases,\n\n'
+              '      clienteId:\n'
+              '        safeSession.clienteId,\n\n'
+              '      email:\n'
+              '        safeSession.email,\n\n'
+              '      whatsapp:\n'
+              '        safeSession.whatsapp,\n\n'
+              '      paymentId:\n'
+              '        safeSession.paymentId\n'
+              '    });\n\n'
+              '  const projectData =\n'
+          )
+          new_result = (
+              '  const result =\n'
+              '    resolveAccessFromPurchases({\n'
+              '      purchases:\n'
+              '        allPurchases,\n\n'
+              '      clienteId:\n'
+              '        safeSession.clienteId,\n\n'
+              '      email:\n'
+              '        safeSession.email,\n\n'
+              '      whatsapp:\n'
+              '        safeSession.whatsapp,\n\n'
+              '      paymentId:\n'
+              '        safeSession.paymentId\n'
+              '    });\n\n'
+              '  /* Sessao aprovada libera cumulativamente a etapa paga. */\n'
+              '  const currentType =\n'
+              '    normalizeType(\n'
+              '      safeSession.tipoProduto\n'
+              '    );\n\n'
+              '  const effectiveAccess = {\n'
+              '    ...result.access,\n'
+              '    medidas: true,\n'
+              '    graficos:\n'
+              '      result.access.graficos === true ||\n'
+              '      currentType === "GRAFICOS" ||\n'
+              '      currentType === "PROJETO_COMPLETO",\n'
+              '    projeto:\n'
+              '      result.access.projeto === true ||\n'
+              '      currentType === "PROJETO_COMPLETO"\n'
+              '  };\n\n'
+              '  effectiveAccess.podeComprarMedidas =\n'
+              '    !effectiveAccess.medidas;\n'
+              '  effectiveAccess.podeComprarGraficos =\n'
+              '    effectiveAccess.medidas &&\n'
+              '    !effectiveAccess.graficos;\n'
+              '  effectiveAccess.podeComprarProjeto =\n'
+              '    effectiveAccess.graficos &&\n'
+              '    !effectiveAccess.projeto;\n\n'
+              '  const projectData =\n'
+          )
           if old_result not in text:
               raise SystemExit('Bloco resolveAccess nao encontrado')
           text = text.replace(old_result, new_result, 1)
 
-          text = text.replace('''    access:\n      result.access,\n\n    stages:\n      buildStages(\n        result.access,''', '''    access:\n      effectiveAccess,\n\n    stages:\n      buildStages(\n        effectiveAccess,''', 1)
-
+          old_access = (
+              '    access:\n'
+              '      result.access,\n\n'
+              '    stages:\n'
+              '      buildStages(\n'
+              '        result.access,'
+          )
+          new_access = (
+              '    access:\n'
+              '      effectiveAccess,\n\n'
+              '    stages:\n'
+              '      buildStages(\n'
+              '        effectiveAccess,'
+          )
+          if old_access not in text:
+              raise SystemExit('Retorno access nao encontrado')
+          text = text.replace(old_access, new_access, 1)
           backend.write_text(text, encoding='utf-8')
 
           page = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
           p = page.read_text(encoding='utf-8')
-
-          old_branch = '''      if (\n        resultado.approved\n      ) {\n        if (\n          entregaProcessada(\n            resultado\n          )\n        ) {\n          await renderizarEntrega(\n            resultado\n          );\n\n          return;\n        }\n\n        await mostrarProcessamento();\n'''
-          new_branch = '''      if (\n        resultado.approved\n      ) {\n        /*\n          Assim que o pagamento esta aprovado, mostramos titulo, valores e\n          botoes imediatamente. A impressora continua somente sobre a galeria\n          enquanto os arquivos terminam de chegar. Antes, tudo ficava oculto\n          ate o ultimo arquivo existir, dando a falsa impressao de pagina morta.\n        */\n        if (!entrega) {\n          entrega = resultado;\n          checkoutEmAndamento = false;\n          indiceGraficoDownload = 0;\n\n          const projetoAprovado =\n            resultado.project || {};\n\n          $w(IDS.titulo).text =\n            montarTituloPagina(projetoAprovado);\n\n          salvarAcessosLocais(\n            projetoAprovado?.codigoProjeto,\n            resultado.access\n          );\n\n          await renderizarBotoes();\n          await mostrarDadosCarregados();\n          await mostrarAvisosEntrega();\n        }\n\n        if (\n          entregaProcessada(\n            resultado\n          )\n        ) {\n          await renderizarEntrega(\n            resultado\n          );\n\n          return;\n        }\n\n        await mostrarProcessamento();\n'''
+          old_branch = (
+              '      if (\n'
+              '        resultado.approved\n'
+              '      ) {\n'
+              '        if (\n'
+              '          entregaProcessada(\n'
+              '            resultado\n'
+              '          )\n'
+              '        ) {\n'
+              '          await renderizarEntrega(\n'
+              '            resultado\n'
+              '          );\n\n'
+              '          return;\n'
+              '        }\n\n'
+              '        await mostrarProcessamento();\n'
+          )
+          new_branch = (
+              '      if (\n'
+              '        resultado.approved\n'
+              '      ) {\n'
+              '        /* Mostra titulo, valores e botoes assim que o pagamento aprova. */\n'
+              '        if (!entrega) {\n'
+              '          entrega = resultado;\n'
+              '          checkoutEmAndamento = false;\n'
+              '          indiceGraficoDownload = 0;\n\n'
+              '          const projetoAprovado =\n'
+              '            resultado.project || {};\n\n'
+              '          $w(IDS.titulo).text =\n'
+              '            montarTituloPagina(projetoAprovado);\n\n'
+              '          salvarAcessosLocais(\n'
+              '            projetoAprovado?.codigoProjeto,\n'
+              '            resultado.access\n'
+              '          );\n\n'
+              '          await renderizarBotoes();\n'
+              '          await mostrarDadosCarregados();\n'
+              '          await mostrarAvisosEntrega();\n'
+              '        }\n\n'
+              '        if (\n'
+              '          entregaProcessada(\n'
+              '            resultado\n'
+              '          )\n'
+              '        ) {\n'
+              '          await renderizarEntrega(\n'
+              '            resultado\n'
+              '          );\n\n'
+              '          return;\n'
+              '        }\n\n'
+              '        await mostrarProcessamento();\n'
+          )
           if old_branch not in p:
               raise SystemExit('Bloco approved da pagina nao encontrado')
           p = p.replace(old_branch, new_branch, 1)

@@ -1,18 +1,20 @@
 import {
   criarCobrancaPixTransparente as criarPixCore,
   consultarCobrancaPix as consultarPixCore
-} from "backend/validaPayPixProjetosProntosCore.jsw";
+} from "backend/validaPayPixProjetosProntosCoreR2.jsw";
 
 /*
   Fachada oficial do Pix de Projetos Prontos.
-  Mantém o nome importado pelas páginas e delega ao core atual.
+  O core base continua responsável por cobrança, sessão e notificações.
+  O R2 acrescenta uma leitura profunda de EMV/QR quando a ValidaPay devolve
+  esses dados em estruturas aninhadas ou nomes diferentes.
 
-  O core ativo:
-  - não depende de SKU;
-  - não usa codigo_checkout;
-  - não cria produto ValidaPay antes da cobrança;
-  - preserva checkoutId para recuperar a mesma tentativa;
-  - mantém sessão, consulta e notificações após aprovação.
+  Regras preservadas:
+  - sem SKU;
+  - sem codigo_checkout;
+  - Pix criado somente no clique;
+  - mesmo checkoutId reaproveita a mesma tentativa;
+  - sessão, polling e notificações continuam no core base.
 */
 export async function criarCobrancaPixTransparente(input = {}) {
   return criarPixCore(input);

@@ -42,6 +42,9 @@ jobs:
       - name: Usar título original na página de entrega
         run: node scripts/usar-titulo-original-entrega.cjs
 
+      - name: Corrigir entrega pós-cartão
+        run: node scripts/corrigir-entrega-pos-cartao.cjs
+
       - name: Corrigir persistência do Pega Zap e abertura de Baixar Medidas
         run: node scripts/corrigir-pega-zap-identificacao.cjs
 
@@ -60,6 +63,7 @@ jobs:
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
             git add \
+              "src/backend/entregaProjetosProntos.jsw" \
               "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
               "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" \
               "src/pages/checkout-projeto-pronto.i9aj1.js" \

@@ -792,7 +792,7 @@ class PelegoCheckoutPronto extends HTMLElement {
     /* Desktop largo; mobile limitado e centralizado. */
     if (window.innerWidth <= 680) {
       const slotWidth = this.getBoundingClientRect().width || this.offsetWidth || 300;
-      const targetWidth = Math.min(320, Math.max(290, window.innerWidth - 36));
+      const targetWidth = Math.min(360, Math.max(300, window.innerWidth - 12));
       this.style.width = `${targetWidth}px`;
       this.style.maxWidth = `${targetWidth}px`;
       this.style.marginLeft = `${Math.round((slotWidth - targetWidth) / 2)}px`;

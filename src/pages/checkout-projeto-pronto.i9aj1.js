@@ -6,7 +6,7 @@ import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/vali
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
 
-const CUSTOM_ID = "#checkoutProntoCustom";
+const HTML_ID = "#htmlCheckoutValidaPay";
 const PROJECTS_COLLECTION = "Videosprojetos";
 const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
@@ -252,9 +252,9 @@ function deliveryUrl() {
 function post(data) {
   const payload = { ...(data || {}), __bridgeSeq: ++bridgeSeq };
   try {
-    $w(CUSTOM_ID).setAttribute("checkout-message", JSON.stringify(payload));
+    $w(HTML_ID).postMessage(payload);
   } catch(e) {
-    console.error("Custom Element post:", e?.message || e);
+    console.error("HTML checkout post:", e?.message || e);
   }
 }
 
@@ -505,9 +505,9 @@ $w.onReady(function(){
   configurarBannersPagamento(ctx.tipoProduto).catch(error => {
     console.error("Falha ao configurar banners do checkout de pagamento:", error?.message || error);
   });
-  const checkout=$w(CUSTOM_ID);
-  checkout.on("checkout-message", event=>{
-    let data=event?.detail ?? event?.data ?? event;
+  const checkout=$w(HTML_ID);
+  checkout.onMessage(event=>{
+    let data=event?.data ?? event;
     if(typeof data==="string"){ try{data=JSON.parse(data)}catch(_){data={type:data}} }
     if(data?.data && typeof data.data==="object" && !data.type) data=data.data;
     data=data && typeof data==="object" ? data : {};

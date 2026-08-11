@@ -51,7 +51,7 @@ const FIRST_WHATSAPP_LOCAL_KEY =
   "pp_whatsapp_primeiro_estagio_persistente";
 
 const CONFIRMACAO_FLUXO_VERSAO =
-  3;
+  4;
 
 const CHECKOUT_AUTH_KEY =
   "pp_checkout_autorizado";
@@ -430,30 +430,6 @@ function codigoPublico(item) {
     match?.[1] ||
     ""
   );
-}
-
-function codigoCheckout(item) {
-  const value =
-    firstValue(
-      item?.codigo_checkout,
-      item?.codigoCheckout
-    );
-
-  const digits =
-    onlyDigits(value);
-
-  if (
-    digits &&
-    digits.length <= 3
-  ) {
-    return digits
-      .padStart(
-        3,
-        "0"
-      );
-  }
-
-  return value;
 }
 
 function tituloProjeto(item) {
@@ -2046,12 +2022,6 @@ function montarUrlCheckout(
     codigoPublico(
       projeto
     );
-
-  const codigoInterno =
-    codigoCheckout(
-      projeto
-    );
-
   const valor =
     valorDaEtapa(
       tipoProduto
@@ -2059,7 +2029,6 @@ function montarUrlCheckout(
 
   if (
     !codigoProjeto ||
-    !codigoInterno ||
     !(valor > 0)
   ) {
     return "";
@@ -2102,10 +2071,6 @@ function montarUrlCheckout(
   const parametros = {
     checkoutId,
     codigoProjeto,
-
-    codigoCheckout:
-      codigoInterno,
-
     titulo,
 
     productId:
@@ -2114,10 +2079,6 @@ function montarUrlCheckout(
       ),
 
     imagem,
-
-    sku:
-      `PP-${codigoProjeto}`,
-
     valor:
       String(valor),
 
@@ -2333,7 +2294,7 @@ async function iniciarPagina() {
       Number(
         salva.confirmacaoWhatsappVersao ||
         0
-      ) === CONFIRMACAO_FLUXO_VERSAO;
+      ) >= CONFIRMACAO_FLUXO_VERSAO;
 
     if (confirmacaoAtualValida) {
       const acessosSalvos =

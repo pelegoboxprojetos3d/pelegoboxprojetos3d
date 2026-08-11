@@ -256,6 +256,14 @@ async function createPix(data={}) {
   }
 }
 
+function cardWasAccepted(result={}) {
+  const status=safe(result?.status).toLowerCase();
+  const rejected=["rejected","declined","denied","failed","cancelled","canceled","expired","refused"].includes(status);
+  if(rejected) return false;
+  if(result?.recoverable===true && safe(result?.chargeId)) return true;
+  return result?.ok===true && Boolean(safe(result?.chargeId) || status || result?.approved===true);
+}
+
 async function createCard(data={}) {
   if(busy) return post({type:"CARD_RESULT",ok:false,error:"Já existe um pagamento em processamento."});
   busy=true;
@@ -265,12 +273,17 @@ async function createCard(data={}) {
       ...basePayload(data), card:data.card||{}, installments:Number(data.installments||1),
       cardDocument:digits(data.cardDocument || ctx.cpfCnpj)
     }),15000,"A operadora demorou para responder. Aguarde antes de tentar novamente.");
-    post({type:"CARD_RESULT",ok:r?.ok===true,approved:r?.approved===true,checkoutId,
-      chargeId:safe(r?.chargeId),status:safe(r?.status),cardBrand:safe(r?.cardBrand),
-      cardLastFour:safe(r?.cardLastFour),error:r?.error||""});
-    if(r?.approved===true) setTimeout(()=>wixLocation.to(deliveryUrl()),1200);
+
+    const accepted=cardWasAccepted(r);
+    post({type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:r?.approved===true,processing:accepted && r?.approved!==true,
+      checkoutId,chargeId:safe(r?.chargeId),status:safe(r?.status),cardBrand:safe(r?.cardBrand),
+      cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),error:accepted?"":(r?.error||"")});
+
+    if(accepted) {
+      setTimeout(()=>wixLocation.to(deliveryUrl()),900);
+    }
   } catch(e) {
-    post({type:"CARD_RESULT",ok:false,approved:false,error:e?.message||"Não foi possível processar o cartão."});
+    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
   } finally { busy=false; }
 }
 

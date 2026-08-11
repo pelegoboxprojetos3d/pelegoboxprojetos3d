@@ -1,0 +1,136 @@
+name: Corrigir entrega pós-cartão
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/corrigir-entrega-pos-cartao.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Esperar automação principal e sincronizar main
+        shell: bash
+        run: |
+          sleep 25
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Aplicar correções da entrega
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          page = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
+          backend = Path('src/backend/entregaProjetosProntos.jsw')
+
+          p = page.read_text(encoding='utf-8')
+          p2, n = re.subn(
+              r'(const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*)3000(\s*;)',
+              r'\g<1>4000\2',
+              p,
+              count=1
+          )
+          if n != 1:
+              raise SystemExit('Não encontrei MIN_PROCESSAMENTO_VISIVEL = 3000 na página de entrega')
+          page.write_text(p2.rstrip() + '\n', encoding='utf-8')
+
+          b = backend.read_text(encoding='utf-8')
+
+          marker = '''const DB_OPTS = {
+  suppressAuth: true
+};'''
+          if marker not in b:
+              raise SystemExit('DB_OPTS não encontrado no backend de entrega')
+          if 'const READ_OPTS' not in b:
+              b = b.replace(
+                  marker,
+                  marker + '''\n\nconst READ_OPTS = {\n  ...DB_OPTS,\n  consistentRead: true\n};''',
+                  1
+              )
+
+          b = b.replace('.find(DB_OPTS)', '.find(READ_OPTS)')
+
+          old_purchase = '''    firstMediaFromPurchases(
+      purchases,
+      "arquivoProjeto",
+      "pdfProjeto"
+    ) ||'''
+          new_purchase = '''    firstMediaFromPurchases(
+      purchases,
+      "arquivoProjeto",
+      "arquivo_projeto",
+      "pdfProjeto"
+    ) ||'''
+          if old_purchase not in b:
+              raise SystemExit('Bloco de PDF das compras não encontrado')
+          b = b.replace(old_purchase, new_purchase, 1)
+
+          old_project = '''    mediaSource(
+      project?.arquivoProjeto ||
+      project?.pdfProjeto
+    );'''
+          new_project = '''    mediaSource(
+      project?.arquivoProjeto ||
+      project?.arquivo_projeto ||
+      project?.pdfProjeto
+    );'''
+          if old_project not in b:
+              raise SystemExit('Bloco de PDF do projeto não encontrado')
+          b = b.replace(old_project, new_project, 1)
+
+          backend.write_text(b.rstrip() + '\n', encoding='utf-8')
+          PY
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção
+        shell: bash
+        run: |
+          rm -f .github/workflows/corrigir-entrega-pos-cartao.yml
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add -A
+          git commit -m "Corrige entrega pós-cartão e mantém impressora por 4s"
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 15
+
+      - name: Publicar versão salva no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

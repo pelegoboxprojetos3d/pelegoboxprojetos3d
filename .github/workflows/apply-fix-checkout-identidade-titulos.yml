@@ -1,0 +1,38 @@
+name: Aplicar correção validada de identificação e títulos
+
+on:
+  push:
+    paths:
+      - ".github/workflows/apply-fix-checkout-identidade-titulos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Aplicar correções
+        run: python scripts/fix_checkout_identidade_titulos.py
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar código
+        run: npm run lint
+      - name: Gravar correção
+        shell: bash
+        run: |
+          rm -f scripts/fix_checkout_identidade_titulos.py
+          rm -f .github/workflows/apply-fix-checkout-identidade-titulos.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Corrige identificação inicial e títulos enviados à ValidaPay'
+          git push origin HEAD:main

@@ -1462,18 +1462,11 @@ export async function buscarEntregaProjetoPronto(
     };
   }
 
-  if (!safeSession.compraRegistrada) {
-    return {
-      ok: true,
-      approved: false,
-      status: "processing",
-
-      session: {
-        checkoutId:
-          safeSession.checkoutId
-      }
-    };
-  }
+  /*
+    A aprovacao da ValidaPay e a fonte de verdade do pagamento.
+    compraRegistrada pode ficar false enquanto Make/OneDrive termina o
+    processamento, portanto esse sinal nao pode bloquear a pagina de entrega.
+  */
 
   const project =
     await findProject(session);
@@ -1532,6 +1525,33 @@ export async function buscarEntregaProjetoPronto(
         safeSession.paymentId
     });
 
+  /* Sessao aprovada libera cumulativamente a etapa paga. */
+  const currentType =
+    normalizeType(
+      safeSession.tipoProduto
+    );
+
+  const effectiveAccess = {
+    ...result.access,
+    medidas: true,
+    graficos:
+      result.access.graficos === true ||
+      currentType === "GRAFICOS" ||
+      currentType === "PROJETO_COMPLETO",
+    projeto:
+      result.access.projeto === true ||
+      currentType === "PROJETO_COMPLETO"
+  };
+
+  effectiveAccess.podeComprarMedidas =
+    !effectiveAccess.medidas;
+  effectiveAccess.podeComprarGraficos =
+    effectiveAccess.medidas &&
+    !effectiveAccess.graficos;
+  effectiveAccess.podeComprarProjeto =
+    effectiveAccess.graficos &&
+    !effectiveAccess.projeto;
+
   const projectData =
     projectPayload(
       project,
@@ -1554,11 +1574,11 @@ export async function buscarEntregaProjetoPronto(
     client,
 
     access:
-      result.access,
+      effectiveAccess,
 
     stages:
       buildStages(
-        result.access,
+        effectiveAccess,
         result.purchases,
         project
       ),

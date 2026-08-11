@@ -2199,6 +2199,28 @@ async function carregarEntrega() {
       if (
         resultado.approved
       ) {
+        /* Mostra titulo, valores e botoes assim que o pagamento aprova. */
+        if (!entrega) {
+          entrega = resultado;
+          checkoutEmAndamento = false;
+          indiceGraficoDownload = 0;
+
+          const projetoAprovado =
+            resultado.project || {};
+
+          $w(IDS.titulo).text =
+            montarTituloPagina(projetoAprovado);
+
+          salvarAcessosLocais(
+            projetoAprovado?.codigoProjeto,
+            resultado.access
+          );
+
+          await renderizarBotoes();
+          await mostrarDadosCarregados();
+          await mostrarAvisosEntrega();
+        }
+
         if (
           entregaProcessada(
             resultado

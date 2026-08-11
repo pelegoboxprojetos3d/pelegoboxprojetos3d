@@ -1467,33 +1467,18 @@ async function aplicarRegraVisualAvisosPaginaPrincipal() {
   ];
 
   /*
-    REGRA MOBILE OFICIAL:
-    mostra SOMENTE o banner da próxima etapa que falta pagar.
-
-    nenhuma compra       -> banner Medidas
-    Medidas paga         -> banner Gráficos
-    Medidas + Gráficos   -> banner Projeto Completo
-    tudo pago            -> nenhum banner
-
-    Desktop continua mostrando os três banners.
+    REGRA MOBILE OFICIAL E ÚNICA:
+    - etapa paga: esconde e recolhe o banner;
+    - etapa não paga: mostra o banner;
+    - não depende de ser a próxima etapa disponível;
+    - desktop continua mostrando os três banners.
   */
-  const proximoBannerMobile =
-    !acessos.medidas
-      ? IDS.avisoMedidas
-      : !acessos.graficos
-        ? IDS.avisoGraficos
-        : !acessos.projeto
-          ? IDS.avisoProjeto
-          : "";
-
   for (const etapa of etapas) {
     estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
 
     await alternarAvisoPaginaPrincipal(
       etapa.id,
-      mobile
-        ? etapa.id === proximoBannerMobile
-        : true
+      mobile ? !etapa.pago : true
     );
   }
 }

@@ -1,4 +1,5 @@
 import wixLocation from "wix-location";
+import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
 import { criarCliente } from "backend/clientes.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
@@ -6,6 +7,7 @@ import { criarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetos
 import { obterAcessosProjeto } from "backend/entregaProjetosProntos.jsw";
 
 const HTML_ID = "#htmlCheckoutValidaPay";
+const PROJECTS_COLLECTION = "Videosprojetos";
 const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
 const PIX_CREATE_TIMEOUT = 12000;
@@ -17,6 +19,7 @@ let ctx = {};
 let checkoutId = "";
 let customer = null;
 let htmlReady = false;
+let contextReady = false;
 let initSent = false;
 let busy = false;
 let chargeId = "";
@@ -72,9 +75,13 @@ function saveIdentity(patch) {
   ctx = { ...ctx, ...next };
 }
 
-function checkoutCode(v) {
-  const n=digits(v);
-  return n ? n.slice(-3).padStart(3,"0") : "";
+function mediaSource(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object") {
+    return safe(value.src || value.url || value.fileUrl || value.mediaUrl || value.image);
+  }
+  return "";
 }
 
 function contextFromUrl() {
@@ -82,13 +89,11 @@ function contextFromUrl() {
   const s=savedIdentity();
   const project=digits(q.codigoProjeto || q.ordemVideo || q.codigo);
   const number=phone(s.whatsappE164 || s.whatsapp);
-  const product=safe(q.titulo || q.produto || q.name || "Projeto Pronto");
+  const product=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");
   return {
     codigoProjeto:project,
-    codigoCheckout:checkoutCode(q.codigoCheckout || q.productId),
     produto:product,
     titulo:product,
-    sku:safe(q.sku) || (project ? `PP-${project}` : "PP"),
     productId:safe(q.productId),
     img:safe(q.imagem || q.img),
     imagem:safe(q.imagem || q.img),
@@ -103,8 +108,62 @@ function contextFromUrl() {
     email:email(s.email),
     cpfCnpj:cpf(s.cpfCnpj || s.cpf),
     whatsappConfirmado:s.whatsappConfirmado === true,
+    hideSku:true,
     returnUrl:safe(q.returnUrl) || (project ? `/checkoutprojetosprontos?codigo=${encodeURIComponent(project)}` : "/checkoutprojetosprontos")
   };
+}
+
+async function buscarProjetoCatalogo(codigoProjeto) {
+  const code = digits(codigoProjeto);
+  if (!code) return null;
+
+  const numeric = Number(code);
+
+  if (Number.isSafeInteger(numeric)) {
+    try {
+      const r = await wixData.query(PROJECTS_COLLECTION).eq("ordem_video", numeric).limit(1).find();
+      if (r.items.length) return r.items[0];
+    } catch (e) {
+      console.warn("Busca numérica do projeto falhou:", e?.message || e);
+    }
+  }
+
+  try {
+    const r = await wixData.query(PROJECTS_COLLECTION).eq("ordem_video", code).limit(1).find();
+    if (r.items.length) return r.items[0];
+  } catch (e) {
+    console.warn("Busca textual do projeto falhou:", e?.message || e);
+  }
+
+  try {
+    const r = await wixData.query(PROJECTS_COLLECTION).startsWith("titulo_video", `#${code}`).limit(1).find();
+    return r.items.length ? r.items[0] : null;
+  } catch (e) {
+    console.warn("Busca pelo titulo do projeto falhou:", e?.message || e);
+    return null;
+  }
+}
+
+async function completarContextoPelaColecao() {
+  const item = await buscarProjetoCatalogo(ctx.codigoProjeto);
+  if (!item) return;
+
+  const tituloReal = safe(item.titulo_video);
+  const imagemReal = mediaSource(item.thumbnail);
+
+  if (tituloReal) {
+    ctx.titulo = tituloReal;
+    ctx.produto = tituloReal;
+  }
+
+  if (imagemReal) {
+    ctx.img = imagemReal;
+    ctx.imagem = imagemReal;
+  }
+
+  if (safe(item._id)) {
+    ctx.productId = safe(item._id);
+  }
 }
 
 const BANNERS_PAGAMENTO = {
@@ -138,10 +197,9 @@ async function configurarBannersPagamento(tipoProduto) {
     REGRA OFICIAL DO /checkout-projeto-pronto, igual em desktop e mobile:
     mostrar somente banners referentes às etapas que ainda faltam pagar.
 
-    Fluxo sequencial:
-    MEDIDAS          -> mostra Medidas + Gráficos + Projeto
-    GRAFICOS         -> mostra Gráficos + Projeto
-    PROJETO_COMPLETO -> mostra somente Projeto
+    MEDIDAS          -> Medidas + Gráficos + Projeto
+    GRAFICOS         -> Gráficos + Projeto
+    PROJETO_COMPLETO -> somente Projeto
   */
   const mostrarMedidas = tipo === "MEDIDAS";
   const mostrarGraficos = tipo === "MEDIDAS" || tipo === "GRAFICOS";
@@ -165,6 +223,7 @@ function post(data) {
 }
 
 function sendInit(force=false) {
+  if (!contextReady) return;
   if (!htmlReady && !force) return;
   if (initSent && !force) return;
   initSent=true;
@@ -174,6 +233,7 @@ function sendInit(force=false) {
     checkoutId,
     autoLookup:false,
     hasWhatsappFromPreviousStep:Boolean(ctx.whatsapp),
+    hideSku:true,
     requiredFields:{name:true,email:true,cpfCnpj:true},
     ctx:{...ctx}
   });
@@ -192,8 +252,6 @@ function basePayload(data={}) {
     whatsappE164:n ? `+55${n}` : "",
     ddi:"55", country:"br",
     codigoProjeto:ctx.codigoProjeto,
-    codigoCheckout:ctx.codigoCheckout,
-    sku:ctx.sku,
     tipoProduto:ctx.tipoProduto,
     produto:ctx.produto,
     valor:ctx.valor,
@@ -201,6 +259,19 @@ function basePayload(data={}) {
     returnUrl:ctx.returnUrl,
     ctx:{...ctx}
   };
+}
+
+function avisarDadosSalvos(payload) {
+  /*
+    Compatibilidade entre versões do HTML.
+    Nenhuma destas mensagens cria cobrança.
+    Elas apenas informam que a identificação terminou e a área de pagamento
+    pode ser exibida. O PIX continua nascendo exclusivamente em CREATE_PIX.
+  */
+  post({type:"CUSTOMER_READY",...payload});
+  post({type:"DATA_SAVED",...payload});
+  post({type:"PAYMENT_READY",...payload});
+  post({type:"SHOW_PAYMENT",...payload});
 }
 
 async function saveCustomer(data={}) {
@@ -241,10 +312,11 @@ async function saveCustomer(data={}) {
       }
     } catch(_) {}
 
-    post({
-      type:"CUSTOMER_READY",ok:true,exists:true,clienteId:id,
+    avisarDadosSalvos({
+      ok:true,exists:true,clienteId:id,
       nome:ctx.nome,email:ctx.email,cpfCnpj:ctx.cpfCnpj,
-      whatsapp:ctx.whatsapp,whatsappE164:ctx.whatsappE164
+      whatsapp:ctx.whatsapp,whatsappE164:ctx.whatsappE164,
+      autoPayment:false
     });
   } catch(e) {
     console.error("saveCustomer:",e?.message||e);
@@ -365,5 +437,13 @@ $w.onReady(function(){
     if(["CLOSE","BACK","CANCEL","ACCESS_ACK"].includes(type)){back();return;}
   });
 
-  setTimeout(()=>{if(!initSent){htmlReady=true;sendInit(true)}},350);
+  completarContextoPelaColecao()
+    .catch(error => {
+      console.error("Falha ao carregar titulo real da coleção:", error?.message || error);
+    })
+    .finally(() => {
+      contextReady=true;
+      htmlReady=true;
+      sendInit(true);
+    });
 });

@@ -190,10 +190,14 @@ button{cursor:pointer}
   .visualNumber{font-size:14px}
   .cardFields{grid-template-columns:1fr 1fr}.cardFull,.cardWide{grid-column:1/-1}
 }
+.checkoutBoot{min-height:72px;display:flex;align-items:center;justify-content:center;padding:12px;color:#555;font:600 12px Arial,Helvetica,sans-serif;text-align:center}
+.checkoutBootDot{width:18px;height:18px;margin-right:9px;border:3px solid #dfeee4;border-top-color:#159447;border-radius:50%;animation:checkoutBootSpin .65s linear infinite}
+@keyframes checkoutBootSpin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<main class="wrap">
+<div id="checkoutBoot" class="checkoutBoot"><span class="checkoutBootDot"></span><span>Carregando checkout...</span></div>
+<main id="checkoutMain" class="wrap" style="display:none">
   <div class="stepper">
     <div class="step active" id="step1"><span class="stepNo">1</span><span>Identificação</span></div>
     <div class="sep"></div>
@@ -432,20 +436,22 @@ var CURRENT_LAYOUT_MODE="INITIAL";
 var HEIGHT_TIMER=null;
 
 function checkoutRealHeight(){
-  /*
-    Mede o conteúdo real, não a altura atual do iframe.
-    scrollHeight/offsetHeight do html/body ficam presos na altura maior
-    depois que o iframe cresce e por isso impediam a retração.
-  */
   var wrap=document.querySelector(".wrap");
   var body=document.body;
 
   if(wrap){
     var rect=wrap.getBoundingClientRect();
-    var styles=body ? window.getComputedStyle(body) : null;
-    var paddingTop=styles ? (parseFloat(styles.paddingTop)||0) : 0;
-    var paddingBottom=styles ? (parseFloat(styles.paddingBottom)||0) : 0;
-    return Math.ceil(rect.height + paddingTop + paddingBottom);
+    if(rect.height>0){
+      var styles=body ? window.getComputedStyle(body) : null;
+      var paddingTop=styles ? (parseFloat(styles.paddingTop)||0) : 0;
+      var paddingBottom=styles ? (parseFloat(styles.paddingBottom)||0) : 0;
+      return Math.ceil(rect.height + paddingTop + paddingBottom);
+    }
+  }
+
+  var boot=document.getElementById("checkoutBoot");
+  if(boot && !boot.classList.contains("hidden")){
+    return Math.ceil(boot.getBoundingClientRect().height + 12);
   }
 
   return Math.ceil(document.documentElement.scrollHeight || 0);
@@ -720,7 +726,7 @@ E.cardDocument.addEventListener("input",function(){this.value=digits(this.value)
 
 window.addEventListener("message",function(event){
  var d=incoming(event.data),type=safe(d.type||d.tipo||d.action).toUpperCase();if(!type)return;
- if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
+ if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$("checkoutBoot"),main=$("checkoutMain");if(boot)boot.classList.add("hidden");if(main)main.style.display="block";document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
  if(["CUSTOMER_READY","DATA_SAVED","PAYMENT_READY","SHOW_PAYMENT"].indexOf(type)>=0){
    if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.");return}
    if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);showPayment();return
@@ -762,7 +768,7 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML31_LAUNCH_READY"});
+post({type:"READY",version:"HTML32_TIGHT_MOBILE"});
 })();
 </script>
 </body>
@@ -783,20 +789,13 @@ class PelegoCheckoutPronto extends HTMLElement {
     this.style.display = "block";
     // O Wix pode publicar o slot do Custom Element com largura intrínseca estreita.
     // No site publicado, usamos a viewport real para o checkout não cair no CSS mobile no desktop.
-    /*
-      Desktop volta ao comportamento que já estava aprovado.
-      No mobile, o Wix pode manter um slot estreito: expandimos o checkout
-      até quase toda a viewport e compensamos metade da diferença para
-      continuar centralizado no mesmo eixo do elemento desenhado no Editor.
-    */
+    /* Desktop largo; mobile limitado e centralizado. */
     if (window.innerWidth <= 680) {
-      const slotWidth = this.getBoundingClientRect().width || this.offsetWidth || 0;
-      const targetWidth = Math.max(280, window.innerWidth - 8);
+      const slotWidth = this.getBoundingClientRect().width || this.offsetWidth || 300;
+      const targetWidth = Math.min(320, Math.max(290, window.innerWidth - 36));
       this.style.width = `${targetWidth}px`;
       this.style.maxWidth = `${targetWidth}px`;
-      this.style.marginLeft = slotWidth > 0
-        ? `${Math.round((slotWidth - targetWidth) / 2)}px`
-        : "0";
+      this.style.marginLeft = `${Math.round((slotWidth - targetWidth) / 2)}px`;
     } else {
       this.style.width = "min(1000px, calc(100vw - 24px))";
       this.style.maxWidth = "1000px";
@@ -807,7 +806,7 @@ class PelegoCheckoutPronto extends HTMLElement {
     this.style.boxSizing = "border-box";
     this.style.overflow = "hidden";
     this.style.background = "transparent";
-    this.style.transition = "height 160ms ease";
+    this.style.transition = "none";
     const frame = document.createElement("iframe");
     frame.title = "Checkout Pelego Box";
     frame.setAttribute("scrolling", "no");
@@ -871,7 +870,14 @@ class PelegoCheckoutPronto extends HTMLElement {
     const height = Math.max(180, Math.min(2300, requested + 2));
     const css = `${height}px`;
     this.style.height = css;
+    this.style.minHeight = css;
+    this.style.maxHeight = css;
     if (this._frame) this._frame.style.height = css;
+    requestAnimationFrame(() => {
+      this.style.height = css;
+      this.style.minHeight = css;
+      this.style.maxHeight = css;
+    });
     this.dispatchEvent(new CustomEvent("checkout-height-change", { detail: { height }, bubbles: true, composed: true }));
   }
   _onWindowMessage(event) {

@@ -1235,36 +1235,13 @@ function tituloBaseProjeto(
 }
 
 
-function montarTituloPagina(
-  projeto,
-  sessao
-) {
-  const codigo =
-    digits(
-      projeto?.codigoProjeto
-    );
-
-  const tituloBase =
-    tituloBaseProjeto(
-      firstValue(
-        projeto?.titulo,
-        sessao?.produto
-      )
-    );
-
-  const prefixo =
-    codigo
-      ? `#${codigo}`
-      : "";
-
-  return (
-    [prefixo, tituloBase]
-      .filter(Boolean)
-      .join(" ") ||
-    "PROJETO PRONTO"
-  );
+function montarTituloPagina(projeto) {
+  /*
+    O título da página de entrega vem diretamente da coluna titulo.
+    Não acrescenta código, não remove prefixo e não altera maiúsculas/minúsculas.
+  */
+  return safe(projeto?.titulo);
 }
-
 
 function montarTituloCheckout(
   tipo,
@@ -2236,15 +2213,11 @@ async function renderizarEntrega(
   const projeto =
     dados.project;
 
-  const sessao =
-    dados.session;
-
   $w(
     IDS.titulo
   ).text =
     montarTituloPagina(
-      projeto,
-      sessao
+      projeto
     );
 
   salvarAcessosLocais(

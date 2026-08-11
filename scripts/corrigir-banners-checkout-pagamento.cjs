@@ -101,3 +101,5 @@ custom = custom
 
 fs.writeFileSync(customPath, custom);
 console.log("Checkout ajustado: mobile limitado e centralizado, flash inicial eliminado, retração instantânea, ordem Pix/Cartão preservada e trava do cartão mantida.");
+
+require("./fix-entrega-graficos-1a4.cjs");

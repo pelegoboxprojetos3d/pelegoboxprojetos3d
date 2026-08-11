@@ -25,6 +25,7 @@ let bridgeSeq = 0;
 let contextReady = false;
 let initSent = false;
 let busy = false;
+let cardRequestBusy = false;
 let chargeId = "";
 let pollTimer = null;
 let polling = false;
@@ -484,8 +485,11 @@ function cardWasAccepted(result={}) {
 }
 
 async function createCard(data={}) {
-  if(busy) return post({type:"CARD_RESULT",ok:false,error:"Já existe um pagamento em processamento."});
-  busy=true;
+  // O formulário interno já bloqueia duplo clique. Se a ponte repetir o evento,
+  // ignoramos a cópia silenciosamente em vez de exibir um erro falso.
+  if(cardRequestBusy) return;
+  if(polling) return post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:"Existe um Pix aguardando pagamento nesta tentativa. Volte e gere um novo checkout para pagar com cartão."});
+  cardRequestBusy=true;
   stopCardPoll();
   post({type:"CARD_LOADING",checkoutId,message:"Processando cartão com segurança..."});
   try {
@@ -510,7 +514,7 @@ async function createCard(data={}) {
     }
   } catch(e) {
     post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
-  } finally { busy=false; }
+  } finally { cardRequestBusy=false; }
 }
 
 function back() {

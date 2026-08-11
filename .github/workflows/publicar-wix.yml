@@ -62,7 +62,8 @@ jobs:
             git add \
               "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
               "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" \
-              "src/pages/checkout-projeto-pronto.i9aj1.js"
+              "src/pages/checkout-projeto-pronto.i9aj1.js" \
+              "src/public/custom-elements/pelego-checkout-pronto.js"
             git commit -m "Automação: aplicar manutenção de checkout e entrega"
             git push origin HEAD:main
           fi

@@ -3,11 +3,12 @@ import wixLocation from "wix-location";
 
 // TÍTULO NO WIX: Videos dos projetos prontos
 //
-// R7
+// R8
 //
 // BOTÃO VERDE:
 // projeto feito do zero -> /checkout-mp
-// SKU recebido da coluna codigo_checkout.
+// envia somente o título real da coleção + preço.
+// NÃO depende de SKU nem de codigo_checkout.
 //
 // BOTÃO ROXO:
 // projeto pronto -> /checkoutprojetosprontos
@@ -83,26 +84,6 @@ function cleanTitle(value) {
     .trim();
 }
 
-function mediaUrl(value) {
-  if (!value) {
-    return "";
-  }
-
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (typeof value === "object") {
-    return safe(
-      value.src ||
-      value.url ||
-      value.fileUrl
-    );
-  }
-
-  return "";
-}
-
 function projectCode(itemData) {
   const direct = onlyDigits(
     itemData?.ordem_video ||
@@ -125,55 +106,6 @@ function projectCode(itemData) {
   return match
     ? match[1]
     : "";
-}
-
-/*
-  SKU usado somente quando o botão verde abre
-  o checkout de projeto feito do zero.
-
-  A origem correta é a coluna codigo_checkout
-  da coleção Videosprojetos.
-
-  Exemplos:
-  codigo_checkout = "003" -> SKU "003"
-  codigo_checkout = 3     -> SKU "003"
-  codigo_checkout = "014" -> SKU "014"
-
-  Não existe mais fallback PRJ01804.
-*/
-function zeroProjectSku(itemData) {
-  const rawValue =
-    itemData?.codigo_checkout ??
-    itemData?.codigoCheckout ??
-    "";
-
-  const value = safe(rawValue);
-
-  if (!value) {
-    return "";
-  }
-
-  const digits = onlyDigits(value);
-
-  /*
-    Para os códigos de questionário:
-    001 até 014.
-  */
-  if (
-    digits &&
-    digits.length <= 3
-  ) {
-    return digits.padStart(
-      3,
-      "0"
-    );
-  }
-
-  /*
-    Caso futuramente a coluna receba outro
-    formato de texto, preservamos o conteúdo.
-  */
-  return value;
 }
 
 function totalProjectValue(itemData) {
@@ -204,49 +136,55 @@ function buildZeroCheckoutUrl({
   title,
   code
 }) {
-  const sku =
-    zeroProjectSku(itemData);
-
   /*
-    Sem codigo_checkout não abrimos o checkout.
-    Melhor bloquear o botão do que inventar SKU.
+    O checkout de Projetos Feitos do Zero é padrão e não é
+    alterado aqui. Apenas montamos a URL de entrada.
+
+    O título vem DIRETAMENTE de titulo_video, sem remover o
+    código do questionário que já está incorporado ao final.
+
+    Não enviamos SKU e não usamos codigo_checkout.
   */
-  if (!sku) {
+  const checkoutTitle = decodeTitle(
+    itemData?.titulo_video || title
+  );
+
+  const price = totalProjectValue(
+    itemData
+  );
+
+  if (!checkoutTitle) {
     console.error(
-      "codigo_checkout não informado para o projeto:",
+      "titulo_video não informado para o checkout de projeto feito do zero:",
       {
         projeto: code,
-        itemId: safe(itemData?._id),
-        titulo: title
+        itemId: safe(itemData?._id)
       }
     );
 
     return "";
   }
 
-  const image = mediaUrl(
-    itemData?.thumbnail ||
-    itemData?.imagem ||
-    itemData?.image
-  );
+  if (!(price > 0)) {
+    console.error(
+      "Preço inválido para o checkout de projeto feito do zero:",
+      {
+        projeto: code,
+        itemId: safe(itemData?._id),
+        titulo: checkoutTitle,
+        price
+      }
+    );
 
-  const price =
-    totalProjectValue(itemData);
+    return "";
+  }
 
-  const returnUrl =
-    wixLocation.url;
+  const returnUrl = wixLocation.url;
 
   return (
     "/checkout-mp" +
-    `?name=${encodeURIComponent(title)}` +
-    `&produto=${encodeURIComponent(title)}` +
-    `&sku=${encodeURIComponent(sku)}` +
-    `&codigoCheckout=${encodeURIComponent(sku)}` +
-    `&productId=${encodeURIComponent(safe(itemData?._id))}` +
-    `&img=${encodeURIComponent(image)}` +
+    `?name=${encodeURIComponent(checkoutTitle)}` +
     `&price=${encodeURIComponent(String(price))}` +
-    `&valor=${encodeURIComponent(String(price))}` +
-    `&codigoProjeto=${encodeURIComponent(code)}` +
     `&returnUrl=${encodeURIComponent(returnUrl)}`
   );
 }
@@ -357,7 +295,9 @@ function configureRepeater() {
       // BOTÃO VERDE — PROJETO FEITO DO ZERO
       // ID: #btnOrcamento
       //
-      // SKU = codigo_checkout
+      // título = titulo_video completo da coleção
+      // preço = soma dos valores configurados
+      // sem SKU / sem codigo_checkout
       // ========================================
 
       const zeroCheckoutUrl =
@@ -378,14 +318,8 @@ function configureRepeater() {
         $item("#btnOrcamento").target =
           "_self";
       } else {
-        /*
-          Não existe codigo_checkout.
-          Bloqueia para não enviar dado falso.
-        */
         $item("#btnOrcamento").disable();
-
-        $item("#btnOrcamento").link =
-          "";
+        $item("#btnOrcamento").link = "";
       }
 
       // ========================================

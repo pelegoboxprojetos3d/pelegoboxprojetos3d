@@ -1,5 +1,6 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
+import wixWindowFrontend from "wix-window-frontend";
 import { local, session } from "wix-storage-frontend";
 import { criarCliente } from "backend/clientes.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
@@ -7,6 +8,8 @@ import { criarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetos
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
 
 const HTML_ID = "#htmlCheckoutValidaPay";
+const ESPACO_PIX_ID = "#espacoCheckoutPix";
+const ESPACO_CARTAO_ID = "#espacoCheckoutCartao";
 const PROJECTS_COLLECTION = "Videosprojetos";
 const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
@@ -205,6 +208,53 @@ async function configurarBannersPagamento(tipoProduto) {
     alternarBannerPagamento(BANNERS_PAGAMENTO.graficos, mostrarGraficos),
     alternarBannerPagamento(BANNERS_PAGAMENTO.projeto, mostrarProjeto),
     alternarBannerPagamento(BANNERS_PAGAMENTO.importante, true)
+  ]);
+}
+
+async function alternarEspacoCheckout(id, expandir) {
+  try {
+    const elemento = $w(id);
+    if (expandir) {
+      if (typeof elemento.expand === "function") await elemento.expand();
+      return;
+    }
+    if (typeof elemento.collapse === "function") await elemento.collapse();
+  } catch (error) {
+    console.warn(`Falha ao alternar espaço do checkout ${id}:`, error?.message || error);
+  }
+}
+
+async function configurarEspacoCheckout(mode) {
+  const desktop = wixWindowFrontend.formFactor === "Desktop";
+  const estado = safe(mode || "COMPACT").toUpperCase();
+
+  if (!desktop) {
+    await Promise.allSettled([
+      alternarEspacoCheckout(ESPACO_PIX_ID, false),
+      alternarEspacoCheckout(ESPACO_CARTAO_ID, false)
+    ]);
+    return;
+  }
+
+  if (estado === "CARD") {
+    await Promise.allSettled([
+      alternarEspacoCheckout(ESPACO_PIX_ID, true),
+      alternarEspacoCheckout(ESPACO_CARTAO_ID, true)
+    ]);
+    return;
+  }
+
+  if (estado === "PIX") {
+    await Promise.allSettled([
+      alternarEspacoCheckout(ESPACO_PIX_ID, true),
+      alternarEspacoCheckout(ESPACO_CARTAO_ID, false)
+    ]);
+    return;
+  }
+
+  await Promise.allSettled([
+    alternarEspacoCheckout(ESPACO_PIX_ID, false),
+    alternarEspacoCheckout(ESPACO_CARTAO_ID, false)
   ]);
 }
 
@@ -492,6 +542,10 @@ $w.onReady(function(){
   checkoutId=safe(wixLocation.query?.checkoutId) || `ckpro_${Date.now().toString(36)}_${Math.random().toString(16).slice(2,10)}`;
   ctx=contextFromUrl();
 
+  configurarEspacoCheckout("COMPACT").catch(error => {
+    console.error("Falha ao iniciar espaços dinâmicos do checkout:", error?.message || error);
+  });
+
   configurarBannersPagamento(ctx.tipoProduto).catch(error => {
     console.error("Falha ao configurar banners do checkout de pagamento:", error?.message || error);
   });
@@ -506,6 +560,7 @@ $w.onReady(function(){
     const type=safe(data.type || data.tipo || data.action).toUpperCase();
 
     if(type==="READY"){htmlReady=true;sendInit();return;}
+    if(type==="CHECKOUT_LAYOUT"){configurarEspacoCheckout(data.mode).catch(console.error);return;}
     if(type==="SAVE_CUSTOMER" || type==="CREATE_CUSTOMER"){saveCustomer(data).catch(console.error);return;}
     if(type==="CREATE_PIX" || type==="SUBMIT_PRO"){createPix(data).catch(console.error);return;}
     if(type==="CREATE_CARD"){createCard(data).catch(console.error);return;}

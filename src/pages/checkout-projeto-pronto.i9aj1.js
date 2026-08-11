@@ -3,8 +3,8 @@ import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
 import { criarCliente } from "backend/clientes.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
-import { criarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntos.jsw";
-import { obterAcessosProjeto } from "backend/entregaProjetosProntos.jsw";
+import { criarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
+import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
 
 const HTML_ID = "#htmlCheckoutValidaPay";
 const PROJECTS_COLLECTION = "Videosprojetos";
@@ -14,6 +14,8 @@ const PIX_CREATE_TIMEOUT = 12000;
 const PIX_READ_TIMEOUT = 3500;
 const PIX_INTERVAL = 2000;
 const PIX_MAX = 300;
+const CARD_DELIVERY_INTERVAL = 1500;
+const CARD_DELIVERY_MAX = 80;
 
 let ctx = {};
 let checkoutId = "";
@@ -25,6 +27,8 @@ let busy = false;
 let chargeId = "";
 let pollTimer = null;
 let polling = false;
+let cardPollTimer = null;
+let cardPolling = false;
 
 const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
@@ -192,15 +196,6 @@ async function alternarBannerPagamento(id, mostrar) {
 
 async function configurarBannersPagamento(tipoProduto) {
   const tipo = safe(tipoProduto || "MEDIDAS").toUpperCase();
-
-  /*
-    REGRA OFICIAL DO /checkout-projeto-pronto, igual em desktop e mobile:
-    mostrar somente banners referentes às etapas que ainda faltam pagar.
-
-    MEDIDAS          -> Medidas + Gráficos + Projeto
-    GRAFICOS         -> Gráficos + Projeto
-    PROJETO_COMPLETO -> somente Projeto
-  */
   const mostrarMedidas = tipo === "MEDIDAS";
   const mostrarGraficos = tipo === "MEDIDAS" || tipo === "GRAFICOS";
   const mostrarProjeto = ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(tipo);
@@ -262,12 +257,6 @@ function basePayload(data={}) {
 }
 
 function avisarDadosSalvos(payload) {
-  /*
-    Compatibilidade entre versões do HTML.
-    Nenhuma destas mensagens cria cobrança.
-    Elas apenas informam que a identificação terminou e a área de pagamento
-    pode ser exibida. O PIX continua nascendo exclusivamente em CREATE_PIX.
-  */
   post({type:"CUSTOMER_READY",...payload});
   post({type:"DATA_SAVED",...payload});
   post({type:"PAYMENT_READY",...payload});
@@ -330,6 +319,58 @@ function stopPoll() {
   pollTimer=null;
 }
 
+function stopCardPoll() {
+  cardPolling=false;
+  if(cardPollTimer) clearTimeout(cardPollTimer);
+  cardPollTimer=null;
+}
+
+async function pollCardDelivery(n=1) {
+  if(!cardPolling) return;
+
+  try {
+    const result=await waitTimeout(
+      buscarEntregaProjetoPronto({checkoutId}),
+      4000,
+      ""
+    );
+
+    if(result?.approved===true) {
+      stopCardPoll();
+      post({
+        type:"CARD_RESULT",
+        ok:true,
+        accepted:true,
+        approved:true,
+        processing:false,
+        checkoutId,
+        deliveryUrl:deliveryUrl()
+      });
+      setTimeout(()=>wixLocation.to(deliveryUrl()),600);
+      return;
+    }
+  } catch(_) {}
+
+  if(n>=CARD_DELIVERY_MAX) {
+    stopCardPoll();
+    post({
+      type:"CARD_RESULT",
+      ok:true,
+      accepted:true,
+      approved:false,
+      processing:true,
+      checkoutId,
+      error:"Pagamento recebido. A entrega ainda está sendo finalizada."
+    });
+    return;
+  }
+
+  cardPollTimer=setTimeout(
+    ()=>pollCardDelivery(n+1).catch(console.error),
+    CARD_DELIVERY_INTERVAL
+  );
+}
+
 async function pollPix(n=1) {
   if(!polling) return;
   try {
@@ -387,28 +428,63 @@ function cardWasAccepted(result={}) {
 async function createCard(data={}) {
   if(busy) return post({type:"CARD_RESULT",ok:false,error:"Já existe um pagamento em processamento."});
   busy=true;
+  stopCardPoll();
   post({type:"CARD_LOADING",checkoutId,message:"Processando cartão com segurança..."});
+
   try {
     const r=await waitTimeout(criarCobrancaCartaoTransparente({
-      ...basePayload(data), card:data.card||{}, installments:Number(data.installments||1),
+      ...basePayload(data),
+      card:data.card||{},
+      installments:Number(data.installments||1),
       cardDocument:digits(data.cardDocument || ctx.cpfCnpj)
-    }),15000,"A operadora demorou para responder. Aguarde antes de tentar novamente.");
+    }),25000,"A operadora demorou para responder. Aguarde antes de tentar novamente.");
 
     const accepted=cardWasAccepted(r);
-    post({type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:r?.approved===true,processing:accepted && r?.approved!==true,
-      checkoutId,chargeId:safe(r?.chargeId),status:safe(r?.status),cardBrand:safe(r?.cardBrand),
-      cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),error:accepted?"":(r?.error||"")});
+    const readyToDeliver=
+      r?.approved===true &&
+      r?.compraRegistrada===true;
 
-    if(accepted) {
-      setTimeout(()=>wixLocation.to(deliveryUrl()),900);
+    post({
+      type:"CARD_RESULT",
+      ok:accepted || r?.ok===true,
+      accepted,
+      approved:readyToDeliver,
+      paymentApproved:r?.approved===true,
+      processing:accepted && !readyToDeliver,
+      checkoutId,
+      chargeId:safe(r?.chargeId),
+      status:safe(r?.status),
+      cardBrand:safe(r?.cardBrand),
+      cardLastFour:safe(r?.cardLastFour),
+      deliveryUrl:deliveryUrl(),
+      error:accepted ? (readyToDeliver ? "" : "Pagamento recebido. Finalizando sua entrega e os e-mails...") : (r?.error||"")
+    });
+
+    if(readyToDeliver) {
+      setTimeout(()=>wixLocation.to(deliveryUrl()),600);
+      return;
+    }
+
+    if(accepted || r?.approved===true) {
+      cardPolling=true;
+      pollCardDelivery(1).catch(console.error);
     }
   } catch(e) {
-    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
-  } finally { busy=false; }
+    post({
+      type:"CARD_RESULT",
+      ok:false,
+      approved:false,
+      accepted:false,
+      error:e?.message||"Não foi possível processar o cartão."
+    });
+  } finally {
+    busy=false;
+  }
 }
 
 function back() {
   stopPoll();
+  stopCardPoll();
   wixLocation.to(ctx.returnUrl || "/checkoutprojetosprontos");
 }
 

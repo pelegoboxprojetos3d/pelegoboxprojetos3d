@@ -23,7 +23,8 @@ jobs:
 
       - name: Validar sintaxe
         run: |
-          node --check src/backend/validaPayCartaoProjetosProntos.jsw
+          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
+          node --check /tmp/validaPayCartaoProjetosProntos.mjs
           node --check src/pages/checkout-projeto-pronto.i9aj1.js
 
       - name: Gravar correcao
@@ -38,4 +39,4 @@ jobs:
           git commit -m "Corrigir confirmacao e saida do cartao"
           git push origin HEAD:main
 
-# gatilho one-shot 2026-08-11 20:12
+# gatilho one-shot 2026-08-11 20:13

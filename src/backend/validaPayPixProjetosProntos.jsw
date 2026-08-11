@@ -1,23 +1,23 @@
 import {
-  criarCobrancaPixTransparente as criarPixRapido,
-  consultarCobrancaPix as consultarPixRapido
-} from "backend/validaPayPixProjetosProntosRapido.jsw";
+  criarCobrancaPixTransparente as criarPixCore,
+  consultarCobrancaPix as consultarPixCore
+} from "backend/validaPayPixProjetosProntosCore.jsw";
 
 /*
-  Fachada oficial do PIX de Projetos Prontos.
-  Mantém o nome/import já usado pelas páginas, mas delega para o fluxo rápido.
+  Fachada oficial do Pix de Projetos Prontos.
+  Mantém o nome importado pelas páginas e delega ao core atual.
 
-  Regras atuais:
-  - não cria produto ValidaPay no caminho crítico;
+  O core ativo:
   - não depende de SKU;
-  - codigo_checkout não é obrigatório para gerar Pix;
-  - título é preservado/decodificado pelo backend rápido;
-  - checkoutId continua garantindo recuperação/idempotência da tentativa.
+  - não usa codigo_checkout;
+  - não cria produto ValidaPay antes da cobrança;
+  - preserva checkoutId para recuperar a mesma tentativa;
+  - mantém sessão, consulta e notificações após aprovação.
 */
 export async function criarCobrancaPixTransparente(input = {}) {
-  return criarPixRapido(input);
+  return criarPixCore(input);
 }
 
 export async function consultarCobrancaPix(input = {}) {
-  return consultarPixRapido(input);
+  return consultarPixCore(input);
 }

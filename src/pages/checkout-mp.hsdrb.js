@@ -8,6 +8,17 @@ function safeStr(v){
   return String(v ?? "");
 }
 
+function truthyFlag(v){
+  const value = safeStr(v).trim().toLowerCase();
+
+  return (
+    value === "1" ||
+    value === "true" ||
+    value === "sim" ||
+    value === "yes"
+  );
+}
+
 function mkCheckoutId(){
   return "ck_" +
   Date.now().toString(36) +
@@ -22,8 +33,15 @@ function buildCtxFromQuery(){
   const produto =
   safeStr(q.name || q.produto || "Produto");
 
-  const sku =
-  safeStr(q.sku || "-");
+  /*
+    hideSku só é enviado pelo botão COMPRAR PROJETO FEITO DO ZERO.
+    Sem essa flag, o comportamento antigo do checkout permanece igual.
+  */
+  const hideSku = truthyFlag(q.hideSku);
+
+  const sku = hideSku
+  ? ""
+  : safeStr(q.sku || "-");
 
   const productId =
   safeStr(q.productId || "");
@@ -42,6 +60,8 @@ function buildCtxFromQuery(){
   return {
     produto,
     sku,
+    hideSku,
+    source: safeStr(q.source || ""),
     productId,
     img,
     valor,

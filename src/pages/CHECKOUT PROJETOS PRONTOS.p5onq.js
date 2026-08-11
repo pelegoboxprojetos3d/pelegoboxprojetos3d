@@ -1466,19 +1466,34 @@ async function aplicarRegraVisualAvisosPaginaPrincipal() {
     { id: IDS.avisoProjeto, pago: acessos.projeto === true }
   ];
 
+  /*
+    REGRA MOBILE OFICIAL:
+    mostra SOMENTE o banner da próxima etapa que falta pagar.
+
+    nenhuma compra       -> banner Medidas
+    Medidas paga         -> banner Gráficos
+    Medidas + Gráficos   -> banner Projeto Completo
+    tudo pago            -> nenhum banner
+
+    Desktop continua mostrando os três banners.
+  */
+  const proximoBannerMobile =
+    !acessos.medidas
+      ? IDS.avisoMedidas
+      : !acessos.graficos
+        ? IDS.avisoGraficos
+        : !acessos.projeto
+          ? IDS.avisoProjeto
+          : "";
+
   for (const etapa of etapas) {
     estilizarAvisoPaginaPrincipal(etapa.id, etapa.pago);
 
-    /*
-      REGRA DA PÁGINA /checkoutprojetosprontos:
-      - Desktop: os três banners aparecem sempre.
-      - Desktop: pago recebe borda verde; a sombra configurada no Editor é preservada.
-      - Mobile: o banner referente à etapa paga some e recolhe o espaço.
-      - Estado vem de acessos + IDs dos banners, nunca de sessão visual.
-    */
     await alternarAvisoPaginaPrincipal(
       etapa.id,
-      mobile ? !etapa.pago : true
+      mobile
+        ? etapa.id === proximoBannerMobile
+        : true
     );
   }
 }
@@ -2366,6 +2381,27 @@ async function iniciarPagina() {
         });
 
         await mostrarValoresEAcessos();
+
+        /*
+          No celular, o cache serve apenas para pintar a tela rápido.
+          Logo depois confirmamos os acessos no backend. Assim uma compra
+          recente não deixa banner antigo preso no navegador.
+        */
+        if (
+          wixWindowFrontend.formFactor === "Mobile"
+        ) {
+          identificarCliente(
+            salva
+          ).catch(
+            (error) => {
+              console.error(
+                "Erro ao revalidar acessos mobile:",
+                error?.message || error
+              );
+            }
+          );
+        }
+
         return;
       }
 

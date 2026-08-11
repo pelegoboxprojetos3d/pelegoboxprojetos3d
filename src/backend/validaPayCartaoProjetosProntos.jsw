@@ -1,0 +1,210 @@
+import wixData from "wix-data";
+import { fetch } from "wix-fetch";
+import { getSecret } from "wix-secrets-backend";
+import { formatarCodigoCheckout, tituloProdutoComCodigoCheckout } from "backend/projetosProntosNormalizacao";
+
+// R2 — CARTÃO TRANSPARENTE VALIDAPAY
+// Não grava número do cartão nem CVV em coleção, storage ou retorno.
+
+const AUTH_URL="https://oauth2.validapay.com.br/auth/token";
+const API_BASE="https://api.validapay.com.br";
+const SESSIONS="SessoesProjetosProntos2";
+const DB={suppressAuth:true};
+let cachedToken="";
+let tokenExpiresAt=0;
+
+const safe=v=>String(v??"").trim();
+const digits=v=>safe(v).replace(/\D/g,"");
+
+function money(v){
+  if(typeof v==="number") return Number.isFinite(v)?Number(v.toFixed(2)):0;
+  let t=safe(v).replace(/[^\d,.-]/g,"");
+  if(t.includes(",")&&t.includes(".")) t=t.replace(/\./g,"").replace(",",".");
+  else if(t.includes(",")) t=t.replace(",",".");
+  const n=Number(t); return Number.isFinite(n)?Number(n.toFixed(2)):0;
+}
+
+function phone(v){
+  let n=digits(v);
+  if(n.startsWith("55")&&(n.length===12||n.length===13)) n=n.slice(2);
+  return n.length===10||n.length===11?`+55${n}`:"";
+}
+
+function type(v){
+  const t=safe(v).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[\s-]+/g,"_");
+  return ["MEDIDAS","GRAFICOS","PROJETO_COMPLETO"].includes(t)?t:"MEDIDAS";
+}
+
+function luhn(v){
+  const n=digits(v); if(n.length<13||n.length>19)return false;
+  let sum=0,alt=false;
+  for(let i=n.length-1;i>=0;i--){
+    let d=Number(n[i]); if(alt){d*=2;if(d>9)d-=9} sum+=d; alt=!alt;
+  }
+  return sum%10===0;
+}
+
+function brand(v){
+  const n=digits(v);
+  if(/^(4011|4312|4389|4514|4576|5041|5066|5067|509|6277|6362|6363)/.test(n))return"ELO";
+  if(/^(34|37)/.test(n))return"AMEX";
+  if(/^(5[1-5]|2[2-7])/.test(n))return"MASTERCARD";
+  if(/^4/.test(n))return"VISA";
+  return"CARD";
+}
+
+async function json(response){
+  const text=await response.text();
+  if(!text)return{};
+  try{return JSON.parse(text)}catch(_){return{raw:text}}
+}
+
+function message(data,status){
+  return safe(data?.error?.message||data?.error_description||data?.message||
+    (typeof data?.error==="string"?data.error:"")||data?.code||data?.raw)||
+    `ValidaPay respondeu HTTP ${status}.`;
+}
+
+async function token(force=false){
+  if(!force&&cachedToken&&Date.now()<tokenExpiresAt-60000)return cachedToken;
+  const id=safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+  const secret=safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+  if(!id||!secret)throw new Error("Credenciais da ValidaPay não encontradas.");
+
+  const body=[
+    "grant_type=client_credentials",
+    `client_id=${encodeURIComponent(id)}`,
+    `client_secret=${encodeURIComponent(secret)}`,
+    `scope=${encodeURIComponent("checkouts/write")}`
+  ].join("&");
+
+  const response=await fetch(AUTH_URL,{
+    method:"post",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body
+  });
+  const data=await json(response);
+  if(!response.ok||!safe(data?.access_token))throw new Error(message(data,response.status));
+  cachedToken=safe(data.access_token);
+  tokenExpiresAt=Date.now()+Math.max(120,Number(data?.expires_in||300))*1000;
+  return cachedToken;
+}
+
+async function api(path,body){
+  for(let attempt=1;attempt<=2;attempt++){
+    const access=await token(attempt>1);
+    const response=await fetch(`${API_BASE}${path}`,{
+      method:"post",
+      headers:{Authorization:`Bearer ${access}`,"Content-Type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    const data=await json(response);
+    if(response.ok)return{ok:true,statusCode:response.status,data};
+    if(attempt===1&&[401,403].includes(Number(response.status))){
+      cachedToken="";tokenExpiresAt=0;continue;
+    }
+    return{ok:false,statusCode:response.status,data,error:message(data,response.status)};
+  }
+  return{ok:false,statusCode:0,data:{},error:"Falha ao consultar a ValidaPay."};
+}
+
+async function findSession(checkoutId){
+  const r=await wixData.query(SESSIONS).eq("checkoutId",safe(checkoutId)).limit(1).find({...DB,consistentRead:true});
+  return r.items[0]||null;
+}
+
+async function saveSession(checkoutId,patch){
+  const current=await findSession(checkoutId);
+  const item={...(current||{}),...(patch||{}),checkoutId:safe(checkoutId)};
+  delete item.whatsApp;
+  delete item.whatsappE164;
+  return current?wixData.update(SESSIONS,item,DB):wixData.insert(SESSIONS,item,DB);
+}
+
+export async function criarCobrancaCartaoTransparente(input={}){
+  const card=input.card||{};
+  const number=digits(card.number);
+  const cvv=digits(card.cvv);
+  const month=digits(card.month).padStart(2,"0").slice(-2);
+  let year=digits(card.year); if(year.length===2)year=`20${year}`;
+  const holder=safe(card.name).replace(/\s+/g," ").toUpperCase();
+
+  try{
+    const ctx=input.ctx||{};
+    const checkoutId=safe(input.checkoutId);
+    const codigoProjeto=digits(input.codigoProjeto||ctx.codigoProjeto);
+    const codigoCheckout=formatarCodigoCheckout(input.codigoCheckout||ctx.codigoCheckout);
+    const tipoProduto=type(input.tipoProduto||ctx.tipoProduto);
+    const produto=tituloProdutoComCodigoCheckout(input.produto||ctx.produto||ctx.titulo||"Projeto Pronto",codigoCheckout);
+    const sku=safe(input.sku||ctx.sku)||`PP-${codigoProjeto}`;
+    const valor=money(input.valor??ctx.valor??ctx.price);
+    const clienteId=safe(input.clienteId||ctx.clienteId);
+    const nome=safe(input.nome||input.nomeCliente||ctx.nome||ctx.nomeCliente);
+    const email=safe(input.email||ctx.email).toLowerCase();
+    const cpfCnpj=digits(input.cpfCnpj||ctx.cpfCnpj);
+    const whatsapp=phone(input.whatsappE164||input.whatsapp||ctx.whatsappE164||ctx.whatsapp);
+    const doc=digits(input.cardDocument||cpfCnpj);
+    const installments=Math.min(12,Math.max(1,Number(input.installments||1)));
+
+    if(!checkoutId||!codigoProjeto||!codigoCheckout||!(valor>0))return{ok:false,error:"Dados do produto incompletos."};
+    if(!clienteId||nome.length<3||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)||!whatsapp||![11,14].includes(cpfCnpj.length))
+      return{ok:false,error:"Dados do comprador incompletos."};
+    if(!luhn(number))return{ok:false,error:"Número do cartão inválido."};
+    if(!/^(0[1-9]|1[0-2])$/.test(month)||!/^20\d{2}$/.test(year))return{ok:false,error:"Validade do cartão inválida."};
+    if(!/^\d{3,4}$/.test(cvv))return{ok:false,error:"CVV inválido."};
+    if(holder.length<3)return{ok:false,error:"Nome impresso no cartão inválido."};
+    if(![11,14].includes(doc.length))return{ok:false,error:"CPF/CNPJ do portador inválido."};
+
+    await saveSession(checkoutId,{
+      status:"pending",paymentMethod:"CARD",clienteId,nomeCliente:nome,whatsapp,email,cpfCnpj,
+      codigoProjeto,codigoCheckout,sku,tipoProduto,produto,img:safe(input.img||ctx.img||ctx.imagem),
+      valor,returnUrl:safe(input.returnUrl||ctx.returnUrl),compraRegistrada:false,updatedAtDate:new Date()
+    });
+
+    const response=await api("/v1/charges",{
+      paymentMethod:"creditcard",
+      externalId:checkoutId,
+      externalTxid:`PP-${codigoProjeto}-CARD`.slice(0,35),
+      customer:{name:nome,email,documentNumber:doc,phone:whatsapp},
+      card:{number,cvv,name:holder,expiration:`${month}/${year}`},
+      amount:valor,
+      installments,
+      passFeesToCustomer:false,
+      freeInstallments:1,
+      metadata:{
+        origem:"PELEGO_BOX_PROJETOS_PRONTOS",
+        checkoutId,clienteId,codigoProjeto,codigoCheckout,sku,tipoProduto,produto,whatsapp
+      }
+    });
+
+    if(!response.ok){
+      if(response.statusCode===409){
+        const id=safe(response.data?.error?.details?.chargeId||response.data?.details?.chargeId);
+        if(id){
+          await saveSession(checkoutId,{validaPayChargeId:id,paymentId:id,updatedAtDate:new Date()});
+          return{ok:false,recoverable:true,chargeId:id,error:"A cobrança já foi enviada. Aguarde a confirmação antes de tentar novamente."};
+        }
+      }
+      return{ok:false,declined:response.statusCode===402,error:response.error||"Cartão não aprovado."};
+    }
+
+    const id=safe(response.data?.chargeId||response.data?.id);
+    const status=safe(response.data?.status).toLowerCase();
+    const approved=response.data?.success===true&&["paid","approved","succeeded"].includes(status);
+
+    await saveSession(checkoutId,{
+      validaPayChargeId:id,paymentId:id,paymentMethod:"CARD",
+      status:approved?"approved":(status||"pending"),updatedAtDate:new Date()
+    });
+
+    return{
+      ok:response.data?.success!==false,
+      approved,checkoutId,chargeId:id,status:status||(approved?"approved":"pending"),
+      cardBrand:safe(response.data?.cardBrand)||brand(number),
+      cardLastFour:number.slice(-4),installments,amount:valor
+    };
+  }catch(error){
+    console.error("ERRO CARTAO VALIDAPAY:",error?.message||error);
+    return{ok:false,error:error?.message||"Não foi possível processar o cartão."};
+  }
+}

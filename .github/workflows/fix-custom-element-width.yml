@@ -1,0 +1,52 @@
+name: Corrigir largura do checkout Custom Element
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fix-custom-element-width.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Corrigir largura responsiva do Custom Element
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/public/custom-elements/pelego-checkout-pronto.js')
+          s=p.read_text(encoding='utf-8')
+          old='''    this.style.display = "block";\n    this.style.width = "100%";\n    this.style.height = "220px";'''
+          new='''    this.style.display = "block";\n    // O Wix pode publicar o slot do Custom Element com largura intrínseca estreita.\n    // No site publicado, usamos a viewport real para o checkout não cair no CSS mobile no desktop.\n    this.style.width = "min(1000px, calc(100vw - 24px))";\n    this.style.maxWidth = "1000px";\n    this.style.minWidth = "0";\n    this.style.height = "220px";'''
+          if old not in s:
+              raise SystemExit('Trecho de largura esperado não encontrado')
+          s=s.replace(old,new,1)
+          if 'this.style.width = "100%"' in s:
+              raise SystemExit('Largura antiga ainda presente')
+          if 'calc(100vw - 24px)' not in s:
+              raise SystemExit('Nova largura responsiva não aplicada')
+          p.write_text(s.rstrip()+'\n',encoding='utf-8')
+          PY
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar código
+        run: npm run lint
+      - name: Gravar correção
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-custom-element-width.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Corrige largura responsiva do checkout Custom Element'
+          git push origin HEAD:main

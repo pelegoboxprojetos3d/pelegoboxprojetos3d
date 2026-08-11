@@ -154,8 +154,12 @@ export async function createCheckoutProPreference(input){
 
   const ctx = input?.ctx || {};
 
-  const produto = safe(ctx.produto || ctx.name || "Produto");
-  const sku = safe(ctx.sku || "-");
+  /*
+    PROJETOS FEITOS DO ZERO:
+    o título recebido do catálogo já contém o código do questionário.
+    SKU deixou de fazer parte deste fluxo.
+  */
+  const produto = safe(ctx.produto || ctx.name || "Produto").trim();
   const img = safe(ctx.img || "");
   const productId = safe(ctx.productId || "");
 
@@ -189,7 +193,6 @@ export async function createCheckoutProPreference(input){
     status:"pending",
 
     produto,
-    sku,
     img,
     productId,
 
@@ -232,7 +235,6 @@ export async function createCheckoutProPreference(input){
         quantity: 1,
         currency_id: "BRL",
         unit_price: valor > 0 ? valor : 1,
-        description: sku ? `SKU: ${sku}` : undefined,
         picture_url: img || undefined
       }
     ],
@@ -243,7 +245,6 @@ export async function createCheckoutProPreference(input){
       whatsappDigits,
       ddi,
       country,
-      sku,
       produto,
       productId,
       img,

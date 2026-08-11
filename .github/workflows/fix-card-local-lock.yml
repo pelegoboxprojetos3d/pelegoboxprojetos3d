@@ -18,95 +18,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Aplicar correcao do cartao
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_or_fail(path, old, new, label):
-              p = Path(path)
-              s = p.read_text(encoding='utf-8')
-              if new in s:
-                  print(f'{label}: ja aplicado')
-                  return
-              if old not in s:
-                  raise SystemExit(f'{label}: trecho nao encontrado em {path}')
-              p.write_text(s.replace(old, new, 1), encoding='utf-8')
-              print(f'{label}: aplicado')
-
-          backend = 'src/backend/validaPayCartaoProjetosProntos.jsw'
-          replace_or_fail(
-              backend,
-              'scope=${encodeURIComponent("checkouts/write products/write checkouts/read")}',
-              'scope=${encodeURIComponent("checkouts/write products/write checkouts/read pix.cob/read")}',
-              'escopo de leitura da cobranca'
-          )
-
-          replace_or_fail(
-              backend,
-              'const approved = response.data?.success === true && ["paid", "approved", "succeeded"].includes(status);',
-              'const approved = response.data?.success !== false && isApprovedCardStatus(status);',
-              'reconhecimento de pagamento aprovado'
-          )
-
-          page = 'src/pages/checkout-projeto-pronto.i9aj1.js'
-          old_poll = '''    if(statusResult?.approved === true) {
-      const delivery = await waitTimeout(buscarEntregaProjetoPronto({checkoutId}),4500,"");
-      if(deliveryReady(delivery)) {
-        stopCardPoll();
-        post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,deliveryUrl:deliveryUrl()});
-        setTimeout(()=>wixLocation.to(deliveryUrl()),650);
-        return;
-      }
-      post({type:"CARD_RESULT",ok:true,accepted:true,approved:false,paymentApproved:true,processing:true,checkoutId,chargeId,status:cardStatus || "paid",error:"Pagamento aprovado. Preparando sua entrega e os e-mails..."});
-    }'''
-          new_poll = '''    if(statusResult?.approved === true || ["paid","approved","succeeded"].includes(cardStatus)) {
-      /*
-        A pagina de entrega ja possui o proprio processamento visual e polling.
-        Assim que a operadora confirmar o pagamento, sai do checkout imediatamente
-        em vez de prender o cliente esperando Make/OneDrive finalizar arquivos.
-      */
-      stopCardPoll();
-      post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
-      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
-      return;
-    }'''
-          replace_or_fail(page, old_poll, new_poll, 'redirecionamento do polling do cartao')
-
-          old_create = '''    post({
-      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved,
-      processing:accepted || paymentApproved,checkoutId,chargeId,status:safe(r?.status),
-      cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
-      error:accepted ? (paymentApproved ? "Pagamento aprovado. Preparando sua entrega e os e-mails..." : "Pagamento recebido. Aguardando confirmação...") : (r?.error||"")
-    });
-    if(accepted || paymentApproved) {
-      cardPolling=true;
-      pollCardDelivery(1).catch(console.error);
-    }'''
-          new_create = '''    if(paymentApproved) {
-      post({
-        type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,
-        processing:false,checkoutId,chargeId,status:safe(r?.status)||"paid",
-        cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
-        error:"Pagamento aprovado. Abrindo sua entrega..."
-      });
-      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
-      return;
-    }
-
-    post({
-      type:"CARD_RESULT",ok:accepted || r?.ok===true,accepted,approved:false,paymentApproved:false,
-      processing:accepted,checkoutId,chargeId,status:safe(r?.status),
-      cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
-      error:accepted ? "Pagamento recebido. Aguardando confirmação..." : (r?.error||"")
-    });
-    if(accepted) {
-      cardPolling=true;
-      pollCardDelivery(1).catch(console.error);
-    }'''
-          replace_or_fail(page, old_create, new_create, 'redirecionamento imediato quando POST retorna pago')
-          PY
+      - name: Aplicar correcao
+        run: node scripts/fix-card-confirmacao.cjs
 
       - name: Validar sintaxe
         run: |
@@ -114,16 +27,15 @@ jobs:
           node --check src/pages/checkout-projeto-pronto.i9aj1.js
 
       - name: Gravar correcao
-        shell: bash
         run: |
-          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
-          git config user.email 'pelegobox82@gmail.com'
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
           git add src/backend/validaPayCartaoProjetosProntos.jsw src/pages/checkout-projeto-pronto.i9aj1.js
           if git diff --cached --quiet; then
-            echo 'Nenhuma alteracao necessaria.'
+            echo "Nenhuma alteracao necessaria."
             exit 0
           fi
-          git commit -m 'Corrigir confirmacao e saida do cartao'
+          git commit -m "Corrigir confirmacao e saida do cartao"
           git push origin HEAD:main
 
-# gatilho one-shot 2026-08-11 20:06
+# gatilho one-shot 2026-08-11 20:12

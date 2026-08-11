@@ -39,6 +39,36 @@ if (text.includes(sequentialInit)) {
   text = text.replace(sequentialInit, parallelInit);
 }
 
+/*
+  CARTÃO: o formulário interno já possui S.cardBusy para bloquear duplo clique.
+  A página não deve reutilizar o busy global de cadastro/Pix para o cartão,
+  porque isso gera o falso erro "Já existe um pagamento em processamento".
+  Mantemos uma trava própria apenas para proteger a ponte Wix de evento duplicado.
+*/
+if (!text.includes('let cardRequestBusy = false;')) {
+  const vars = 'let busy = false;\nlet chargeId = "";';
+  if (!text.includes(vars)) throw new Error("Variáveis de trava do checkout não encontradas.");
+  text = text.replace(vars, 'let busy = false;\nlet cardRequestBusy = false;\nlet chargeId = "";');
+}
+
+const oldCardStart = `async function createCard(data={}) {\n  if(busy) return post({type:\"CARD_RESULT\",ok:false,error:\"Já existe um pagamento em processamento.\"});\n  busy=true;\n  stopCardPoll();`;
+const newCardStart = `async function createCard(data={}) {\n  // O formulário interno já bloqueia duplo clique. Se a ponte repetir o evento,\n  // ignoramos a cópia silenciosamente em vez de exibir um erro falso.\n  if(cardRequestBusy) return;\n  if(polling) return post({type:\"CARD_RESULT\",ok:false,approved:false,accepted:false,error:\"Existe um Pix aguardando pagamento nesta tentativa. Volte e gere um novo checkout para pagar com cartão.\"});\n  cardRequestBusy=true;\n  stopCardPoll();`;
+
+if (text.includes(oldCardStart)) {
+  text = text.replace(oldCardStart, newCardStart);
+} else if (!text.includes('if(cardRequestBusy) return;')) {
+  throw new Error("Início da função createCard não encontrado.");
+}
+
+const oldCardEnd = `  } catch(e) {\n    post({type:\"CARD_RESULT\",ok:false,approved:false,accepted:false,error:e?.message||\"Não foi possível processar o cartão.\"});\n  } finally { busy=false; }\n}`;
+const newCardEnd = `  } catch(e) {\n    post({type:\"CARD_RESULT\",ok:false,approved:false,accepted:false,error:e?.message||\"Não foi possível processar o cartão.\"});\n  } finally { cardRequestBusy=false; }\n}`;
+
+if (text.includes(oldCardEnd)) {
+  text = text.replace(oldCardEnd, newCardEnd);
+} else if (!text.includes('finally { cardRequestBusy=false; }')) {
+  throw new Error("Fim da função createCard não encontrado.");
+}
+
 fs.writeFileSync(path, text);
 
 // ======================================================
@@ -109,4 +139,4 @@ custom = custom
 
 fs.writeFileSync(customPath, custom);
 
-console.log("Checkout atualizado para lançamento: desktop restaurado, mobile mais largo/centralizado, carregamento destravado, altura retrátil e cartão abaixo do Pix no mobile.");
+console.log("Checkout atualizado para lançamento: desktop restaurado, mobile mais largo/centralizado, carregamento destravado, altura retrátil, cartão abaixo do Pix no mobile e trava local do cartão separada.");

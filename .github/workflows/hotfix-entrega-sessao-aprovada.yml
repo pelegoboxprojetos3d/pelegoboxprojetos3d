@@ -1,0 +1,155 @@
+name: Hotfix entrega por sessao aprovada
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/hotfix-entrega-sessao-aprovada.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Corrigir backend e pagina de entrega
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          backend = Path('src/backend/entregaProjetosProntos.jsw')
+          text = backend.read_text(encoding='utf-8')
+
+          gate = '''  if (!safeSession.compraRegistrada) {
+    return {
+      ok: true,
+      approved: false,
+      status: "processing",
+
+      session: {
+        checkoutId:
+          safeSession.checkoutId
+      }
+    };
+  }
+
+'''
+          if gate not in text:
+              raise SystemExit('Gate compraRegistrada nao encontrado')
+          text = text.replace(gate, '''  /*
+    A aprovacao da ValidaPay e a fonte de verdade do pagamento.
+    compraRegistrada pode ficar false enquanto Make/OneDrive termina o
+    processamento, portanto esse sinal nao pode bloquear a pagina de entrega.
+  */
+
+''', 1)
+
+          old_result = '''  const result =
+    resolveAccessFromPurchases({
+      purchases:
+        allPurchases,
+
+      clienteId:
+        safeSession.clienteId,
+
+      email:
+        safeSession.email,
+
+      whatsapp:
+        safeSession.whatsapp,
+
+      paymentId:
+        safeSession.paymentId
+    });
+
+  const projectData =
+'''
+          new_result = '''  const result =
+    resolveAccessFromPurchases({
+      purchases:
+        allPurchases,
+
+      clienteId:
+        safeSession.clienteId,
+
+      email:
+        safeSession.email,
+
+      whatsapp:
+        safeSession.whatsapp,
+
+      paymentId:
+        safeSession.paymentId
+    });
+
+  /*
+    Mesmo antes do callback do Make gravar a compra, a sessao aprovada ja
+    libera cumulativamente a etapa paga. Isso faz os botoes aparecerem e
+    evita que Pix e Cartao fiquem presos na impressora por compraRegistrada.
+  */
+  const currentType =
+    normalizeType(
+      safeSession.tipoProduto
+    );
+
+  const effectiveAccess = {
+    ...result.access,
+    medidas: true,
+    graficos:
+      result.access.graficos === true ||
+      currentType === "GRAFICOS" ||
+      currentType === "PROJETO_COMPLETO",
+    projeto:
+      result.access.projeto === true ||
+      currentType === "PROJETO_COMPLETO"
+  };
+
+  effectiveAccess.podeComprarMedidas =
+    !effectiveAccess.medidas;
+  effectiveAccess.podeComprarGraficos =
+    effectiveAccess.medidas &&
+    !effectiveAccess.graficos;
+  effectiveAccess.podeComprarProjeto =
+    effectiveAccess.graficos &&
+    !effectiveAccess.projeto;
+
+  const projectData =
+'''
+          if old_result not in text:
+              raise SystemExit('Bloco resolveAccess nao encontrado')
+          text = text.replace(old_result, new_result, 1)
+
+          text = text.replace('''    access:\n      result.access,\n\n    stages:\n      buildStages(\n        result.access,''', '''    access:\n      effectiveAccess,\n\n    stages:\n      buildStages(\n        effectiveAccess,''', 1)
+
+          backend.write_text(text, encoding='utf-8')
+
+          page = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
+          p = page.read_text(encoding='utf-8')
+
+          old_branch = '''      if (\n        resultado.approved\n      ) {\n        if (\n          entregaProcessada(\n            resultado\n          )\n        ) {\n          await renderizarEntrega(\n            resultado\n          );\n\n          return;\n        }\n\n        await mostrarProcessamento();\n'''
+          new_branch = '''      if (\n        resultado.approved\n      ) {\n        /*\n          Assim que o pagamento esta aprovado, mostramos titulo, valores e\n          botoes imediatamente. A impressora continua somente sobre a galeria\n          enquanto os arquivos terminam de chegar. Antes, tudo ficava oculto\n          ate o ultimo arquivo existir, dando a falsa impressao de pagina morta.\n        */\n        if (!entrega) {\n          entrega = resultado;\n          checkoutEmAndamento = false;\n          indiceGraficoDownload = 0;\n\n          const projetoAprovado =\n            resultado.project || {};\n\n          $w(IDS.titulo).text =\n            montarTituloPagina(projetoAprovado);\n\n          salvarAcessosLocais(\n            projetoAprovado?.codigoProjeto,\n            resultado.access\n          );\n\n          await renderizarBotoes();\n          await mostrarDadosCarregados();\n          await mostrarAvisosEntrega();\n        }\n\n        if (\n          entregaProcessada(\n            resultado\n          )\n        ) {\n          await renderizarEntrega(\n            resultado\n          );\n\n          return;\n        }\n\n        await mostrarProcessamento();\n'''
+          if old_branch not in p:
+              raise SystemExit('Bloco approved da pagina nao encontrado')
+          p = p.replace(old_branch, new_branch, 1)
+          page.write_text(p, encoding='utf-8')
+          PY
+
+      - name: Validar codigo
+        run: |
+          npm ci --ignore-scripts
+          npm run lint
+
+      - name: Gravar hotfix
+        run: |
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/backend/entregaProjetosProntos.jsw" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          git commit -m "Corrige entrega aprovada e exibe botoes durante processamento"
+          git push origin HEAD:main

@@ -3,11 +3,11 @@ import wixLocation from "wix-location";
 
 // TÍTULO NO WIX: Videos dos projetos prontos
 //
-// R8
+// R9
 //
 // BOTÃO VERDE:
 // projeto feito do zero -> /checkout-mp
-// envia somente o título real da coleção + preço.
+// envia título da coleção, thumbnail e preço.
 // NÃO depende de SKU nem de codigo_checkout.
 //
 // BOTÃO ROXO:
@@ -75,6 +75,106 @@ function decodeTitle(value) {
     .trim();
 }
 
+function mediaUrl(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (typeof value === "object") {
+    return safe(
+      value.src ||
+      value.url ||
+      value.fileUrl
+    );
+  }
+
+  return "";
+}
+
+function checkoutDisplayTitle(value, itemData = {}) {
+  const decoded = decodeTitle(value);
+
+  if (!decoded) {
+    return "";
+  }
+
+  const connectors = new Set([
+    "a", "as", "o", "os",
+    "de", "da", "das", "do", "dos",
+    "e", "em", "no", "na", "nos", "nas",
+    "para", "por", "com", "sem"
+  ]);
+
+  const brandWords = new Map();
+
+  [
+    itemData?.marca_1,
+    itemData?.marca_2,
+    itemData?.marca_3
+  ]
+    .filter(Boolean)
+    .forEach((brand) => {
+      safe(brand)
+        .split(/\s+/)
+        .filter(Boolean)
+        .forEach((word) => {
+          brandWords.set(
+            word.toLocaleLowerCase("pt-BR"),
+            word
+          );
+        });
+    });
+
+  return decoded
+    .split(/\s+/)
+    .map((token, index) => {
+      /*
+        Códigos, potências, medidas e modelos ficam intactos:
+        #1818, 1X, 15SWV3.8, 1900W, 3D, 003 etc.
+      */
+      if (/\d/.test(token)) {
+        return token;
+      }
+
+      const match = token.match(
+        /^([^A-Za-zÀ-ÖØ-öø-ÿ]*)([A-Za-zÀ-ÖØ-öø-ÿ]+)([^A-Za-zÀ-ÖØ-öø-ÿ]*)$/
+      );
+
+      if (!match) {
+        return token;
+      }
+
+      const prefix = match[1];
+      const word = match[2];
+      const suffix = match[3];
+      const lower = word.toLocaleLowerCase("pt-BR");
+
+      const brandWord = brandWords.get(lower);
+
+      if (brandWord) {
+        return prefix + brandWord + suffix;
+      }
+
+      if (connectors.has(lower) && index > 0) {
+        return prefix + lower + suffix;
+      }
+
+      return (
+        prefix +
+        lower.charAt(0).toLocaleUpperCase("pt-BR") +
+        lower.slice(1) +
+        suffix
+      );
+    })
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function cleanTitle(value) {
   return decodeTitle(value)
     .split(
@@ -137,16 +237,23 @@ function buildZeroCheckoutUrl({
   code
 }) {
   /*
-    O checkout de Projetos Feitos do Zero é padrão e não é
-    alterado aqui. Apenas montamos a URL de entrada.
+    Fluxo exclusivo do botão COMPRAR PROJETO FEITO DO ZERO.
 
-    O título vem DIRETAMENTE de titulo_video, sem remover o
-    código do questionário que já está incorporado ao final.
-
-    Não enviamos SKU e não usamos codigo_checkout.
+    - título: titulo_video completo, incluindo código do questionário;
+    - imagem: thumbnail da coleção;
+    - preço: soma das três etapas;
+    - SKU: não é enviado;
+    - codigo_checkout: não é usado.
   */
-  const checkoutTitle = decodeTitle(
-    itemData?.titulo_video || title
+  const checkoutTitle = checkoutDisplayTitle(
+    itemData?.titulo_video || title,
+    itemData
+  );
+
+  const image = mediaUrl(
+    itemData?.thumbnail ||
+    itemData?.imagem ||
+    itemData?.image
   );
 
   const price = totalProjectValue(
@@ -185,6 +292,9 @@ function buildZeroCheckoutUrl({
     "/checkout-mp" +
     `?name=${encodeURIComponent(checkoutTitle)}` +
     `&price=${encodeURIComponent(String(price))}` +
+    `&img=${encodeURIComponent(image)}` +
+    "&hideSku=1" +
+    "&source=projeto-zero" +
     `&returnUrl=${encodeURIComponent(returnUrl)}`
   );
 }
@@ -296,6 +406,7 @@ function configureRepeater() {
       // ID: #btnOrcamento
       //
       // título = titulo_video completo da coleção
+      // imagem = thumbnail
       // preço = soma dos valores configurados
       // sem SKU / sem codigo_checkout
       // ========================================

@@ -755,7 +755,11 @@ class PelegoCheckoutPronto extends HTMLElement {
     if (this._mounted) return;
     this._mounted = true;
     this.style.display = "block";
-    this.style.width = "100%";
+    // O Wix pode publicar o slot do Custom Element com largura intrínseca estreita.
+    // No site publicado, usamos a viewport real para o checkout não cair no CSS mobile no desktop.
+    this.style.width = "min(1000px, calc(100vw - 24px))";
+    this.style.maxWidth = "1000px";
+    this.style.minWidth = "0";
     this.style.height = "220px";
     this.style.boxSizing = "border-box";
     this.style.overflow = "hidden";

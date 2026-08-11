@@ -401,29 +401,11 @@ function entregaProcessada(resultado) {
   const projeto = resultado?.project || {};
   const tipo = safe(resultado?.session?.tipoProduto).toUpperCase();
 
-  const statusProcessamento =
-    safe(projeto.statusProcessamento)
-      .toUpperCase();
-
   /*
-    Quando o Make já iniciou o processamento, a galeria
-    só é liberada depois de PROCESSADO. Isso impede que
-    o primeiro gráfico apareça enquanto os demais ainda
-    estão sendo importados. Registros antigos sem status
-    continuam compatíveis pela existência do arquivo.
+    A existência do arquivo da etapa é a fonte da verdade.
+    O Make/OneDrive pode ainda estar marcando PROCESSANDO quando o arquivo
+    já foi importado no Wix. Não seguramos mais a entrega por esse status.
   */
-  /*
-    PROCESSADO é o estado ideal. PARCIAL também pode representar um
-    registro antigo que exigia quatro gráficos mesmo quando o projeto
-    possuía legitimamente apenas 1, 2 ou 3. Nesses casos, a presença do
-    arquivo da etapa abaixo é a fonte da verdade para liberar a entrega.
-  */
-  if (
-    statusProcessamento &&
-    !["PROCESSADO", "PARCIAL"].includes(statusProcessamento)
-  ) {
-    return false;
-  }
 
   if (tipo === "PROJETO_COMPLETO") {
     return Boolean(safe(projeto.pdfProjeto));

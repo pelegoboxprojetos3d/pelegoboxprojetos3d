@@ -85,6 +85,33 @@ function isTerminalCardFailure(value) {
   return ["rejected", "declined", "denied", "failed", "cancelled", "canceled", "expired", "refused"].includes(safe(value).toLowerCase());
 }
 
+function extractChargeId(data = {}) {
+  return safe(
+    data?.chargeId ||
+    data?.id ||
+    data?.data?.chargeId ||
+    data?.data?.id ||
+    data?.charge?.chargeId ||
+    data?.charge?.id ||
+    data?.payment?.chargeId ||
+    data?.payment?.id ||
+    data?.result?.chargeId ||
+    data?.result?.id ||
+    data?.error?.details?.chargeId ||
+    data?.details?.chargeId
+  );
+}
+
+function extractChargeStatus(data = {}) {
+  return safe(
+    data?.status ||
+    data?.data?.status ||
+    data?.charge?.status ||
+    data?.payment?.status ||
+    data?.result?.status
+  ).toLowerCase();
+}
+
 function brand(v) {
   const n = digits(v);
   if (/^(4011|4312|4389|4514|4576|5041|5066|5067|509|6277|6362|6363)/.test(n)) return "ELO";
@@ -406,7 +433,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       }
 
       const previousData = previousResponse.data?.data || previousResponse.data?.charge || previousResponse.data || {};
-      const liveStatus = safe(previousData?.status).toLowerCase();
+      const liveStatus = extractChargeStatus(previousData);
 
       if (isApprovedCardStatus(liveStatus)) {
         await saveSession(checkoutId, {
@@ -515,7 +542,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
 
     if (!response.ok) {
       if (response.statusCode === 409) {
-        const id = safe(response.data?.error?.details?.chargeId || response.data?.details?.chargeId);
+        const id = extractChargeId(response.data || {});
         if (id) {
           await saveSession(checkoutId, {
             validaPayChargeId: id,
@@ -552,8 +579,8 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       };
     }
 
-    const id = safe(response.data?.chargeId || response.data?.id);
-    const status = safe(response.data?.status).toLowerCase();
+    const id = extractChargeId(response.data || {});
+    const status = extractChargeStatus(response.data || {});
     const approved = response.data?.success !== false && isApprovedCardStatus(status);
 
     await saveSession(checkoutId, {
@@ -611,8 +638,8 @@ export async function consultarCobrancaCartaoTransparente(input = {}) {
     }
     const response=await api("get",`/v1/charges/${encodeURIComponent(chargeId)}`);
     if(!response.ok) return {ok:true,recoverable:true,processing:true,checkoutId,chargeId,status:safe(session.status)||"pending",error:response.error||"Consultando confirmação do cartão..."};
-    const data=response.data?.data||response.data?.charge||response.data||{};
-    const status=safe(data.status).toLowerCase();
+    const data=response.data||{};
+    const status=extractChargeStatus(data);
     const approved=["paid","approved","succeeded"].includes(status);
     const declined=["rejected","declined","denied","failed","cancelled","canceled","expired","refused"].includes(status);
     await saveSession(checkoutId,{validaPayChargeId:chargeId,paymentId:chargeId,paymentMethod:"CARD",status:approved?"approved":(status||safe(session.status)||"pending"),updatedAtDate:new Date()});

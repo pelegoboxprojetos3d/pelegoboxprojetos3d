@@ -1,0 +1,48 @@
+name: Corrigir pulo indevido da identificação
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fix-returning-customer-skip.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Corrigir regra de cliente recorrente
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/pages/checkout-projeto-pronto.i9aj1.js')
+          s=p.read_text(encoding='utf-8')
+          old='''async function hydrateReturningCustomer() {\n  if (identityComplete(ctx)) {\n    ctx.skipIdentity = true;\n    return;\n  }\n  const n = phone(ctx.whatsappE164 || ctx.whatsapp);\n  if (!n) { ctx.skipIdentity = false; return; }\n  try {\n    const found = await waitTimeout(buscarCliente(n), 3500, "");\n    if (found) {\n      customer = found;\n      const id = safe(found._id || found.clienteId);\n      saveIdentity({\n        clienteId:id,\n        nome:safe(found.nome || found.nomeCliente),\n        email:email(found.email),\n        cpfCnpj:cpf(found.cpfCnpj || found.cpf),\n        whatsapp:n,\n        whatsappE164:`+55${n}`,\n        whatsappConfirmado:true\n      });\n    }\n  } catch (_) {}\n  ctx.skipIdentity = identityComplete(ctx);\n}'''
+          new='''async function hydrateReturningCustomer() {\n  const n = phone(ctx.whatsappE164 || ctx.whatsapp);\n  if (!n) {\n    ctx.skipIdentity = false;\n    return;\n  }\n\n  /*\n    Segurança da primeira compra:\n    dados completos existentes apenas no storage do navegador não autorizam\n    pular Nome/CPF/e-mail. O pulo só acontece depois de confirmar um cadastro\n    completo recuperado pelo backend para este WhatsApp.\n  */\n  ctx.skipIdentity = false;\n\n  try {\n    const found = await waitTimeout(buscarCliente(n), 3500, "");\n    if (!found) return;\n\n    customer = found;\n    const id = safe(found._id || found.clienteId);\n    const cadastroBackend = {\n      whatsapp:n,\n      whatsappE164:`+55${n}`,\n      nome:safe(found.nome || found.nomeCliente),\n      email:email(found.email),\n      cpfCnpj:cpf(found.cpfCnpj || found.cpf)\n    };\n\n    if (!identityComplete(cadastroBackend)) return;\n\n    saveIdentity({\n      clienteId:id,\n      nome:cadastroBackend.nome,\n      email:cadastroBackend.email,\n      cpfCnpj:cadastroBackend.cpfCnpj,\n      whatsapp:n,\n      whatsappE164:`+55${n}`,\n      whatsappConfirmado:true\n    });\n    ctx.skipIdentity = true;\n  } catch (_) {\n    ctx.skipIdentity = false;\n  }\n}'''
+          if old not in s:
+              raise SystemExit('Função hydrateReturningCustomer esperada não encontrada')
+          s=s.replace(old,new,1)
+          p.write_text(s.rstrip()+'\n',encoding='utf-8')
+          PY
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar código
+        run: npm run lint
+      - name: Gravar correção
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-returning-customer-skip.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Evita pulo indevido dos dados na primeira compra'
+          git push origin HEAD:main

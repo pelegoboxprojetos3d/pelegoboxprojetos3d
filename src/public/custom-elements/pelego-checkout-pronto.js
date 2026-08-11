@@ -432,14 +432,23 @@ var CURRENT_LAYOUT_MODE="INITIAL";
 var HEIGHT_TIMER=null;
 
 function checkoutRealHeight(){
+  /*
+    Mede o conteúdo real, não a altura atual do iframe.
+    scrollHeight/offsetHeight do html/body ficam presos na altura maior
+    depois que o iframe cresce e por isso impediam a retração.
+  */
+  var wrap=document.querySelector(".wrap");
   var body=document.body;
-  var html=document.documentElement;
-  return Math.ceil(Math.max(
-    body ? body.scrollHeight : 0,
-    body ? body.offsetHeight : 0,
-    html ? html.scrollHeight : 0,
-    html ? html.offsetHeight : 0
-  ));
+
+  if(wrap){
+    var rect=wrap.getBoundingClientRect();
+    var styles=body ? window.getComputedStyle(body) : null;
+    var paddingTop=styles ? (parseFloat(styles.paddingTop)||0) : 0;
+    var paddingBottom=styles ? (parseFloat(styles.paddingBottom)||0) : 0;
+    return Math.ceil(rect.height + paddingTop + paddingBottom);
+  }
+
+  return Math.ceil(document.documentElement.scrollHeight || 0);
 }
 
 function emitCheckoutHeight(){
@@ -753,7 +762,7 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML29_CUSTOM_ELEMENT_HOST"});
+post({type:"READY",version:"HTML30_DYNAMIC_SIZE"});
 })();
 </script>
 </body>
@@ -774,8 +783,10 @@ class PelegoCheckoutPronto extends HTMLElement {
     this.style.display = "block";
     // O Wix pode publicar o slot do Custom Element com largura intrínseca estreita.
     // No site publicado, usamos a viewport real para o checkout não cair no CSS mobile no desktop.
-    this.style.width = "min(1000px, calc(100vw - 24px))";
-    this.style.maxWidth = "1000px";
+    // A largura externa pertence ao elemento desenhado no Wix.
+    // O checkout apenas ocupa 100% desse espaço, inclusive no mobile.
+    this.style.width = "100%";
+    this.style.maxWidth = "100%";
     this.style.minWidth = "0";
     this.style.height = "220px";
     this.style.boxSizing = "border-box";

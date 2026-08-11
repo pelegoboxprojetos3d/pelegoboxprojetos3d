@@ -1,0 +1,77 @@
+name: Corrigir trava local do cartao
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fix-card-local-lock.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Aplicar correcao
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/pages/checkout-projeto-pronto.i9aj1.js')
+          s=p.read_text(encoding='utf-8')
+          old='let busy = false;\nlet chargeId = "";'
+          new='let busy = false;\nlet cardRequestBusy = false;\nlet chargeId = "";'
+          if old not in s and 'let cardRequestBusy = false;' not in s:
+              raise SystemExit('ancora de variaveis nao encontrada')
+          if 'let cardRequestBusy = false;' not in s:
+              s=s.replace(old,new,1)
+
+          old_start='''async function createCard(data={}) {
+  if(busy) return post({type:"CARD_RESULT",ok:false,error:"Já existe um pagamento em processamento."});
+  busy=true;
+  stopCardPoll();'''
+          new_start='''async function createCard(data={}) {
+  // O formulario interno ja bloqueia duplo clique. Esta trava e apenas uma
+  // segunda protecao contra evento duplicado na ponte Wix, sem exibir erro falso.
+  if(cardRequestBusy) return;
+  if(polling) return post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:"Existe um Pix aguardando pagamento nesta tentativa. Volte e gere um novo checkout para pagar com cartão."});
+  cardRequestBusy=true;
+  stopCardPoll();'''
+          if old_start not in s and new_start not in s:
+              raise SystemExit('inicio createCard nao encontrado')
+          s=s.replace(old_start,new_start,1)
+
+          old_end='''  } catch(e) {
+    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
+  } finally { busy=false; }
+}'''
+          new_end='''  } catch(e) {
+    post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:e?.message||"Não foi possível processar o cartão."});
+  } finally { cardRequestBusy=false; }
+}'''
+          if old_end not in s and new_end not in s:
+              raise SystemExit('fim createCard nao encontrado')
+          s=s.replace(old_end,new_end,1)
+          p.write_text(s.rstrip()+'\n',encoding='utf-8')
+          PY
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+      - name: Validar codigo
+        run: npm run lint
+      - name: Gravar correcao
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-card-local-lock.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Separa trava local do cartao no checkout'
+          git push origin HEAD:main

@@ -1,4 +1,4 @@
-const CHECKOUT_HTML = `<!doctype html>
+const CHECKOUT_HTML = String.raw`<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">

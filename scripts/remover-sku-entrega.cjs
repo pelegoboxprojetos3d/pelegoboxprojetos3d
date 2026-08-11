@@ -4,70 +4,67 @@ const caminho = "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js";
 let codigo = fs.readFileSync(caminho, "utf8");
 let alterou = false;
 
-function removerTrecho(trecho, descricao) {
-  if (!codigo.includes(trecho)) {
-    return;
-  }
+function substituirRegex(regex, novo, descricao) {
+  const antes = codigo;
+  codigo = codigo.replace(regex, novo);
 
-  codigo = codigo.replace(trecho, "");
-  alterou = true;
-  console.log(`Removido: ${descricao}`);
+  if (codigo !== antes) {
+    alterou = true;
+    console.log(`Ajustado: ${descricao}`);
+  }
 }
 
-function substituirTrecho(antigo, novo, descricao) {
-  if (!codigo.includes(antigo)) {
-    return;
-  }
-
-  codigo = codigo.replace(antigo, novo);
-  alterou = true;
-  console.log(`Ajustado: ${descricao}`);
-}
-
-removerTrecho(
-  `  sku:\n    "#txtSku",\n\n`,
+substituirRegex(
+  /\n  sku:\n    "#txtSku",\n/,
+  "",
   "ID #txtSku"
 );
 
-substituirTrecho(
-  "  padrão do Editor (TITULO DO PROJETO, sku, Small Title etc.) nem os\n",
-  "  padrão do Editor (TITULO DO PROJETO, Small Title etc.) nem os\n",
+substituirRegex(
+  /TITULO DO PROJETO, sku, Small Title etc\./,
+  "TITULO DO PROJETO, Small Title etc.",
   "comentário dos placeholders"
 );
 
-removerTrecho(
-  `  IDS.sku,\n`,
+substituirRegex(
+  /\n  IDS\.sku,/,
+  "",
   "SKU da lista de dados reais"
 );
 
-removerTrecho(
-  `    $w(IDS.sku).text = "";\n`,
+substituirRegex(
+  /\n    \$w\(IDS\.sku\)\.text = "";/,
+  "",
   "limpeza inicial do texto SKU"
 );
 
-removerTrecho(
-  `  const sku =\n    safe(\n      projeto?.sku\n    ) ||\n    \`PP-${codigoProjeto}\`;\n\n`,
+substituirRegex(
+  /\n  const sku =\n    safe\(\n      projeto\?\.sku\n    \) \|\|\n    `PP-\$\{codigoProjeto\}`;\n/,
+  "",
   "montagem do SKU para checkout"
 );
 
-removerTrecho(
-  `    sku,\n\n`,
+substituirRegex(
+  /\n    sku,\n/,
+  "",
   "SKU do objeto de dados do checkout"
 );
 
-removerTrecho(
-  `    sku:\n      dados.sku,\n\n`,
+substituirRegex(
+  /\n    sku:\n      dados\.sku,\n/,
+  "",
   "parâmetro SKU da URL do checkout"
 );
 
-substituirTrecho(
-  "      título, SKU, galeria, botões ou entrega.\n",
-  "      título, galeria, botões ou entrega.\n",
+substituirRegex(
+  /título, SKU, galeria, botões ou entrega\./,
+  "título, galeria, botões ou entrega.",
   "comentário do botão de vídeo"
 );
 
-removerTrecho(
-  `  $w(\n    IDS.sku\n  ).text =\n    projeto?.sku\n      ? \`SKU: ${projeto.sku}\`\n      : "";\n\n`,
+substituirRegex(
+  /\n  \$w\(\n    IDS\.sku\n  \)\.text =\n    projeto\?\.sku\n      \? `SKU: \$\{projeto\.sku\}`\n      : "";\n/,
+  "",
   "exibição do SKU na página"
 );
 

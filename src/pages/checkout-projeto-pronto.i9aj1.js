@@ -392,7 +392,7 @@ function deliveryReady(result) {
   if (result?.approved !== true) return false;
   const project = result?.project || {};
   const status = safe(project.statusProcessamento).toUpperCase();
-  if (status && status !== "PROCESSADO") return false;
+  if (status && !["PROCESSADO", "PARCIAL"].includes(status)) return false;
   const type = safe(result?.session?.tipoProduto || ctx.tipoProduto).toUpperCase();
   if (type === "PROJETO_COMPLETO") return Boolean(safe(project.pdfProjeto));
   if (type === "GRAFICOS") return Array.isArray(project.imagensGraficos) && project.imagensGraficos.filter(Boolean).length > 0;

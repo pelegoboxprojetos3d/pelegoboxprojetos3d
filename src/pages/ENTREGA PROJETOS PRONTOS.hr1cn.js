@@ -412,9 +412,15 @@ function entregaProcessada(resultado) {
     estão sendo importados. Registros antigos sem status
     continuam compatíveis pela existência do arquivo.
   */
+  /*
+    PROCESSADO é o estado ideal. PARCIAL também pode representar um
+    registro antigo que exigia quatro gráficos mesmo quando o projeto
+    possuía legitimamente apenas 1, 2 ou 3. Nesses casos, a presença do
+    arquivo da etapa abaixo é a fonte da verdade para liberar a entrega.
+  */
   if (
     statusProcessamento &&
-    statusProcessamento !== "PROCESSADO"
+    !["PROCESSADO", "PARCIAL"].includes(statusProcessamento)
   ) {
     return false;
   }

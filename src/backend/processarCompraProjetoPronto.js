@@ -941,19 +941,25 @@ export async function processarCompraProjetoPronto(
   }
 
   if (tipoProduto === "GRAFICOS") {
-    [
+    /*
+      Um projeto pode possuir 1, 2, 3 ou 4 análises gráficas.
+      Não exigir quatro arquivos fixos: a etapa está completa quando
+      pelo menos um gráfico foi efetivamente recebido/importado.
+      Falhas reais de importação continuam registradas em "falhas".
+    */
+    const graficosDisponiveis = [
       "imagemGrafico1",
       "imagemGrafico2",
       "imagemGrafico3",
       "imagemGrafico4"
-    ].forEach((field) => {
-      if (!safe(salvo[field])) {
-        arquivosFaltantes.push({
-          field,
-          error: `O arquivo ${field} não foi recebido ou importado.`
-        });
-      }
-    });
+    ].filter((field) => safe(salvo[field]));
+
+    if (!graficosDisponiveis.length) {
+      arquivosFaltantes.push({
+        field: "imagemGrafico1",
+        error: "Nenhuma análise gráfica foi recebida ou importada."
+      });
+    }
   }
 
   if (

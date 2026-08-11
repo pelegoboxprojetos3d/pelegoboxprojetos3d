@@ -1,0 +1,62 @@
+name: Hotfix ponte HTML do checkout
+
+on:
+  push:
+    paths:
+      - ".github/workflows/hotfix-checkout-bridge-html.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Restaurar ponte para HTML existente no canvas
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/pages/checkout-projeto-pronto.i9aj1.js')
+          s=p.read_text(encoding='utf-8')
+
+          replacements = [
+            ('const CUSTOM_ID = "#checkoutProntoCustom";', 'const HTML_ID = "#htmlCheckoutValidaPay";'),
+            ('$w(CUSTOM_ID).setAttribute("checkout-message", JSON.stringify(payload));', '$w(HTML_ID).postMessage(payload);'),
+            ('console.error("Custom Element post:", e?.message || e);', 'console.error("HTML checkout post:", e?.message || e);'),
+            ('const checkout=$w(CUSTOM_ID);\n  checkout.on("checkout-message", event=>{\n    let data=event?.detail ?? event?.data ?? event;', 'const checkout=$w(HTML_ID);\n  checkout.onMessage(event=>{\n    let data=event?.data ?? event;')
+          ]
+
+          for old,new in replacements:
+            if old not in s:
+              raise SystemExit(f'Assinatura não encontrada para hotfix: {old[:90]}')
+            s=s.replace(old,new,1)
+
+          if 'checkoutProntoCustom' in s or '$w(CUSTOM_ID)' in s:
+            raise SystemExit('Referência antiga ao Custom Element ainda presente na página')
+          if '#htmlCheckoutValidaPay' not in s or '.onMessage(' not in s or '.postMessage(' not in s:
+            raise SystemExit('Ponte HTML não ficou completa')
+
+          p.write_text(s.rstrip()+'\n', encoding='utf-8')
+          PY
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar código
+        run: npm run lint
+      - name: Gravar hotfix
+        shell: bash
+        run: |
+          rm -f .github/workflows/hotfix-checkout-bridge-html.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Restaura ponte do checkout para HTML existente'
+          git push origin HEAD:main

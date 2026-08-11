@@ -97,3 +97,5 @@ jobs:
             exit 1
           fi
           echo "Site publicado com a versão salva mais recente do Editor."
+
+# gatilho cartao 2026-08-11 20:14

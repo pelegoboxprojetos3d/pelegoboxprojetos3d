@@ -127,6 +127,9 @@ let bloqueioCliqueAte =
 let eventosLigados =
   false;
 
+let hidratacaoClienteCheckout =
+  null;
+
 let identificacao = {
   whatsapp: "",
   whatsappE164: "",
@@ -864,59 +867,59 @@ function normalizarIdentificacaoSalva(
   };
 }
 
+function pontuarIdentificacaoSalva(data) {
+  const normalized = normalizarIdentificacaoSalva(data);
+
+  if (!normalized) {
+    return {
+      score: -1,
+      value: null
+    };
+  }
+
+  let score = 0;
+
+  if (normalized.whatsapp) score += 1;
+  if (normalized.whatsappConfirmado === true) score += 5;
+  if (Number(normalized.confirmacaoWhatsappVersao || 0) >= CONFIRMACAO_FLUXO_VERSAO) score += 5;
+  if (safe(normalized.clienteId)) score += 12;
+  if (safe(normalized.nome).replace(/\s+/g, " ").length >= 3) score += 6;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(normalizeEmail(normalized.email))) score += 6;
+  if (onlyDigits(normalized.cpfCnpj).length === 11) score += 6;
+
+  return {
+    score,
+    value: normalized
+  };
+}
+
 function lerIdentificacaoSalva() {
   const fontes = [
-    {
-      storage:
-        session,
-
-      key:
-        SESSION_KEY
-    },
-    {
-      storage:
-        local,
-
-      key:
-        LOCAL_KEY
-    }
+    { storage: session, key: SESSION_KEY },
+    { storage: local, key: LOCAL_KEY }
   ];
 
-  for (
-    const fonte of
-    fontes
-  ) {
+  let melhor = null;
+  let melhorScore = -1;
+
+  for (const fonte of fontes) {
     try {
-      const raw =
-        fonte.storage
-          .getItem(
-            fonte.key
-          );
+      const raw = fonte.storage.getItem(fonte.key);
+      if (!raw) continue;
 
-      if (!raw) {
-        continue;
+      const parsed = JSON.parse(raw);
+      const candidate = pontuarIdentificacaoSalva(parsed);
+
+      if (candidate.value && candidate.score > melhorScore) {
+        melhor = candidate.value;
+        melhorScore = candidate.score;
       }
-
-      const parsed =
-        JSON.parse(raw);
-
-      const normalized =
-        normalizarIdentificacaoSalva(
-          parsed
-        );
-
-      if (normalized) {
-        return normalized;
-      }
-
     } catch (_) {
-      /*
-        Ignora registro antigo inválido.
-      */
+      /* Ignora registro antigo inválido. */
     }
   }
 
-  return null;
+  return melhor;
 }
 
 function salvarWhatsappPrimeiroEstagio(
@@ -1651,6 +1654,82 @@ function agendarPopupWhatsapp(
     );
 }
 
+function identificacaoCompletaParaCheckout(data = identificacao) {
+  const telefone = normalizarTelefone(data);
+  const nome = safe(data?.nome).replace(/\s+/g, " ");
+  const email = normalizeEmail(data?.email);
+  const documento = onlyDigits(data?.cpfCnpj || data?.cpf);
+
+  return Boolean(
+    telefone.whatsapp &&
+    safe(data?.clienteId) &&
+    data?.whatsappConfirmado === true &&
+    nome.length >= 3 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email) &&
+    documento.length === 11
+  );
+}
+
+async function completarCadastroClienteRapido(data = {}) {
+  if (identificacaoCompletaParaCheckout(identificacao)) {
+    return true;
+  }
+
+  const telefone = normalizarTelefone({
+    ...identificacao,
+    ...data
+  });
+
+  if (!telefone.whatsapp) {
+    return false;
+  }
+
+  try {
+    const encontrado = await comTimeout(
+      buscarCliente(telefone.whatsapp),
+      4500,
+      "A consulta rápida do cliente não respondeu."
+    );
+
+    if (!encontrado) {
+      return false;
+    }
+
+    clienteAtual = encontrado;
+
+    identificacao = {
+      ...identificacao,
+      whatsapp: telefone.whatsapp,
+      whatsappE164: telefone.whatsappE164,
+      ddi: telefone.ddi,
+      country: telefone.country,
+      clienteId: firstValue(encontrado._id, encontrado.clienteId, identificacao.clienteId),
+      nome: firstValue(encontrado.nome, encontrado.title, identificacao.nome),
+      email: normalizeEmail(firstValue(encontrado.email, identificacao.email)),
+      cpfCnpj: onlyDigits(
+        encontrado.cpfCnpj ||
+        encontrado.cpf ||
+        encontrado.documentNumber ||
+        encontrado.documento ||
+        encontrado.cpfcnpj ||
+        identificacao.cpfCnpj ||
+        ""
+      )
+    };
+
+    salvarIdentificacao();
+
+    return identificacaoCompletaParaCheckout(identificacao);
+  } catch (error) {
+    console.warn(
+      "Falha ao completar cadastro antes do checkout:",
+      error?.message || error
+    );
+
+    return false;
+  }
+}
+
 async function identificarCliente(
   data = {}
 ) {
@@ -2004,6 +2083,27 @@ function salvarAutorizacaoCheckout(
         clienteId:
           safe(identificacao.clienteId),
 
+        nome:
+          safe(identificacao.nome),
+
+        email:
+          normalizeEmail(identificacao.email),
+
+        cpfCnpj:
+          onlyDigits(identificacao.cpfCnpj),
+
+        whatsapp:
+          safe(identificacao.whatsapp),
+
+        whatsappE164:
+          safe(identificacao.whatsappE164),
+
+        whatsappConfirmado:
+          identificacao.whatsappConfirmado === true,
+
+        confirmacaoWhatsappVersao:
+          Number(identificacao.confirmacaoWhatsappVersao || 0),
+
         criadoEm:
           Date.now()
       })
@@ -2131,6 +2231,21 @@ async function abrirEtapa(
     await abrirPopupWhatsapp();
     return;
   }
+
+  /*
+    Se o cache da página iniciou a recuperação do cadastro, esperamos apenas
+    essa mesma promessa. Não fazemos uma segunda consulta no clique e não
+    adicionamos atraso ao cliente novo.
+  */
+  if (
+    !identificacaoCompletaParaCheckout(identificacao) &&
+    hidratacaoClienteCheckout
+  ) {
+    await hidratacaoClienteCheckout;
+  }
+
+  /* Handoff direto botão -> checkout: persistimos a melhor identidade antes de navegar. */
+  salvarIdentificacao();
 
   /*
     A identificação já foi feita antes. Não repetimos consulta de cliente
@@ -2315,6 +2430,15 @@ async function iniciarPagina() {
           email: normalizeEmail(salva.email),
           cpfCnpj: onlyDigits(salva.cpfCnpj)
         };
+
+        /*
+          Se o cache de acessos veio antes do cadastro completo, iniciamos a
+          hidratação do cliente imediatamente. Normalmente ela termina antes
+          de a pessoa conseguir clicar no botão.
+        */
+        if (!identificacaoCompletaParaCheckout(identificacao)) {
+          hidratacaoClienteCheckout = completarCadastroClienteRapido(salva);
+        }
 
         /*
           Ao voltar do checkout, a página usa o estado que já foi validado

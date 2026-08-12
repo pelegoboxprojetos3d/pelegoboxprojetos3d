@@ -11,6 +11,7 @@ const PROJECTS_COLLECTION = "Videosprojetos";
 const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
 const VERIFIED_SESSION_KEY = "pp_checkout_cliente_validado_sessao";
+const CHECKOUT_AUTH_KEY = "pp_checkout_autorizado";
 const PIX_CREATE_TIMEOUT = 12000;
 const PIX_READ_TIMEOUT = 3500;
 const PIX_INTERVAL = 2000;
@@ -172,17 +173,42 @@ async function hydrateReturningCustomer() {
   }
 }
 
+function identityStorageScore(value) {
+  if (!value || typeof value !== "object") return -1;
+
+  let score = 0;
+  const n = phone(value.whatsappE164 || value.whatsapp);
+
+  if (n) score += 1;
+  if (value.whatsappConfirmado === true) score += 5;
+  if (safe(value.clienteId)) score += 12;
+  if (safe(value.nome || value.nomeCliente).replace(/\s+/g, " ").length >= 3) score += 6;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email(value.email))) score += 6;
+  if (validCpf(value.cpfCnpj || value.cpf)) score += 6;
+
+  return score;
+}
+
 function savedIdentity() {
-  for (const [store,key] of [[session,SESSION_KEY],[local,LOCAL_KEY]]) {
+  let best = {};
+  let bestScore = -1;
+
+  for (const [store, key] of [[session, SESSION_KEY], [local, LOCAL_KEY]]) {
     try {
       const raw = store.getItem(key);
-      if (raw) {
-        const v = JSON.parse(raw);
-        if (v && typeof v === "object") return v;
+      if (!raw) continue;
+
+      const value = JSON.parse(raw);
+      const score = identityStorageScore(value);
+
+      if (score > bestScore) {
+        best = value && typeof value === "object" ? value : {};
+        bestScore = score;
       }
     } catch (_) {}
   }
-  return {};
+
+  return best;
 }
 
 function saveIdentity(patch) {
@@ -206,9 +232,61 @@ function mediaSource(value) {
   return "";
 }
 
+function checkoutHandoffIdentity(query = {}) {
+  try {
+    const raw = session.getItem(CHECKOUT_AUTH_KEY);
+    if (!raw) return {};
+
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object") return {};
+
+    const createdAt = Number(value.criadoEm || 0);
+    const age = Date.now() - createdAt;
+
+    if (!createdAt || age < 0 || age > 5 * 60 * 1000) {
+      return {};
+    }
+
+    const queryCode = digits(query.codigoProjeto || query.ordemVideo || query.codigo);
+    const authCode = digits(value.codigoProjeto);
+
+    if (queryCode && authCode && queryCode !== authCode) {
+      return {};
+    }
+
+    const queryType = safe(query.tipoProduto || "MEDIDAS").toUpperCase();
+    const authType = safe(value.tipoProduto || "").toUpperCase();
+
+    if (authType && queryType !== authType) {
+      return {};
+    }
+
+    const handoffPhone = phone(value.whatsappE164 || value.whatsapp);
+    const candidate = {
+      clienteId: safe(value.clienteId),
+      nome: safe(value.nome),
+      email: email(value.email),
+      cpfCnpj: cpf(value.cpfCnpj),
+      whatsapp: handoffPhone,
+      whatsappE164: handoffPhone ? "+55" + handoffPhone : "",
+      whatsappConfirmado: value.whatsappConfirmado === true
+    };
+
+    return (
+      candidate.whatsappConfirmado === true &&
+      safe(candidate.clienteId) &&
+      identityComplete(candidate)
+    ) ? candidate : {};
+  } catch (_) {
+    return {};
+  }
+}
+
 function contextFromUrl() {
   const q=wixLocation.query || {};
-  const s=savedIdentity();
+  const stored=savedIdentity();
+  const handoff=checkoutHandoffIdentity(q);
+  const s=identityComplete(handoff) ? { ...stored, ...handoff } : stored;
   const verifiedSession=sessionIdentityVerified(s);
   const project=digits(q.codigoProjeto || q.ordemVideo || q.codigo);
   const number=phone(s.whatsappE164 || s.whatsapp);

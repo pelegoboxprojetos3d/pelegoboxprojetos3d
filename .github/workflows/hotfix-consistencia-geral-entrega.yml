@@ -1,0 +1,221 @@
+name: Hotfix consistencia geral entrega
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/hotfix-consistencia-geral-entrega.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar hotfix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text, old, new, label):
+              if old in text:
+                  return text.replace(old, new, 1)
+              if new in text:
+                  return text
+              raise SystemExit(f'Trecho nao encontrado: {label}')
+
+          # ==================================================
+          # PAGINA DE ENTREGA
+          # ==================================================
+          page_path = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
+          page = page_path.read_text(encoding='utf-8')
+
+          page = re.sub(
+              r'const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*\n\s*\d+\s*;',
+              'const MIN_PROCESSAMENTO_VISIVEL =\n  500;',
+              page,
+              count=1
+          )
+          if 'const MAX_PROCESSAMENTO_VISIVEL' not in page:
+              page = replace_once(
+                  page,
+                  'const MIN_PROCESSAMENTO_VISIVEL =\n  500;',
+                  'const MIN_PROCESSAMENTO_VISIVEL =\n  500;\n\n/* Nunca deixar a impressora dominar a pagina por mais de 5 segundos. */\nconst MAX_PROCESSAMENTO_VISIVEL =\n  5000;',
+                  'declaracao MAX_PROCESSAMENTO_VISIVEL'
+              )
+          else:
+              page = re.sub(
+                  r'const\s+MAX_PROCESSAMENTO_VISIVEL\s*=\s*\n\s*\d+\s*;',
+                  'const MAX_PROCESSAMENTO_VISIVEL =\n  5000;',
+                  page,
+                  count=1
+              )
+
+          page = replace_once(
+              page,
+              '''  await baixarArquivo(\n    projeto.pdfProjeto,\n    "PROJETO-COMPLETO",\n    "pdf",\n    true\n  );''',
+              '''  /* Projeto completo: abre o link original do OneDrive. */\n  wixLocation.to(\n    safe(projeto.pdfProjeto)\n  );''',
+              'download direto do projeto completo'
+          )
+
+          page = replace_once(
+              page,
+              '''    const item =\n      await buscarItemProjetoVideo(\n        codigoProjeto\n      );\n\n    const url =\n      linkVideoDoItem(\n        item\n      );''',
+              '''    /* Usa primeiro o video que o backend ja devolveu. */\n    let url =\n      normalizarVideoUrl(\n        entrega?.project?.videoUrl\n      );\n\n    if (!url) {\n      const item =\n        await buscarItemProjetoVideo(\n          codigoProjeto\n        );\n\n      url =\n        linkVideoDoItem(\n          item\n        );\n    }''',
+              'video pelo payload da entrega'
+          )
+
+          page = replace_once(
+              page,
+              '''          await renderizarBotoes();\n          await mostrarDadosCarregados();\n          await mostrarAvisosEntrega();''',
+              '''          await renderizarBotoes();\n          await mostrarDadosCarregados();\n          await mostrarAvisosEntrega();\n\n          /* Video independe do processamento do Make/OneDrive. */\n          prepararBotaoVideo().catch((erro) => {\n            console.warn(\n              "Falha ao preparar video durante a aprovacao:",\n              erro?.message || erro\n            );\n          });''',
+              'video logo apos aprovacao'
+          )
+
+          page_path.write_text(page, encoding='utf-8')
+
+          # ==================================================
+          # BACKEND DA ENTREGA: VIDEO NO PAYLOAD
+          # ==================================================
+          entrega_path = Path('src/backend/entregaProjetosProntos.jsw')
+          entrega = entrega_path.read_text(encoding='utf-8')
+          entrega = replace_once(
+              entrega,
+              '''    pdfProjeto:\n      pdfProject,\n\n    statusProcessamento,''',
+              '''    pdfProjeto:\n      pdfProject,\n\n    videoUrl:\n      firstValue(\n        project?.link_video,\n        project?.linkVideo,\n        project?.url_video,\n        project?.urlVideo,\n        project?.youtube,\n        project?.youtubeUrl\n      ),\n\n    statusProcessamento,''',
+              'videoUrl no projectPayload'
+          )
+          entrega_path.write_text(entrega, encoding='utf-8')
+
+          # ==================================================
+          # SCRIPT AUTOMATICO: NAO RESTAURAR 4 SEGUNDOS
+          # ==================================================
+          script_path = Path('scripts/corrigir-entrega-pos-cartao.cjs')
+          script = script_path.read_text(encoding='utf-8')
+          old_script = '''page = page.replace(\n  /(const\\s+MIN_PROCESSAMENTO_VISIVEL\\s*=\\s*)3000(\\s*;)/,\n  '$14000$2'\n);\nif (!/const\\s+MIN_PROCESSAMENTO_VISIVEL\\s*=\\s*4000\\s*;/.test(page)) {\n  throw new Error('Não foi possível configurar a impressora para 4 segundos.');\n}'''
+          new_script = '''page = page.replace(\n  /(const\\s+MIN_PROCESSAMENTO_VISIVEL\\s*=\\s*)\\d+(\\s*;)/,\n  '$1500$2'\n);\nif (!/const\\s+MIN_PROCESSAMENTO_VISIVEL\\s*=\\s*500\\s*;/.test(page)) {\n  throw new Error('Não foi possível configurar a impressora mínima para 0,5 segundo.');\n}\nif (!/const\\s+MAX_PROCESSAMENTO_VISIVEL\\s*=\\s*5000\\s*;/.test(page)) {\n  page = page.replace(\n    /const\\s+MIN_PROCESSAMENTO_VISIVEL\\s*=\\s*500\\s*;/,\n    'const MIN_PROCESSAMENTO_VISIVEL =\\n  500;\\n\\nconst MAX_PROCESSAMENTO_VISIVEL =\\n  5000;'\n  );\n}'''
+          script = replace_once(script, old_script, new_script, 'regra persistente da impressora')
+          script = script.replace(
+              'impressora mínima de 4s.',
+              'impressora mínima de 0,5s e máxima de 5s.'
+          )
+          script_path.write_text(script, encoding='utf-8')
+
+          # ==================================================
+          # NOTIFICADOR UNIFICADO DE VENDA (EMAIL/CHATBOT)
+          # ==================================================
+          notifier_path = Path('src/backend/notificarVendaProjetoPronto.js')
+          notifier_path.write_text('''import wixData from "wix-data";\nimport { fetch } from "wix-fetch";\nimport { getSecret } from "wix-secrets-backend";\n\nconst SESSIONS = "SessoesProjetosProntos2";\nconst DB = { suppressAuth: true };\nconst SITE_BASE = "https://www.pelegobox.com.br";\nconst MAKE_SALE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";\nconst CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";\n\nconst safe = value => String(value ?? "").trim();\nconst digits = value => safe(value).replace(/\\D/g, "");\n\nfunction phone(value) {\n  let n = digits(value);\n  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) return `+${n}`;\n  if (n.length === 10 || n.length === 11) return `+55${n}`;\n  return "";\n}\n\nfunction type(value) {\n  const t = safe(value).normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toUpperCase().replace(/[\\s-]+/g, "_");\n  return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";\n}\n\nasync function optionalSecret(name) {\n  try { return safe(await getSecret(name)); } catch (_) { return ""; }\n}\n\nasync function postJson(url, payload) {\n  const response = await fetch(url, {\n    method: "post",\n    headers: { "Content-Type": "application/json" },\n    body: JSON.stringify(payload)\n  });\n  if (!response.ok) throw new Error(`Webhook respondeu HTTP ${response.status}.`);\n}\n\nasync function findSession(checkoutId) {\n  const result = await wixData.query(SESSIONS).eq("checkoutId", safe(checkoutId)).limit(1).find({ ...DB, consistentRead: true });\n  return result.items[0] || null;\n}\n\nexport async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId, paymentMethod = "" } = {}) {\n  const session = await findSession(checkoutId);\n  if (!session) return { ok: false, error: "session_not_found" };\n\n  const amount = Number(session.valor || 0);\n  const payload = {\n    event: "venda_aprovada_PROJETOS_PRONTOS",\n    origem: "PELEGO_BOX_PROJETOS_PRONTOS",\n    provider: "VALIDAPAY",\n    paymentMethod: safe(paymentMethod || session.paymentMethod).toUpperCase(),\n    status: "approved",\n    dataISO: new Date().toISOString(),\n    checkoutId: safe(session.checkoutId),\n    chargeId: safe(chargeId || session.paymentId || session.validaPayChargeId),\n    clienteId: safe(session.clienteId),\n    nome: safe(session.nomeCliente || session.nome),\n    email: safe(session.email).toLowerCase(),\n    whatsapp: phone(session.whatsapp || session.whatsappE164 || session.whatsApp),\n    cpfCnpj: digits(session.cpfCnpj),\n    produto: safe(session.produto),\n    tipoProduto: type(session.tipoProduto),\n    codigoProjeto: digits(session.codigoProjeto),\n    img: safe(session.img),\n    valor: amount,\n    valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),\n    deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`\n  };\n\n  const patch = { ...session, updatedAtDate: new Date() };\n  let changed = false;\n  const result = { ok: true, email: "skipped", chatbot: "skipped" };\n\n  if (!session.emailEnviadoEm && session.emailEnviado !== true) {\n    const url = await optionalSecret(MAKE_SALE_SECRET);\n    if (url) {\n      try {\n        await postJson(url, payload);\n        patch.emailEnviadoEm = new Date();\n        patch.emailEnviado = true;\n        changed = true;\n        result.email = "sent";\n      } catch (error) {\n        result.email = "error";\n        console.error("Falha ao disparar email da venda:", error?.message || error);\n      }\n    } else {\n      result.email = "secret_missing";\n    }\n  }\n\n  if (session.chatbotVendaEnviado !== true) {\n    const url = await optionalSecret(CHATBOT_SECRET);\n    if (url) {\n      try {\n        await postJson(url, payload);\n        patch.chatbotVendaEnviado = true;\n        changed = true;\n        result.chatbot = "sent";\n      } catch (error) {\n        result.chatbot = "error";\n        console.error("Falha ao disparar chatbot da venda:", error?.message || error);\n      }\n    } else {\n      result.chatbot = "secret_missing";\n    }\n  }\n\n  if (changed) await wixData.update(SESSIONS, patch, DB);\n  return result;\n}\n''', encoding='utf-8')
+
+          # ==================================================
+          # PIX: TELEFONE NO FORMATO DA COBRANCA + NOTIFICACAO SINCRONA
+          # ==================================================
+          pix_path = Path('src/backend/validaPayPixProjetosProntosCore.jsw')
+          pix = pix_path.read_text(encoding='utf-8')
+          if 'function validaPayPhone(' not in pix:
+              pix = replace_once(
+                  pix,
+                  '''function normalizePhone(value) {\n  let number = digits(value);\n  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);\n  return number.length === 10 || number.length === 11 ? `+55${number}` : "";\n}''',
+                  '''function normalizePhone(value) {\n  let number = digits(value);\n  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);\n  return number.length === 10 || number.length === 11 ? `+55${number}` : "";\n}\n\nfunction validaPayPhone(value) {\n  let number = digits(value);\n  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);\n  return number.length === 10 || number.length === 11 ? number : "";\n}''',
+                  'helper de telefone Pix'
+              )
+          pix = pix.replace(
+              'customer: { name: nome, email, phone: whatsapp, documentNumber: cpfCnpj },',
+              'customer: { name: nome, email, phone: validaPayPhone(whatsapp), documentNumber: cpfCnpj },',
+              1
+          )
+          pix = replace_once(
+              pix,
+              '''      notifyApproved(checkoutId, chargeId, response.data || {}).catch(error => {\n        console.error("Falha ao notificar venda aprovada:", error?.message || error);\n      });''',
+              '''      try {\n        await notifyApproved(checkoutId, chargeId, response.data || {});\n      } catch (error) {\n        console.error("Falha ao notificar venda aprovada:", error?.message || error);\n      }''',
+              'notificacao Pix aguardada'
+          )
+          pix_path.write_text(pix, encoding='utf-8')
+
+          # ==================================================
+          # CARTAO: TELEFONE + EMAIL/CHATBOT APOS APROVACAO
+          # ==================================================
+          card_path = Path('src/backend/validaPayCartaoProjetosProntos.jsw')
+          card = card_path.read_text(encoding='utf-8')
+          if 'notificarVendaProjetoProntoAprovada' not in card:
+              card = replace_once(
+                  card,
+                  'import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";',
+                  'import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";\nimport { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";',
+                  'import do notificador no cartao'
+              )
+          if 'function validaPayPhone(' not in card:
+              card = replace_once(
+                  card,
+                  '''function phone(v) {\n  let n = digits(v);\n  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);\n  return n.length === 10 || n.length === 11 ? `+55${n}` : "";\n}''',
+                  '''function phone(v) {\n  let n = digits(v);\n  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);\n  return n.length === 10 || n.length === 11 ? `+55${n}` : "";\n}\n\nfunction validaPayPhone(v) {\n  let n = digits(v);\n  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);\n  return n.length === 10 || n.length === 11 ? n : "";\n}''',
+                  'helper de telefone Cartao'
+              )
+          card = card.replace('phone: whatsapp\n      },', 'phone: validaPayPhone(whatsapp)\n      },', 1)
+
+          card = replace_once(
+              card,
+              '''    const make=await triggerMake({session,purchase:existente,paymentId:chargeId});\n    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make};''',
+              '''    const make=await triggerMake({session,purchase:existente,paymentId:chargeId});\n    const notificacao=await notificarVendaProjetoProntoAprovada({\n      checkoutId,\n      chargeId,\n      paymentMethod:"CARD"\n    });\n    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};''',
+              'notificacao cartao em compra ja registrada'
+          )
+          card = replace_once(
+              card,
+              '''  const make=await triggerMake({session,purchase:savedPurchase,paymentId:chargeId});\n  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make};''',
+              '''  const make=await triggerMake({session,purchase:savedPurchase,paymentId:chargeId});\n  const notificacao=await notificarVendaProjetoProntoAprovada({\n    checkoutId,\n    chargeId,\n    paymentMethod:"CARD"\n  });\n  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};''',
+              'notificacao cartao apos registro'
+          )
+          card_path.write_text(card, encoding='utf-8')
+
+          # ==================================================
+          # WEBHOOK VALIDAPAY: GARANTIA DE NOTIFICACAO SEM NAVEGADOR
+          # ==================================================
+          http_path = Path('src/backend/http-functions.js')
+          http = http_path.read_text(encoding='utf-8')
+          if 'notificarVendaProjetoProntoAprovada' not in http:
+              http = replace_once(
+                  http,
+                  'import { processarCompraProjetoPronto } from "backend/processarCompraProjetoPronto";',
+                  'import { processarCompraProjetoPronto } from "backend/processarCompraProjetoPronto";\nimport { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";',
+                  'import do notificador no webhook'
+              )
+          target = '''    const makeResult =\n      await triggerMake({\n        session,\n        purchase:\n          purchaseResult.purchase,\n        paymentId,\n        client\n      });\n\n    console.log(\n      "VALIDAPAY PAGAMENTO APROVADO:",'''
+          replacement = '''    const makeResult =\n      await triggerMake({\n        session,\n        purchase:\n          purchaseResult.purchase,\n        paymentId,\n        client\n      });\n\n    const notificationResult =\n      await notificarVendaProjetoProntoAprovada({\n        checkoutId: safe(session.checkoutId),\n        chargeId,\n        paymentMethod: safe(session.paymentMethod) || "VALIDAPAY"\n      });\n\n    console.log(\n      "VALIDAPAY PAGAMENTO APROVADO:",'''
+          http = replace_once(http, target, replacement, 'notificacao no webhook ValidaPay')
+          http = http.replace(
+              '''        make:\n          makeResult\n      }''',
+              '''        make:\n          makeResult,\n        notification:\n          notificationResult\n      }''',
+              1
+          )
+          http_path.write_text(http, encoding='utf-8')
+
+          print('Hotfix aplicado.')
+          PY
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Validar codigo
+        run: npm run lint
+
+      - name: Gravar hotfix
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Hotfix ja aplicado."
+            exit 0
+          fi
+          git commit -m "Corrigir entrega, video, OneDrive e notificacoes"
+          git push origin HEAD:main

@@ -2237,6 +2237,22 @@ function ligarEventos() {
 // INICIAR
 // ======================================================
 
+function cadastroProntoParaPagamento(data = identificacao) {
+  const telefone = normalizarTelefone(data);
+  const nome = safe(data?.nome).replace(/\s+/g, " ");
+  const mail = normalizeEmail(data?.email);
+  const documento = onlyDigits(data?.cpfCnpj || data?.cpf);
+
+  return Boolean(
+    telefone.whatsapp &&
+    safe(data?.clienteId) &&
+    data?.whatsappConfirmado === true &&
+    nome.length >= 3 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(mail) &&
+    documento.length === 11
+  );
+}
+
 async function iniciarPagina() {
   /*
     Toda vez que a página aparece novamente,
@@ -2302,7 +2318,7 @@ async function iniciarPagina() {
           codigoPublico(projeto)
         );
 
-      if (acessosSalvos) {
+      if (acessosSalvos && cadastroProntoParaPagamento(salva)) {
         identificado = true;
         consultaConcluida = true;
         acessos = acessosSalvos;
@@ -2351,23 +2367,12 @@ async function iniciarPagina() {
         return;
       }
 
-      identificado =
-        true;
-
-      identificarCliente(
-        salva
-      ).catch(
-        (
-          error
-        ) => {
-          console.error(
-            "Erro ao restaurar identificação:",
-            error?.message ||
-            error
-          );
-        }
-      );
-
+      /*
+        Registro antigo com apenas WhatsApp não libera o clique antes da hora.
+        Fazemos uma única restauração aqui, durante a abertura da página.
+        Depois disso o botão não consulta backend e navega imediatamente.
+      */
+      await identificarCliente(salva);
       return;
     }
 

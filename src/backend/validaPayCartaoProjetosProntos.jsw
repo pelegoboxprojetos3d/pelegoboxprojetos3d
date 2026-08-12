@@ -155,7 +155,7 @@ async function token(force = false) {
     "grant_type=client_credentials",
     `client_id=${encodeURIComponent(id)}`,
     `client_secret=${encodeURIComponent(secret)}`,
-    `scope=${encodeURIComponent("checkouts/write products/write checkouts/read pix.cob/read")}`
+    `scope=${encodeURIComponent("checkouts/write products/write products/read checkouts/read pix.cob/read")}`
   ].join("&");
 
   const response = await fetch(AUTH_URL, {
@@ -247,6 +247,44 @@ async function saveSession(checkoutId, patch) {
   return current ? wixData.update(SESSIONS, item, DB) : wixData.insert(SESSIONS, item, DB);
 }
 
+
+async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
+  const nomeEsperado = normalizarTituloProduto(produto).toLowerCase();
+  if (!nomeEsperado || !(Number(valor) > 0)) return "";
+
+  try {
+    const lista = await api("get", `/v1/products?limit=50&status=active&search=${encodeURIComponent(produto)}`);
+    if (!lista.ok) return "";
+
+    const items = lista.data?.items || lista.data?.data?.items || [];
+    for (const item of items) {
+      if (normalizarTituloProduto(item?.name).toLowerCase() !== nomeEsperado) continue;
+
+      let detalhe = item;
+      let prices = item?.prices || [];
+      const productId = safe(item?.productId || item?.id);
+
+      if ((!Array.isArray(prices) || !prices.length) && productId) {
+        const respostaDetalhe = await api("get", `/v1/products/${encodeURIComponent(productId)}`);
+        if (respostaDetalhe.ok) detalhe = respostaDetalhe.data?.data || respostaDetalhe.data || detalhe;
+        prices = detalhe?.prices || detalhe?.data?.prices || [];
+      }
+
+      const preco = (Array.isArray(prices) ? prices : []).find(price =>
+        safe(price?.priceId || price?.id) &&
+        Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&
+        (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === "ONE_TIME")
+      );
+
+      if (preco) return safe(preco?.priceId || preco?.id);
+    }
+  } catch (error) {
+    console.warn("Não foi possível localizar produto existente na ValidaPay:", error?.message || error);
+  }
+
+  return "";
+}
+
 async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
   try {
     const r = await wixData
@@ -277,6 +315,12 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
   if (reused) {
     await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
     return reused;
+  }
+
+  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });
+  if (providerReused) {
+    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });
+    return providerReused;
   }
 
   const response = await api("post", "/v1/products", {

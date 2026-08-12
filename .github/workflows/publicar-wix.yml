@@ -60,6 +60,9 @@ jobs:
       - name: Preparar próximo teste real
         run: node scripts/ajustar-pre-teste-real-2026-08-12.cjs
 
+      - name: Aplicar correção estável do checkout
+        run: node scripts/corrigir-fluxo-checkout-estavel-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 

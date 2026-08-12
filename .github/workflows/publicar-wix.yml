@@ -36,6 +36,9 @@ jobs:
       - name: Ajustar status do método de pagamento
         run: node scripts/ajustar-status-metodo-pagamento-2026-08-12.cjs
 
+      - name: Reabrir login social após 3 segundos
+        run: node scripts/reabrir-login-social-3s-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 
@@ -47,8 +50,10 @@ jobs:
           else
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
-            git add "src/public/custom-elements/pelego-checkout-pronto.js"
-            git commit -m "Automação: atualizar estado visual do método de pagamento"
+            git add \
+              "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
+              "src/public/custom-elements/pelego-checkout-pronto.js"
+            git commit -m "Automação: atualizar checkout Projetos Prontos"
             git push origin HEAD:main
           fi
 

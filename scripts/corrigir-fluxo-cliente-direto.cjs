@@ -4,6 +4,25 @@ const arquivo = "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js";
 let codigo = fs.readFileSync(arquivo, "utf8");
 const original = codigo;
 
+/*
+  O fluxo cross-browser atual já contempla o objetivo deste script antigo:
+  - cliente completo é liberado imediatamente com o estado local;
+  - o backend revalida acessos em segundo plano em desktop e mobile;
+  - o clique não dispara novamente a cadeia buscarCliente + obterAcessos.
+
+  Não reintroduzimos a lógica antiga quando esse fluxo já está presente.
+*/
+const temFluxoCrossBrowser =
+  codigo.includes("function cadastroProntoParaPagamento(") &&
+  codigo.includes("async function revalidarAcessosSalvos(") &&
+  codigo.includes("if (cadastroProntoParaPagamento(salva)) {") &&
+  codigo.includes("Erro ao atualizar acessos em segundo plano:");
+
+if (temFluxoCrossBrowser) {
+  console.log("Cliente cadastrado direto ao pagamento: fluxo cross-browser mais novo já aplicado.");
+  process.exit(0);
+}
+
 function insertBeforeOnce(source, marker, insertion, uniqueMarker, label) {
   if (source.includes(uniqueMarker)) {
     console.log(`${label}: já aplicado.`);

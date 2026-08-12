@@ -99,7 +99,7 @@ jobs:
           fi
 
       - name: Aguardar sincronização GitHub → Wix
-        run: sleep 30
+        run: sleep 60
 
       - name: Publicar versão salva no Wix
         env:
@@ -128,4 +128,4 @@ jobs:
           fi
           echo "Site publicado com a versão salva mais recente do Editor."
 
-# gatilho cartao 2026-08-11 20:14
+# republicar login social 2026-08-12 19:20 BRT

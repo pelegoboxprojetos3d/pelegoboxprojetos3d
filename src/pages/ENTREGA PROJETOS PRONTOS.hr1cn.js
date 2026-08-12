@@ -132,6 +132,7 @@ const MIN_PROCESSAMENTO_VISIVEL =
 
 
 
+
 const EMAIL_PROCESSAMENTO_MS =
   7000;
 
@@ -451,24 +452,15 @@ async function esconderProcessamento() {
 
 function entregaProcessada(resultado) {
   const projeto = resultado?.project || {};
-  const tipo = safe(resultado?.session?.tipoProduto).toUpperCase();
 
   /*
-    A existência do arquivo da etapa é a fonte da verdade.
-    O Make/OneDrive pode ainda estar marcando PROCESSANDO quando o arquivo
-    já foi importado no Wix. Não seguramos mais a entrega por esse status.
+    REGRA OFICIAL:
+    na abertura da página de entrega a impressora aguarda somente a imagem
+    de Medidas. Não espera Gráficos nem o PDF do Projeto Completo.
   */
-
-  if (tipo === "PROJETO_COMPLETO") {
-    return Boolean(safe(projeto.pdfProjeto));
-  }
-
-  if (tipo === "GRAFICOS") {
-    return Array.isArray(projeto.imagensGraficos) &&
-      projeto.imagensGraficos.filter(Boolean).length > 0;
-  }
-
-  return Boolean(safe(projeto.imagemMedidas));
+  return Boolean(
+    safe(projeto.imagemMedidas)
+  );
 }
 
 // ======================================================
@@ -1234,23 +1226,83 @@ async function baixarProximoGrafico() {
 
 
 async function baixarProjetoCompleto() {
-  const projeto =
-    entrega?.project;
-
   if (
-    !entrega
-      ?.access
-      ?.projeto ||
-    !safe(
-      projeto?.pdfProjeto
-    )
+    entrega?.access?.projeto !== true
   ) {
     return;
   }
 
-  /* Projeto completo: abre o link original do OneDrive. */
+  let arquivo =
+    safe(entrega?.project?.pdfProjeto);
+
+  /*
+    O botão pode ser liberado alguns instantes antes de o Make gravar o
+    webUrl do OneDrive. Atualiza a entrega por alguns segundos em vez de
+    deixar o clique morrer sem resposta.
+  */
+  if (!arquivo) {
+    alterarDescricao(
+      "Projeto completo pago. Localizando o PDF..."
+    );
+
+    const checkoutId =
+      safe(
+        wixLocation.query.checkout_id ||
+        wixLocation.query.checkoutId
+      );
+
+    const token =
+      safe(wixLocation.query.token);
+
+    for (
+      let tentativa = 1;
+      tentativa <= 5 && !arquivo;
+      tentativa += 1
+    ) {
+      try {
+        const atualizado =
+          await buscarEntregaProjetoPronto({
+            checkoutId,
+            token
+          });
+
+        if (
+          atualizado?.ok &&
+          atualizado?.approved
+        ) {
+          entrega = atualizado;
+          arquivo =
+            safe(atualizado?.project?.pdfProjeto);
+        }
+      } catch (erro) {
+        console.warn(
+          "Falha ao atualizar link do projeto completo:",
+          erro?.message || erro
+        );
+      }
+
+      if (
+        !arquivo &&
+        tentativa < 5
+      ) {
+        await esperar(800);
+      }
+    }
+  }
+
+  if (!arquivo) {
+    await mostrarGaleria();
+
+    alterarDescricao(
+      "O PDF do projeto completo ainda está sendo finalizado. Tente novamente em alguns segundos."
+    );
+
+    return;
+  }
+
+  /* Abre o compartilhamento original do OneDrive para visualizar o PDF online. */
   wixLocation.to(
-    safe(projeto.pdfProjeto)
+    arquivo
   );
 }
 

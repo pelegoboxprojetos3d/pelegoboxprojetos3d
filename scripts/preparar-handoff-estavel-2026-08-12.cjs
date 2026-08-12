@@ -15,6 +15,23 @@ if (!codigo.includes('const CHECKOUT_AUTH_KEY = "pp_checkout_autorizado";')) {
   console.log("Preparador: constantes do handoff restauradas.");
 }
 
+/*
+  O script estável substitui a versão antiga chamada checkoutHandoffVerified.
+  Se a versão atual já usa checkoutHandoffSnapshot, renomeamos temporariamente
+  apenas dentro deste job. O passo seguinte recria checkoutHandoffSnapshot com
+  a implementação definitiva antes do lint/publicação.
+*/
+if (
+  codigo.includes("function checkoutHandoffSnapshot(") &&
+  !codigo.includes("function checkoutHandoffVerified(")
+) {
+  codigo = codigo.replace(
+    "function checkoutHandoffSnapshot(",
+    "function checkoutHandoffVerified("
+  );
+  console.log("Preparador: snapshot atual marcado para substituição estável.");
+}
+
 if (
   !codigo.includes("function checkoutHandoffSnapshot(") &&
   !codigo.includes("function checkoutHandoffVerified(")

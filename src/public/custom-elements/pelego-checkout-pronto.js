@@ -83,9 +83,9 @@ button{cursor:pointer}
 .alert.success{display:block;background:var(--success-bg);color:var(--success)}
 .button{width:100%;min-height:47px;border:0;border-radius:11px;font-weight:700;transition:transform .13s,filter .13s,opacity .13s}
 .button:hover:not(:disabled){transform:translateY(-2px);filter:brightness(.985)}
-.buttonPrimary{background:var(--green);color:#fff}
+.buttonPrimary{background:var(--green);color:#fff;border:2px solid var(--green)}
 .button:disabled{opacity:.45;cursor:not-allowed;transform:none}
-.buttonPrimary:disabled{background:#d9d9d9;color:#8a8a8a;opacity:1}
+.buttonPrimary:disabled{background:#f5fff7;color:var(--green);border-color:var(--green);opacity:1;box-shadow:0 3px 11px rgba(38,133,53,.09)}
 .buttonLink{margin-top:7px;min-height:28px;background:transparent;color:#666;text-decoration:underline}
 
 /* PAYMENT NORMAL, visual preservado */
@@ -226,13 +226,21 @@ button{cursor:pointer}
           <p>Seu e-mail já vem da conta Google/Facebook. Confira nome, WhatsApp e CPF uma única vez neste navegador.</p>
         </div>
         <div class="formGrid">
-          <div class="fieldFull">
+          <div>
             <label class="label">WhatsApp com DDD <span class="required">*</span></label>
             <div class="phoneRow">
               <div class="phonePrefix">🇧🇷 +55</div>
-              <input id="phoneInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="Ex: 47988419261">
+              <input id="phoneInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="Ex: (11) 99888-7766">
             </div>
             <p class="hint">Informe somente DDD e número.</p>
+          </div>
+          <div>
+            <label class="label">Confirme seu WhatsApp <span class="required">*</span></label>
+            <div class="phoneRow">
+              <div class="phonePrefix">🇧🇷 +55</div>
+              <input id="phoneConfirmInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="Digite novamente">
+            </div>
+            <p id="phoneConfirmHint" class="hint">Digite novamente o mesmo WhatsApp.</p>
           </div>
           <div>
             <label class="label">Seu nome <span class="required">*</span></label>
@@ -417,7 +425,7 @@ function $(id){return document.getElementById(id)}
 var E={
  step1:$("step1"),step2:$("step2"),step3:$("step3"),img:$("productImage"),fallback:$("productFallback"),title:$("productTitle"),price:$("productPrice"),
  identity:$("identityPanel"),payment:$("paymentPanel"),normal:$("paymentNormal"),cardMode:$("paymentCardMode"),success:$("successPanel"),already:$("alreadyPanel"),
- phone:$("phoneInput"),name:$("nameInput"),cpf:$("cpfInput"),email:$("emailInput"),email2:$("emailConfirmInput"),identityAlert:$("identityAlert"),identityBtn:$("identityButton"),
+ phone:$("phoneInput"),phoneConfirm:$("phoneConfirmInput"),phoneConfirmHint:$("phoneConfirmHint"),name:$("nameInput"),cpf:$("cpfInput"),email:$("emailInput"),email2:$("emailConfirmInput"),identityAlert:$("identityAlert"),identityBtn:$("identityButton"),
  topGrid:$("paymentTopGrid"),left:$("leftColumn"),center:$("centerColumn"),notice:$("paymentNotice"),google:$("googleMethod"),pixAuto:$("pixAutoMethod"),apple:$("appleMethod"),paypal:$("paypalMethod"),deferred:$("mobileDeferred"),
  pix:$("pixMethod"),card:$("cardMethod"),pixFromCard:$("pixFromCard"),pixArea:$("pixArea"),qr:$("qrRender"),tetrisWrap:$("tetrisWrap"),tetrisCanvas:$("tetrisCanvas"),pixCode:$("pixCode"),copy:$("copyPixButton"),pixStatus:$("pixStatus"),pixStatusText:$("pixStatusText"),
  cardLeft:$("cardLeft"),cardRight:$("cardRight"),cardSelected:$("cardSelected"),cardPaymentNotice:$("cardPaymentNotice"),cardForm:$("cardForm"),cardNumber:$("cardNumber"),cardMonth:$("cardMonth"),cardYear:$("cardYear"),cardCvv:$("cardCvv"),cardName:$("cardName"),cardDocument:$("cardDocument"),installments:$("installments"),cardAlert:$("cardAlert"),cardSubmit:$("cardSubmit"),
@@ -540,7 +548,7 @@ function hydrate(ctx){
  E.price.textContent=money(S.ctx.valor||S.ctx.price);
  var src=safe(S.ctx.imagem||S.ctx.img);
  if(src){E.img.src=src;E.img.classList.remove("hidden");E.fallback.classList.add("hidden")}else{E.img.classList.add("hidden");E.fallback.classList.remove("hidden")}
- var p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp);if(p)E.phone.value=formatPhone(p);
+ var p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp);if(p)E.phone.value=formatPhone(p);if(E.phoneConfirm)E.phoneConfirm.value="";
  if(S.ctx.nome)E.name.value=safe(S.ctx.nome);
  if(S.ctx.cpfCnpj)E.cpf.value=formatCpf(S.ctx.cpfCnpj);
  if(S.ctx.email){E.email.value=email(S.ctx.email);E.email2.value=email(S.ctx.email)}
@@ -558,27 +566,32 @@ function hydrate(ctx){
 
 
 
+function phoneConfirmationMatches(){
+ var a=phoneLocal(E.phone.value),b=phoneLocal(E.phoneConfirm.value);
+ return Boolean(a&&b&&a===b)
+}
+function syncPhoneConfirmationState(){
+ if(!E.phoneConfirm||!E.phoneConfirmHint)return;
+ var a=phoneLocal(E.phone.value),b=phoneLocal(E.phoneConfirm.value),mismatch=Boolean(b&&a!==b);
+ E.phoneConfirm.style.borderColor=mismatch?"#d32f2f":"";
+ E.phoneConfirm.style.boxShadow=mismatch?"0 0 0 3px rgba(211,47,47,.10)":"";
+ E.phoneConfirmHint.textContent=mismatch?"Os números não conferem.":"Digite novamente o mesmo WhatsApp.";
+ E.phoneConfirmHint.style.color=mismatch?"#b3261e":"#777";
+}
 function identityFieldsReady(){
- var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
- return Boolean(p && n.length>=3 && validCpf(c) && validEmail(a))
+ var p=phoneLocal(E.phone.value),p2=phoneLocal(E.phoneConfirm.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
+ return Boolean(p&&p2&&p===p2&&n.length>=3&&validCpf(c)&&validEmail(a))
 }
 function syncIdentityButton(){
+ syncPhoneConfirmationState();
  if(!E.identityBtn)return;
- E.identityBtn.disabled=S.saving || !identityFieldsReady();
-}
-
-
-function identityFieldsReady(){
- var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value),b=email(E.email2.value);
- return Boolean(p && n.length>=3 && validCpf(c) && validEmail(a) && validEmail(b) && a===b)
-}
-function syncIdentityButton(){
- if(!E.identityBtn)return;
- E.identityBtn.disabled=S.saving || !identityFieldsReady();
+ E.identityBtn.disabled=S.saving||!identityFieldsReady();
 }
 function validateIdentity(){
- var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
+ var p=phoneLocal(E.phone.value),p2=phoneLocal(E.phoneConfirm.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
  if(!p){setAlert(E.identityAlert,"error","Informe um WhatsApp válido com DDD.");E.phone.focus();return false}
+ if(!p2){setAlert(E.identityAlert,"error","Confirme seu WhatsApp.");E.phoneConfirm.focus();return false}
+ if(p!==p2){setAlert(E.identityAlert,"error","Os números de WhatsApp não conferem.");syncPhoneConfirmationState();E.phoneConfirm.focus();return false}
  if(n.length<3){setAlert(E.identityAlert,"error","Informe seu nome completo.");E.name.focus();return false}
  if(!validCpf(c)){setAlert(E.identityAlert,"error","Informe um CPF válido.");E.cpf.focus();return false}
  if(!validEmail(a)){setAlert(E.identityAlert,"error","Não foi possível carregar o e-mail da sua conta Google/Facebook.");return false}
@@ -754,6 +767,7 @@ function showAlready(){stopTetris();E.identity.classList.add("hidden");E.payment
 
 E.img.addEventListener("error",function(){E.img.classList.add("hidden");E.fallback.classList.remove("hidden")});
 E.phone.addEventListener("input",function(){this.value=formatPhone(this.value);syncIdentityButton()});
+E.phoneConfirm.addEventListener("input",function(){this.value=formatPhone(this.value);syncIdentityButton()});
 E.name.addEventListener("input",syncIdentityButton);
 E.cpf.addEventListener("input",function(){this.value=formatCpf(this.value);syncIdentityButton()});
 E.email.addEventListener("input",syncIdentityButton);

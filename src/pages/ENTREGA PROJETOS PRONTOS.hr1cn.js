@@ -121,7 +121,7 @@ const MAX_TENTATIVAS =
   150;
 
 const INTERVALO =
-  2000;
+  1000;
 
 /*
   Mesmo quando a imagem já existe (por exemplo, acesso pelo botão do e-mail),
@@ -132,6 +132,9 @@ const MIN_PROCESSAMENTO_VISIVEL =
 
 let processamentoVisivelDesde =
   0;
+
+let processamentoVisualEncerrado =
+  false;
 
 let entrega =
   null;
@@ -318,6 +321,10 @@ async function mostrarDadosCarregados() {
 // ======================================================
 
 async function mostrarProcessamento() {
+  if (processamentoVisualEncerrado) {
+    return;
+  }
+
   /*
     PRIORIDADE ABSOLUTA DA ENTREGA:
     a impressora precisa ser o primeiro elemento dinâmico a aparecer.
@@ -2233,10 +2240,33 @@ async function carregarEntrega() {
           return;
         }
 
-        await mostrarProcessamento();
+        if (!processamentoVisualEncerrado) {
+          await mostrarProcessamento();
+
+          const tempoProcessando =
+            processamentoVisivelDesde
+              ? Date.now() - processamentoVisivelDesde
+              : 0;
+
+          if (
+            tempoProcessando >=
+            MAX_PROCESSAMENTO_VISIVEL
+          ) {
+            processamentoVisualEncerrado = true;
+
+            try {
+              await $w(IDS.processando).hide();
+              await $w(IDS.processando).collapse();
+            } catch (_) {}
+
+            processamentoVisivelDesde = 0;
+          }
+        }
 
         alterarDescricao(
-          "Pagamento aprovado. Estamos preparando seus arquivos..."
+          processamentoVisualEncerrado
+            ? "Pagamento aprovado. Seus acessos já estão disponíveis; finalizando os arquivos..."
+            : "Pagamento aprovado. Estamos preparando seus arquivos..."
         );
 
         await esperar(

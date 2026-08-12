@@ -1049,6 +1049,75 @@ function estadoPago(
   button.enable();
 }
 
+function ligarDestaqueAoPassarMouse(
+  buttonId,
+  avisoId
+) {
+  const button =
+    $w(buttonId);
+
+  const aviso =
+    $w(avisoId);
+
+  let corOriginal =
+    "";
+
+  let larguraOriginal =
+    0;
+
+  try {
+    corOriginal =
+      aviso.style.borderColor;
+
+    larguraOriginal =
+      aviso.style.borderWidth;
+  } catch (_) {
+    return;
+  }
+
+  button.onMouseIn(
+    () => {
+      try {
+        aviso.style.borderColor =
+          "#159447";
+
+        aviso.style.borderWidth =
+          3;
+      } catch (_) {}
+    }
+  );
+
+  button.onMouseOut(
+    () => {
+      try {
+        aviso.style.borderColor =
+          corOriginal;
+
+        aviso.style.borderWidth =
+          larguraOriginal;
+      } catch (_) {}
+    }
+  );
+}
+
+function ligarDestaquesDosAvisos() {
+  ligarDestaqueAoPassarMouse(
+    IDS.medidas,
+    IDS.avisoMedidas
+  );
+
+  ligarDestaqueAoPassarMouse(
+    IDS.graficos,
+    IDS.avisoGraficos
+  );
+
+  ligarDestaqueAoPassarMouse(
+    IDS.projeto,
+    IDS.avisoProjeto
+  );
+}
+
+
 // ======================================================
 // ESTADO DAS ETAPAS
 // ======================================================
@@ -1141,11 +1210,26 @@ function bloquearSemIdentificacao() {
 }
 
 function esconderConteudoPrincipal() {
-  /*
-    Preserva o conteúdo visual no Voltar/BFCache enquanto o CMS responde.
-    Segurança continua garantida porque os botões ficam desabilitados até
-    a identificação e os acessos serem restaurados.
-  */
+  $w(
+    IDS.titulo
+  ).hide();
+
+  $w(
+    IDS.imagem
+  ).hide();
+
+  $w(
+    IDS.medidas
+  ).hide();
+
+  $w(
+    IDS.graficos
+  ).hide();
+
+  $w(
+    IDS.projeto
+  ).hide();
+
   bloquearSemIdentificacao();
 }
 
@@ -2109,6 +2193,8 @@ function ligarEventos() {
   eventosLigados =
     true;
 
+  ligarDestaquesDosAvisos();
+
   $w(
     IDS.medidas
   ).onClick(
@@ -2166,48 +2252,6 @@ function cadastroProntoParaPagamento(data = identificacao) {
     documento.length === 11
   );
 }
-
-async function revalidarAcessosSalvos(data = identificacao) {
-  if (!projeto || !cadastroProntoParaPagamento(data)) {
-    return;
-  }
-
-  const telefone = normalizarTelefone(data);
-
-  try {
-    const resultado = await comTimeout(
-      obterAcessosProjeto({
-        codigoProjeto: codigoPublico(projeto),
-        clienteId: safe(data.clienteId),
-        email: normalizeEmail(data.email),
-        whatsapp: onlyDigits(telefone.whatsappE164)
-      }),
-      6000,
-      "A atualização dos acessos demorou mais que o esperado."
-    );
-
-    if (!resultado?.ok || !resultado?.access) {
-      return;
-    }
-
-    acessos = {
-      medidas: resultado.access.medidas === true,
-      graficos: resultado.access.graficos === true,
-      projeto: resultado.access.projeto === true
-    };
-
-    capturarDownloads(resultado);
-    salvarAcessosLocais(codigoPublico(projeto), acessos);
-    consultaConcluida = true;
-    await mostrarValoresEAcessos();
-  } catch (error) {
-    console.warn(
-      "Revalidação de acessos em segundo plano falhou:",
-      error?.message || error
-    );
-  }
-}
-
 
 async function iniciarPagina() {
   /*
@@ -2274,15 +2318,10 @@ async function iniciarPagina() {
           codigoPublico(projeto)
         );
 
-      if (cadastroProntoParaPagamento(salva)) {
+      if (acessosSalvos && cadastroProntoParaPagamento(salva)) {
         identificado = true;
-        consultaConcluida = Boolean(acessosSalvos);
-
-        acessos = acessosSalvos || {
-          medidas: false,
-          graficos: false,
-          projeto: false
-        };
+        consultaConcluida = true;
+        acessos = acessosSalvos;
 
         clienteAtual = {
           _id: safe(salva.clienteId),
@@ -2293,25 +2332,46 @@ async function iniciarPagina() {
           cpfCnpj: onlyDigits(salva.cpfCnpj)
         };
 
-        capturarDownloads({ access: acessos });
+        /*
+          Ao voltar do checkout, a página usa o estado que já foi validado
+          e salvo. Não dispara buscarCliente + obterAcessosProjeto em paralelo
+          com a nova criação de PIX. A validação definitiva continua no
+          checkout/backend antes de cobrar.
+        */
+        capturarDownloads({
+          access: acessos
+        });
+
         await mostrarValoresEAcessos();
 
         /*
-          O cache serve só para pintar rápido. A verdade volta do backend
-          em segundo plano, tanto no desktop quanto no mobile.
+          No celular, o cache serve apenas para pintar a tela rápido.
+          Logo depois confirmamos os acessos no backend. Assim uma compra
+          recente não deixa banner antigo preso no navegador.
         */
-        revalidarAcessosSalvos(salva)
-          .catch((error) => {
-            console.error(
-              "Erro ao atualizar acessos em segundo plano:",
-              error?.message || error
-            );
-          });
+        if (
+          wixWindowFrontend.formFactor === "Mobile"
+        ) {
+          identificarCliente(
+            salva
+          ).catch(
+            (error) => {
+              console.error(
+                "Erro ao revalidar acessos mobile:",
+                error?.message || error
+              );
+            }
+          );
+        }
 
         return;
       }
 
-      /* Identificação antiga/incompleta ainda usa o caminho de restauração. */
+      /*
+        Registro antigo com apenas WhatsApp não libera o clique antes da hora.
+        Fazemos uma única restauração aqui, durante a abertura da página.
+        Depois disso o botão não consulta backend e navega imediatamente.
+      */
       await identificarCliente(salva);
       return;
     }

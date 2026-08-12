@@ -1,4 +1,5 @@
 import wixData from "wix-data";
+import { currentMember as currentMemberBackend } from "wix-members-backend";
 
 import {
   webMethod,
@@ -352,6 +353,96 @@ export const buscarCliente =
     }
   );
 
+
+// ======================================================
+// BUSCAR CLIENTE PELO MEMBRO WIX AUTENTICADO
+// ======================================================
+
+export const buscarClienteDoMembroAtual =
+  webMethod(
+    Permissions.SiteMember,
+
+    async () => {
+      const membro =
+        await currentMemberBackend.getMember();
+
+      const memberId =
+        safe(membro?._id);
+
+      const emailsContato =
+        Array.isArray(
+          membro?.contactDetails?.emails
+        )
+          ? membro.contactDetails.emails
+          : [];
+
+      const memberEmail =
+        limparEmail(
+          membro?.loginEmail ||
+          emailsContato[0] ||
+          membro?.contactDetails?.email
+        );
+
+      const memberName =
+        limparNome(
+          membro?.profile?.nickname ||
+          [
+            membro?.contactDetails?.firstName,
+            membro?.contactDetails?.lastName
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+
+      if (!memberId || !memberEmail) {
+        return {
+          memberId,
+          email: memberEmail,
+          nome: memberName,
+          cliente: null,
+          ambiguo: false
+        };
+      }
+
+      const encontrados = [];
+
+      for (const campo of ["email", "Email"]) {
+        try {
+          const resultado =
+            await wixData
+              .query(COLLECTION)
+              .eq(campo, memberEmail)
+              .limit(20)
+              .find(DB_OPTS);
+
+          encontrados.push(
+            ...(resultado.items || [])
+          );
+        } catch (_) {}
+      }
+
+      const unicos =
+        Array.from(
+          new Map(
+            encontrados
+              .filter(Boolean)
+              .map((item) => [safe(item?._id), item])
+          ).values()
+        ).filter((item) => safe(item?._id));
+
+      return {
+        memberId,
+        email: memberEmail,
+        nome: memberName,
+        cliente:
+          unicos.length === 1
+            ? clientePublico(unicos[0])
+            : null,
+        ambiguo:
+          unicos.length > 1
+      };
+    }
+  );
 
 /*
   Consulta estrita usada SOMENTE para decidir se o checkout pode

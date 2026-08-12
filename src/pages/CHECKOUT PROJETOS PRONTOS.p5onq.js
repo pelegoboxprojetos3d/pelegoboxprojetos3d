@@ -1,6 +1,7 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
 import wixWindowFrontend from "wix-window-frontend";
+import { authentication, currentMember } from "wix-members-frontend";
 
 import {
   local,
@@ -8,7 +9,8 @@ import {
 } from "wix-storage-frontend";
 
 import {
-  buscarCliente
+  buscarCliente,
+  buscarClienteDoMembroAtual
 } from "backend/clientes.web";
 
 import {
@@ -1651,6 +1653,198 @@ function agendarPopupWhatsapp(
     );
 }
 
+async function identificarMembroSocial() {
+  cancelarPopupAgendado();
+
+  consultaConcluida =
+    false;
+
+  const perfil =
+    await comTimeout(
+      buscarClienteDoMembroAtual(),
+      7000,
+      "A identificação do membro Wix não respondeu."
+    );
+
+  const memberId =
+    safe(perfil?.memberId);
+
+  const memberEmail =
+    normalizeEmail(
+      perfil?.email
+    );
+
+  if (!memberId || !memberEmail) {
+    identificado = false;
+    bloquearSemIdentificacao();
+    throw new Error(
+      "Não foi possível identificar o membro Wix autenticado."
+    );
+  }
+
+  const cliente =
+    perfil?.cliente &&
+    typeof perfil.cliente === "object"
+      ? perfil.cliente
+      : null;
+
+  const telefone =
+    cliente
+      ? normalizarTelefone({
+          whatsapp:
+            cliente.whatsappNacional ||
+            cliente.whatsapp,
+          whatsappE164:
+            cliente.whatsappE164 ||
+            cliente.whatsapp,
+          ddi: "55",
+          country: "br"
+        })
+      : {
+          whatsapp: "",
+          whatsappE164: "",
+          ddi: "55",
+          country: "br"
+        };
+
+  identificacao = {
+    whatsapp:
+      telefone.whatsapp,
+    whatsappE164:
+      telefone.whatsappE164,
+    ddi:
+      telefone.ddi || "55",
+    country:
+      telefone.country || "br",
+    countryName:
+      "Brasil",
+    clienteId:
+      cliente
+        ? firstValue(
+            cliente._id,
+            cliente.clienteId
+          )
+        : "",
+    nome:
+      firstValue(
+        cliente?.nome,
+        perfil?.nome
+      ),
+    email:
+      normalizeEmail(
+        firstValue(
+          cliente?.email,
+          memberEmail
+        )
+      ),
+    cpfCnpj:
+      onlyDigits(
+        cliente?.cpfCnpj ||
+        cliente?.cpf ||
+        ""
+      ),
+    /*
+      Compatibilidade com o checkout atual: quando o cliente foi
+      localizado por e-mail autenticado do Wix, a identidade já foi
+      confirmada pelo login social. O WhatsApp abaixo vem do cadastro
+      existente, não de um número digitado por um visitante anônimo.
+    */
+    whatsappConfirmado:
+      Boolean(
+        cliente &&
+        telefone.whatsapp
+      ),
+    confirmacaoWhatsappVersao:
+      cliente && telefone.whatsapp
+        ? CONFIRMACAO_FLUXO_VERSAO
+        : 0,
+    confirmadoEm:
+      cliente && telefone.whatsapp
+        ? new Date().toISOString()
+        : ""
+  };
+
+  clienteAtual =
+    cliente;
+
+  identificado =
+    true;
+
+  acessos = {
+    medidas: false,
+    graficos: false,
+    projeto: false
+  };
+
+  downloads = {
+    medidas: "",
+    graficos: "",
+    projeto: ""
+  };
+
+  if (
+    clienteAtual &&
+    identificacao.clienteId
+  ) {
+    try {
+      const resultado =
+        await comTimeout(
+          obterAcessosProjeto({
+            codigoProjeto:
+              codigoPublico(
+                projeto
+              ),
+            clienteId:
+              identificacao.clienteId,
+            email:
+              identificacao.email,
+            whatsapp:
+              onlyDigits(
+                identificacao.whatsappE164
+              )
+          }),
+          7000,
+          "A consulta das compras não respondeu."
+        );
+
+      if (
+        resultado?.ok &&
+        resultado?.access
+      ) {
+        acessos = {
+          medidas:
+            resultado.access.medidas === true,
+          graficos:
+            resultado.access.graficos === true,
+          projeto:
+            resultado.access.projeto === true
+        };
+
+        capturarDownloads(
+          resultado
+        );
+
+        salvarAcessosLocais(
+          codigoPublico(projeto),
+          acessos
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Falha ao carregar acessos pelo membro Wix:",
+        error?.message || error
+      );
+    }
+  }
+
+  consultaConcluida =
+    true;
+
+  salvarIdentificacao();
+
+  await mostrarValoresEAcessos();
+}
+
 async function identificarCliente(
   data = {}
 ) {
@@ -1876,7 +2070,6 @@ async function identificarCliente(
 async function abrirPopupWhatsapp() {
   if (
     popupAberto ||
-    identificado ||
     !projeto
   ) {
     return;
@@ -1887,104 +2080,33 @@ async function abrirPopupWhatsapp() {
   popupAberto =
     true;
 
-  let deveReabrir =
-    false;
-
   try {
-    const resultado =
-      await wixWindowFrontend
-        .openLightbox(
-          POPUP_NAME,
-          {
-            codigoProjeto:
-              codigoPublico(
-                projeto
-              ),
+    const membro =
+      await currentMember.getMember();
 
-            tituloProjeto:
-              tituloProjeto(
-                projeto
-              ),
-
-            whatsapp:
-              "",
-
-            ddi:
-              "55",
-
-            country:
-              "br"
-          }
-        );
-
-    if (
-      resultado?.action !==
-      "VERIFY"
-    ) {
-      bloquearSemIdentificacao();
-
-      deveReabrir =
-        true;
-
-      return;
+    if (!membro?._id) {
+      await authentication
+        .promptLogin({
+          mode: "login",
+          modal: true
+        });
     }
 
-    /*
-      Fonte da verdade da etapa 1.
-      Gravamos uma única vez, exatamente com o número retornado pelo popup 1.
-    */
-    salvarWhatsappPrimeiroEstagio(
-      resultado.whatsappE164 ||
-      resultado.whatsapp
-    );
-
-    /*
-      O popup WhatsApp inicial já validou esta identificação.
-      Não desfazemos a confirmação ao retornar para a página.
-    */
-    identificacao.whatsappConfirmado =
-      resultado.whatsappConfirmado === true;
-
-    identificacao.confirmacaoWhatsappVersao =
-      Number(
-        resultado.confirmacaoWhatsappVersao ||
-        CONFIRMACAO_FLUXO_VERSAO
-      );
-
-    identificacao.confirmadoEm =
-      safe(resultado.confirmadoEm) ||
-      new Date().toISOString();
-
-    await identificarCliente(
-      resultado
-    );
+    await identificarMembroSocial();
 
   } catch (error) {
     console.error(
-      "Erro no popup:",
-      error?.message ||
-      error
+      "Erro no login social:",
+      error?.message || error
     );
 
-    if (!identificado) {
-      bloquearSemIdentificacao();
-
-      deveReabrir =
-        true;
-    }
-
+    bloquearSemIdentificacao();
   } finally {
     popupAberto =
       false;
-
-    if (
-      deveReabrir &&
-      !identificado
-    ) {
-      agendarPopupWhatsapp();
-    }
   }
 }
+
 
 
 function salvarAutorizacaoCheckout(
@@ -2322,99 +2444,61 @@ async function iniciarPagina() {
 
   await mostrarProjetoCompleto();
 
-  const salva =
-    lerIdentificacaoSalva();
+  await identificarMembroSocial();
 
-  if (salva) {
-    identificacao = {
-      ...identificacao,
-      ...salva
-    };
+}
 
-    const confirmacaoAtualValida =
-      salva.whatsappConfirmado === true &&
-      Number(
-        salva.confirmacaoWhatsappVersao ||
-        0
-      ) >= CONFIRMACAO_FLUXO_VERSAO;
 
-    if (confirmacaoAtualValida) {
-      const acessosSalvos =
-        lerAcessosLocais(
-          codigoPublico(projeto)
+function iniciarPaginaComTratamento() {
+  iniciarPagina()
+    .catch(
+      (error) => {
+        console.error(
+          "Erro ao iniciar página:",
+          error?.message ||
+          error,
+          error
         );
+      }
+    );
+}
 
-      if (acessosSalvos && cadastroProntoParaPagamento(salva)) {
-        identificado = true;
-        consultaConcluida = true;
-        acessos = acessosSalvos;
+function solicitarLoginSocial() {
+  authentication
+    .promptLogin({
+      mode: "login",
+      modal: true
+    })
+    .then(
+      () => {
+        iniciarPaginaComTratamento();
+      }
+    )
+    .catch(
+      () => {
+        wixLocation.to("/");
+      }
+    );
+}
 
-        clienteAtual = {
-          _id: safe(salva.clienteId),
-          clienteId: safe(salva.clienteId),
-          nome: safe(salva.nome),
-          title: safe(salva.nome),
-          email: normalizeEmail(salva.email),
-          cpfCnpj: onlyDigits(salva.cpfCnpj)
-        };
-
-        /*
-          Ao voltar do checkout, a página usa o estado que já foi validado
-          e salvo. Não dispara buscarCliente + obterAcessosProjeto em paralelo
-          com a nova criação de PIX. A validação definitiva continua no
-          checkout/backend antes de cobrar.
-        */
-        capturarDownloads({
-          access: acessos
-        });
-
-        await mostrarValoresEAcessos();
-
-        /*
-          No celular, o cache serve apenas para pintar a tela rápido.
-          Logo depois confirmamos os acessos no backend. Assim uma compra
-          recente não deixa banner antigo preso no navegador.
-        */
-        if (
-          wixWindowFrontend.formFactor === "Mobile"
-        ) {
-          identificarCliente(
-            salva
-          ).catch(
-            (error) => {
-              console.error(
-                "Erro ao revalidar acessos mobile:",
-                error?.message || error
-              );
-            }
-          );
+function iniciarComLoginSocial() {
+  currentMember
+    .getMember()
+    .then(
+      (membro) => {
+        if (membro?._id) {
+          iniciarPaginaComTratamento();
+          return;
         }
 
-        return;
+        solicitarLoginSocial();
       }
-
-      /*
-        Registro antigo com apenas WhatsApp não libera o clique antes da hora.
-        Fazemos uma única restauração aqui, durante a abertura da página.
-        Depois disso o botão não consulta backend e navega imediatamente.
-      */
-      await identificarCliente(salva);
-      return;
-    }
-
-    identificado =
-      false;
-
-    agendarPopupWhatsapp(
-      300
+    )
+    .catch(
+      () => {
+        solicitarLoginSocial();
+      }
     );
-
-    return;
-  }
-
-  agendarPopupWhatsapp(
-    800
-  );
 }
 
 
@@ -2430,18 +2514,6 @@ $w.onReady(
       return;
     }
 
-    iniciarPagina()
-      .catch(
-        (
-          error
-        ) => {
-          console.error(
-            "Erro ao iniciar página:",
-            error?.message ||
-            error,
-            error
-          );
-        }
-      );
+    iniciarComLoginSocial();
   }
 );

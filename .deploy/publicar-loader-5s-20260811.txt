@@ -1,0 +1,1 @@
+Publicacao solicitada apos aplicar limite maximo de 5 segundos para a impressora da pagina de entrega.

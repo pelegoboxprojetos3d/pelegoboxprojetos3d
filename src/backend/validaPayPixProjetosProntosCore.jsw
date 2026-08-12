@@ -299,8 +299,10 @@ async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
       .limit(100)
       .find(DB);
 
+    const tituloPreco = priceTitleForType(tipoProduto);
     const found = (result.items || []).find(item =>
       safe(item?.validaPayPriceId) &&
+      safe(item?.validaPayPriceLabel) === tituloPreco &&
       normalizarTituloProduto(item?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() &&
       Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
     );
@@ -323,6 +325,12 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
   ) {
     return safe(current.validaPayPriceId);
   }
+  const localReused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
+  if (localReused) {
+    await saveSession(checkoutId, { validaPayPriceId: localReused, validaPayPriceLabel: tituloPreco, updatedAtDate: new Date() });
+    return localReused;
+  }
+
   const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor, tipoProduto });
   if (providerReused) {
     await saveSession(checkoutId, { validaPayPriceId: providerReused, validaPayPriceLabel: tituloPreco, updatedAtDate: new Date() });

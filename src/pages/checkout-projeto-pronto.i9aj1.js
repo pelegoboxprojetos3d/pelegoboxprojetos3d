@@ -69,31 +69,39 @@ function identityComplete(value = ctx) {
   );
 }
 
-function checkoutHandoffVerified(saved = {}, project = "", type = "") {
-  if (!safe(saved?.clienteId) || saved?.whatsappConfirmado !== true || !identityComplete(saved)) {
-    return false;
-  }
-
+function checkoutHandoffSnapshot(project = "", type = "") {
   try {
     const raw = session.getItem(CHECKOUT_AUTH_KEY);
-    if (!raw) return false;
+    if (!raw) return null;
 
     const marker = JSON.parse(raw);
-    if (!marker || typeof marker !== "object") return false;
+    if (!marker || typeof marker !== "object") return null;
 
     const createdAt = Number(marker.criadoEm || 0);
     const age = Date.now() - createdAt;
+    if (!(createdAt > 0 && age >= 0 && age <= CHECKOUT_AUTH_MAX_AGE)) return null;
+    if (digits(marker.codigoProjeto) !== digits(project)) return null;
+    if (safe(marker.tipoProduto).toUpperCase() !== safe(type).toUpperCase()) return null;
 
-    return Boolean(
-      createdAt > 0 &&
-      age >= 0 &&
-      age <= CHECKOUT_AUTH_MAX_AGE &&
-      digits(marker.codigoProjeto) === digits(project) &&
-      safe(marker.tipoProduto).toUpperCase() === safe(type).toUpperCase() &&
-      safe(marker.clienteId) === safe(saved.clienteId)
-    );
+    const snapshot = {
+      clienteId: safe(marker.clienteId),
+      nome: safe(marker.nome || marker.nomeCliente),
+      email: email(marker.email),
+      cpfCnpj: cpf(marker.cpfCnpj || marker.cpf),
+      whatsapp: phone(marker.whatsappE164 || marker.whatsapp),
+      whatsappE164: "",
+      whatsappConfirmado: marker.whatsappConfirmado === true
+    };
+
+    if (snapshot.whatsapp) snapshot.whatsappE164 = "+55" + snapshot.whatsapp;
+
+    if (!snapshot.clienteId || snapshot.whatsappConfirmado !== true || !identityComplete(snapshot)) {
+      return null;
+    }
+
+    return snapshot;
   } catch (_) {
-    return false;
+    return null;
   }
 }
 
@@ -238,12 +246,13 @@ function mediaSource(value) {
 
 function contextFromUrl() {
   const q=wixLocation.query || {};
-  const s=savedIdentity();
+  const saved=savedIdentity();
   const project=digits(q.codigoProjeto || q.ordemVideo || q.codigo);
   const type=safe(q.tipoProduto || "MEDIDAS").toUpperCase();
-  const verifiedSession=sessionIdentityVerified(s);
-  const verifiedHandoff=checkoutHandoffVerified(s,project,type);
-  const number=phone(s.whatsappE164 || s.whatsapp);
+  const handoff=checkoutHandoffSnapshot(project,type);
+  const source=handoff || saved;
+  const verifiedSession=sessionIdentityVerified(source);
+  const number=phone(source.whatsappE164 || source.whatsapp);
   const product=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");
   return {
     codigoProjeto:project,
@@ -258,12 +267,12 @@ function contextFromUrl() {
     whatsapp:number,
     whatsappE164:number ? `+55${number}` : "",
     ddi:"55", country:"br",
-    clienteId:safe(s.clienteId),
-    nome:safe(s.nome || s.nomeCliente),
-    email:email(s.email),
-    cpfCnpj:cpf(s.cpfCnpj || s.cpf),
-    whatsappConfirmado:s.whatsappConfirmado === true,
-    skipIdentity:verifiedSession || verifiedHandoff,
+    clienteId:safe(source.clienteId),
+    nome:safe(source.nome || source.nomeCliente),
+    email:email(source.email),
+    cpfCnpj:cpf(source.cpfCnpj || source.cpf),
+    whatsappConfirmado:source.whatsappConfirmado === true,
+    skipIdentity:Boolean(handoff) || verifiedSession,
     hideSku:true,
     returnUrl:safe(q.returnUrl) || (project ? `/checkoutprojetosprontos?codigo=${encodeURIComponent(project)}` : "/checkoutprojetosprontos")
   };

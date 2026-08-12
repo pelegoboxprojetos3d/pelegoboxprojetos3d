@@ -85,6 +85,7 @@ button{cursor:pointer}
 .button:hover:not(:disabled){transform:translateY(-2px);filter:brightness(.985)}
 .buttonPrimary{background:var(--green);color:#fff}
 .button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.buttonPrimary:disabled{background:#d9d9d9;color:#8a8a8a;opacity:1}
 .buttonLink{margin-top:7px;min-height:28px;background:transparent;color:#666;text-decoration:underline}
 
 /* PAYMENT NORMAL, visual preservado */
@@ -253,7 +254,7 @@ button{cursor:pointer}
           <div class="emailNotice fieldFull">Confira com atenção. Esse e-mail será usado para identificar sua compra e enviar o acesso ao produto.</div>
         </div>
         <div id="identityAlert" class="alert"></div>
-        <button id="identityButton" class="button buttonPrimary" type="button">Continuar para pagamento</button>
+        <button id="identityButton" class="button buttonPrimary" type="button" disabled>Continuar para pagamento</button>
         <button id="identityBack" class="button buttonLink" type="button">Voltar</button>
       </section>
 
@@ -547,8 +548,17 @@ function hydrate(ctx){
  if(S.ctx.cpfCnpj)E.cpf.value=formatCpf(S.ctx.cpfCnpj);
  if(S.ctx.email){E.email.value=email(S.ctx.email);E.email2.value=email(S.ctx.email)}
  fillInstallments();
+ syncIdentityButton();
 }
 
+function identityFieldsReady(){
+ var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value),b=email(E.email2.value);
+ return Boolean(p && n.length>=3 && validCpf(c) && validEmail(a) && validEmail(b) && a===b)
+}
+function syncIdentityButton(){
+ if(!E.identityBtn)return;
+ E.identityBtn.disabled=S.saving || !identityFieldsReady();
+}
 function validateIdentity(){
  var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value),b=email(E.email2.value);
  if(!p){setAlert(E.identityAlert,"error","Informe um WhatsApp válido com DDD.");E.phone.focus();return false}
@@ -558,6 +568,7 @@ function validateIdentity(){
  if(!validEmail(b)||a!==b){setAlert(E.identityAlert,"error","Os e-mails não coincidem. Confira os dois campos.");E.email2.focus();return false}
  return true
 }
+
 function customerPayload(){
  var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," ");
  return{type:"CREATE_CUSTOMER",checkoutId:S.checkoutId,whatsapp:p,whatsappE164:p?"+55"+p:"",ddi:"55",country:"br",nome:n,nomeCliente:n,cpfCnpj:cpf(E.cpf.value),cpf:cpf(E.cpf.value),email:email(E.email.value),ctx:S.ctx}
@@ -726,9 +737,13 @@ function showSuccess(){stopTetris();E.identity.classList.add("hidden");E.payment
 function showAlready(){stopTetris();E.identity.classList.add("hidden");E.payment.classList.add("hidden");E.success.classList.add("hidden");E.already.classList.remove("hidden");setStep(3);layoutMode("SUCCESS")}
 
 E.img.addEventListener("error",function(){E.img.classList.add("hidden");E.fallback.classList.remove("hidden")});
-E.phone.addEventListener("input",function(){this.value=formatPhone(this.value)});
-E.cpf.addEventListener("input",function(){this.value=formatCpf(this.value)});
-E.identityBtn.addEventListener("click",function(){if(S.saving||!validateIdentity())return;S.saving=true;E.identityBtn.disabled=true;setAlert(E.identityAlert,"info","Salvando seus dados...");post(customerPayload())});
+E.phone.addEventListener("input",function(){this.value=formatPhone(this.value);syncIdentityButton()});
+E.name.addEventListener("input",syncIdentityButton);
+E.cpf.addEventListener("input",function(){this.value=formatCpf(this.value);syncIdentityButton()});
+E.email.addEventListener("input",syncIdentityButton);
+E.email2.addEventListener("input",syncIdentityButton);
+E.identityBtn.addEventListener("click",function(){if(S.saving||!validateIdentity())return;S.saving=true;syncIdentityButton();setAlert(E.identityAlert,"info","Salvando seus dados...");post(customerPayload())});
+syncIdentityButton();
 E.pix.addEventListener("click",openPix);E.pixFromCard.addEventListener("click",openPix);E.card.addEventListener("click",openCard);E.copy.addEventListener("click",copyPix);
 $("identityBack").onclick=$("paymentBack").onclick=$("alreadyBack").onclick=function(){post({type:"BACK"})};
 E.cardForm.addEventListener("submit",submitCard);

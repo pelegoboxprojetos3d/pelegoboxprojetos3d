@@ -1991,6 +1991,11 @@ function salvarAutorizacaoCheckout(
   tipoProduto
 ) {
   try {
+    const telefone =
+      normalizarTelefone(
+        identificacao
+      );
+
     session.setItem(
       CHECKOUT_AUTH_KEY,
       JSON.stringify({
@@ -2003,6 +2008,27 @@ function salvarAutorizacaoCheckout(
 
         clienteId:
           safe(identificacao.clienteId),
+
+        nome:
+          safe(identificacao.nome),
+
+        email:
+          normalizeEmail(identificacao.email),
+
+        cpfCnpj:
+          onlyDigits(
+            identificacao.cpfCnpj ||
+            identificacao.cpf
+          ),
+
+        whatsapp:
+          telefone.whatsapp,
+
+        whatsappE164:
+          telefone.whatsappE164,
+
+        whatsappConfirmado:
+          identificacao.whatsappConfirmado === true,
 
         criadoEm:
           Date.now()

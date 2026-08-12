@@ -27,12 +27,16 @@ const newBoot = `  /*\n    FAST BOOT:\n    o checkout visual não espera consult
 
 page = replaceOnce(page, oldBoot, newBoot, "Página: fast boot paralelo");
 
-page = replaceOnce(
-  page,
-  `const SESSION_KEY = "pp_identificacao_atual";\nconst LOCAL_KEY = "pp_identificacao_persistente";`,
-  `const SESSION_KEY = "pp_identificacao_atual";\nconst LOCAL_KEY = "pp_identificacao_persistente";\nconst VERIFIED_SESSION_KEY = "pp_checkout_cliente_validado_sessao";`,
-  "Página: chave de cliente validado na sessão"
-);
+if (!page.includes('const VERIFIED_SESSION_KEY = "pp_checkout_cliente_validado_sessao";')) {
+  page = replaceOnce(
+    page,
+    `const SESSION_KEY = "pp_identificacao_atual";\nconst LOCAL_KEY = "pp_identificacao_persistente";`,
+    `const SESSION_KEY = "pp_identificacao_atual";\nconst LOCAL_KEY = "pp_identificacao_persistente";\nconst VERIFIED_SESSION_KEY = "pp_checkout_cliente_validado_sessao";`,
+    "Página: chave de cliente validado na sessão"
+  );
+} else {
+  console.log("Página: chave de cliente validado na sessão: já aplicada.");
+}
 
 page = replaceOnce(
   page,

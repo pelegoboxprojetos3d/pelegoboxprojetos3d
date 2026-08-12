@@ -1,0 +1,49 @@
+name: Hotfix final ValidaPay e RespondeChat
+
+on:
+  push:
+    paths:
+      - "scripts/hotfix-final-validapay-webhook.cjs"
+      - ".github/workflows/hotfix-final-validapay-webhook.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Aplicar hotfix
+        run: node scripts/hotfix-final-validapay-webhook.cjs
+
+      - name: Validar
+        run: npm run lint
+
+      - name: Gravar correção
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/notificarVendaProjetoPronto.js \
+                  src/backend/validaPayCartaoProjetosProntos.jsw \
+                  src/backend/validaPayPixProjetosProntosCore.jsw
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração pendente."
+            exit 0
+          fi
+          git commit -m "Corrige fatura ValidaPay e webhook RespondeChat"
+          git pull --rebase origin main
+          git push origin HEAD:main

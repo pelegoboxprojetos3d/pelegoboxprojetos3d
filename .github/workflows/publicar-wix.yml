@@ -66,6 +66,9 @@ jobs:
       - name: Aplicar login social em Projetos Prontos
         run: node scripts/aplicar-login-social-projetos-prontos.cjs
 
+      - name: Limpar duplicação do login social
+        run: node scripts/limpar-duplicacao-login-social.cjs
+
       - name: Corrigir cancelamento do login social
         run: node scripts/corrigir-cancelamento-login-social.cjs
 

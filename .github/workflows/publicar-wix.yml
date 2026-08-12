@@ -33,9 +33,6 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Aplicar regra mobile dos banners não pagos
-        run: node scripts/corrigir-banners-mobile-proxima-etapa.cjs
-
       - name: Remover SKU da página de entrega
         run: node scripts/remover-sku-entrega.cjs
 
@@ -44,9 +41,6 @@ jobs:
 
       - name: Corrigir entrega pós-cartão
         run: node scripts/corrigir-entrega-pos-cartao.cjs
-
-      - name: Corrigir persistência do Pega Zap e abertura de Baixar Medidas
-        run: node scripts/corrigir-pega-zap-identificacao.cjs
 
       - name: Corrigir banners do checkout de pagamento
         run: node scripts/corrigir-banners-checkout-pagamento.cjs
@@ -127,5 +121,3 @@ jobs:
             exit 1
           fi
           echo "Site publicado com a versão salva mais recente do Editor."
-
-# republicar login social 2026-08-12 19:20 BRT

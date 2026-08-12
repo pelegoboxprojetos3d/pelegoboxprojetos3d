@@ -768,7 +768,7 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML34_RETURNING_NO_FLASH"});
+post({type:"READY",version:"HTML35_PERSISTENT_FAST_RETURN"});
 })();
 </script>
 </body>

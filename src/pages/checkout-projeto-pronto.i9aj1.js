@@ -100,7 +100,11 @@ function sessionIdentityVerified(value = ctx) {
     a sessão atual já contém clienteId + dados completos + WhatsApp confirmado.
     Isso só decide a tela inicial; autorização de pagamento continua no backend.
   */
-  return sessionIdentityCandidate();
+  return Boolean(
+    safe(value?.clienteId) &&
+    value?.whatsappConfirmado === true &&
+    identityComplete(value)
+  );
 }
 
 function markSessionIdentityVerified(value = ctx) {

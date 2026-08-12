@@ -75,6 +75,9 @@ jobs:
       - name: Ajustar dados do checkout social
         run: node scripts/ajustar-dados-checkout-social-2026-08-12.cjs
 
+      - name: Ajustar status do método de pagamento
+        run: node scripts/ajustar-status-metodo-pagamento-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 

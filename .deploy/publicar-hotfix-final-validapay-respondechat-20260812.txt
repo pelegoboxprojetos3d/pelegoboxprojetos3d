@@ -1,0 +1,1 @@
+Publicar no Wix a correção final de fatura ValidaPay, título de preço e webhook RespondeChat de Projetos Prontos.

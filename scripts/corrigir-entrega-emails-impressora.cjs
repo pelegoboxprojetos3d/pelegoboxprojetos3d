@@ -46,6 +46,13 @@ if (page.includes(oldProcessingBlock)) {
   page = page.replace(oldProcessingBlock, newProcessingBlock);
 }
 
+// Um script legado executado antes deste hotfix ainda recria essa constante.
+// Ela não pode controlar a entrega pós-pagamento, portanto removemos de novo.
+page = page.replace(
+  /\nconst\s+MAX_PROCESSAMENTO_VISIVEL\s*=\s*\n?\s*5000\s*;\n?/g,
+  '\n'
+);
+
 if (!page.includes('async function mostrarCharmeDownload()')) {
   const marker = 'async function baixarMedidas() {';
   if (!page.includes(marker)) throw new Error('baixarMedidas não encontrado');

@@ -1,0 +1,69 @@
+name: Hotfix envio automatico da fatura ValidaPay
+
+on:
+  push:
+    paths:
+      - ".github/workflows/hotfix-validapay-resend-email.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Aplicar hotfix da notificacao ValidaPay
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/backend/validaPayCartaoProjetosProntos.jsw')
+          s = path.read_text(encoding='utf-8')
+
+          marker = '''  return { ok: false, statusCode: 0, data: {}, error: "Falha ao consultar a ValidaPay." };\n}\n\nasync function findSession(checkoutId) {'''
+          helper = '''  return { ok: false, statusCode: 0, data: {}, error: "Falha ao consultar a ValidaPay." };\n}\n\nasync function reenviarNotificacaoValidaPay(chargeId) {\n  const id = safe(chargeId);\n  if (!id) return { sent: false, error: "charge_id_missing" };\n\n  try {\n    const response = await api("post", "/v1/users/notifications/resend", { chargeId: id });\n    if (!response.ok) {\n      console.warn("ValidaPay não enviou a notificação da fatura:", response.statusCode, response.error);\n      return { sent: false, statusCode: response.statusCode, error: response.error || "notification_resend_failed" };\n    }\n    return {\n      sent: true,\n      statusCode: response.statusCode,\n      event: safe(response.data?.event),\n      success: response.data?.success === true\n    };\n  } catch (error) {\n    console.warn("Falha ao chamar reenvio de notificação ValidaPay:", error?.message || error);\n    return { sent: false, error: error?.message || "notification_resend_error" };\n  }\n}\n\nasync function findSession(checkoutId) {'''
+
+          if marker not in s:
+              raise SystemExit('Ponto de insercao da funcao de reenvio nao encontrado')
+          s = s.replace(marker, helper, 1)
+
+          old = '''  const notificacao=await notificarVendaProjetoProntoAprovada({\n    checkoutId,\n    chargeId,\n    paymentMethod:"CARD"\n  });\n  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};'''
+          new = '''  const notificacao=await notificarVendaProjetoProntoAprovada({\n    checkoutId,\n    chargeId,\n    paymentMethod:"CARD"\n  });\n  // O painel oficial da ValidaPay usa esta rota para enviar/re-enviar a fatura por e-mail.\n  // Chamamos somente na primeira finalizacao da compra; o branch de compra ja registrada nao repete.\n  const faturaValidaPay=await reenviarNotificacaoValidaPay(chargeId);\n  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao,faturaValidaPay};'''
+
+          if old not in s:
+              raise SystemExit('Ponto de finalizacao inicial do cartao nao encontrado')
+          s = s.replace(old, new, 1)
+
+          # Nao deve existir chamada no branch de compra ja registrada.
+          branch = s.split('if (session.compraRegistrada===true', 1)[1].split('const samePayment=', 1)[0]
+          if 'reenviarNotificacaoValidaPay' in branch:
+              raise SystemExit('Reenvio foi inserido no branch repetido por engano')
+
+          path.write_text(s.rstrip() + '\n', encoding='utf-8')
+          PY
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Validar codigo
+        run: npm run lint
+
+      - name: Gravar hotfix
+        shell: bash
+        run: |
+          rm -f .github/workflows/hotfix-validapay-resend-email.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Envia fatura ValidaPay apos cartao aprovado'
+          git push origin HEAD:main

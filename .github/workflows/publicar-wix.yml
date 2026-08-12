@@ -72,6 +72,9 @@ jobs:
       - name: Corrigir cancelamento do login social
         run: node scripts/corrigir-cancelamento-login-social.cjs
 
+      - name: Ajustar dados do checkout social
+        run: node scripts/ajustar-dados-checkout-social-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 

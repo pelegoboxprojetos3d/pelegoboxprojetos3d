@@ -1090,7 +1090,7 @@ function processingIsStale(
 
   return (
     Date.now() - date.getTime()
-  ) > 10 * 60 * 1000;
+  ) > 15 * 1000;
 }
 
 function shouldTriggerMake(
@@ -1503,6 +1503,13 @@ export async function post_mercadoPagoWebhookPro(
           purchaseResult.purchase,
         paymentId,
         client
+      });
+
+    const notificationResult =
+      await notificarVendaProjetoProntoAprovada({
+        checkoutId,
+        chargeId: paymentId,
+        paymentMethod: "MERCADO_PAGO"
       });
 
     return ok({

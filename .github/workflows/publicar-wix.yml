@@ -60,12 +60,6 @@ jobs:
       - name: Preparar próximo teste real
         run: node scripts/ajustar-pre-teste-real-2026-08-12.cjs
 
-      - name: Otimizar abertura imediata do checkout
-        run: node scripts/otimizar-checkout-inicializacao.cjs
-
-      - name: Abrir cliente recorrente direto no pagamento
-        run: node scripts/corrigir-cliente-recorrente-fastboot.cjs
-
       - name: Corrigir handoff botão para checkout
         run: node scripts/corrigir-handoff-cliente-checkout.cjs
 

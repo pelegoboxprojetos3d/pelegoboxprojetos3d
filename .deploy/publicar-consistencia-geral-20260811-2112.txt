@@ -1,0 +1,1 @@
+Publicar correcoes de entrega: limite de 5s, video, projeto OneDrive, telefone ValidaPay e notificacoes de venda.

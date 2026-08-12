@@ -52,7 +52,7 @@ jobs:
         run: node scripts/corrigir-banners-checkout-pagamento.cjs
 
       - name: Corrigir entrega, Make e notificações
-        run: node scripts/corrigir-entrega-emails-impressora.cjs
+        run: node scripts/hotfix-entrega-final-20260811.cjs
 
       - name: Validar código
         run: npm run lint

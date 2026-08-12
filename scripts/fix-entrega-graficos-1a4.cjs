@@ -85,9 +85,11 @@ const newDeliveryStatus = [
 const entregaAtual = fs.readFileSync(entrega, "utf8");
 if (
   entregaAtual.includes("A existência do arquivo da etapa é a fonte da verdade") ||
-  entregaAtual.includes("A existencia do arquivo da etapa e a fonte da verdade")
+  entregaAtual.includes("A existencia do arquivo da etapa e a fonte da verdade") ||
+  entregaAtual.includes("REGRA OFICIAL:") ||
+  entregaAtual.includes("na abertura da página de entrega a impressora aguarda somente a imagem")
 ) {
-  console.log("liberar PARCIAL legado com arquivo: substituído por regra mais nova baseada na existência do arquivo");
+  console.log("liberar PARCIAL legado com arquivo: substituído por regra mais nova da página de entrega");
 } else {
   replaceOrFail(entrega, oldDeliveryStatus, newDeliveryStatus, "liberar PARCIAL legado com arquivo");
 }

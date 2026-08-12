@@ -3,6 +3,7 @@ import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
 
 const SESSIONS = "SessoesProjetosProntos2";
+const HISTORICO_COMPRAS = "HistoricoComprasProjetosProntos";
 const DB = { suppressAuth: true };
 const SITE_BASE = "https://www.pelegobox.com.br";
 const MAKE_SALE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
@@ -21,6 +22,82 @@ function phone(value) {
 function type(value) {
   const t = safe(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";
+}
+
+function gerarCodigoCompra() {
+  const tempo = Date.now().toString(36).toUpperCase();
+  const aleatorio = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `PBX-PP-${tempo}-${aleatorio}`;
+}
+
+async function registrarHistoricoCompraAprovada({ session, chargeId, paymentMethod }) {
+  const idPagamento = safe(chargeId || session?.paymentId || session?.validaPayChargeId);
+  if (!idPagamento) return { ok: false, error: "payment_id_missing" };
+
+  const existente = await wixData
+    .query(HISTORICO_COMPRAS)
+    .eq("idPagamento", idPagamento)
+    .limit(1)
+    .find({ ...DB, consistentRead: true });
+
+  const itemExistente = existente.items?.[0];
+  if (itemExistente) {
+    return {
+      ok: true,
+      created: false,
+      codigoCompra: safe(itemExistente.codigoCompra),
+      historicoId: safe(itemExistente._id)
+    };
+  }
+
+  const codigoCompra = gerarCodigoCompra();
+  const produto = safe(session?.produto);
+  const item = {
+    title: codigoCompra,
+    emailCompra: safe(session?.email).toLowerCase(),
+    idPagamento,
+    clienteId: safe(session?.clienteId),
+    checkoutId: safe(session?.checkoutId),
+    codigoProjeto: digits(session?.codigoProjeto),
+    tipoProduto: type(session?.tipoProduto),
+    produto,
+    nomeCompra: safe(session?.nomeCliente || session?.nome),
+    whatsappCompra: phone(session?.whatsapp || session?.whatsappE164 || session?.whatsApp),
+    cpfCompra: digits(session?.cpfCnpj),
+    dataCompra: new Date(),
+    statusCompra: "approved",
+    valorCompra: Number(session?.valor || 0),
+    formaPagamento: safe(paymentMethod || session?.paymentMethod).toUpperCase(),
+    codigoCompra
+  };
+
+  try {
+    const salvo = await wixData.insert(HISTORICO_COMPRAS, item, DB);
+    return {
+      ok: true,
+      created: true,
+      codigoCompra,
+      historicoId: safe(salvo?._id)
+    };
+  } catch (error) {
+    // Proteção extra para duas confirmações chegando quase juntas.
+    const repetido = await wixData
+      .query(HISTORICO_COMPRAS)
+      .eq("idPagamento", idPagamento)
+      .limit(1)
+      .find({ ...DB, consistentRead: true });
+
+    const jaSalvo = repetido.items?.[0];
+    if (jaSalvo) {
+      return {
+        ok: true,
+        created: false,
+        codigoCompra: safe(jaSalvo.codigoCompra),
+        historicoId: safe(jaSalvo._id)
+      };
+    }
+    throw error;
+  }
 }
 
 async function optionalSecret(name) {
@@ -79,6 +156,14 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
   const session = await findSession(checkoutId);
   if (!session) return { ok: false, error: "session_not_found" };
 
+  let historico = { ok: false, error: "not_attempted" };
+  try {
+    historico = await registrarHistoricoCompraAprovada({ session, chargeId, paymentMethod });
+  } catch (error) {
+    historico = { ok: false, error: safe(error?.message || error).slice(0, 800) };
+    console.error("Falha ao registrar histórico da compra:", error?.message || error);
+  }
+
   const amount = Number(session.valor || 0);
   const payload = {
     event: "venda_aprovada_PROJETOS_PRONTOS",
@@ -110,7 +195,8 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
         ? "BAIXAR PROJETO COMPLETO"
         : "BAIXAR MEDIDAS",
     botaoUrl: SITE_BASE + "/entregaprojetosprontos?checkout_id=" + encodeURIComponent(safe(session.checkoutId)),
-    deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`
+    deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`,
+    codigoCompra: safe(historico?.codigoCompra)
   };
 
   const emailPayload = {
@@ -121,7 +207,7 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
 
   const patch = { ...session, updatedAtDate: new Date() };
   let changed = false;
-  const result = { ok: true, email: "skipped", chatbot: "skipped" };
+  const result = { ok: true, email: "skipped", chatbot: "skipped", historico };
 
   if (!session.emailEnviadoEm && session.emailEnviado !== true) {
     const url = await optionalSecret(MAKE_SALE_SECRET);

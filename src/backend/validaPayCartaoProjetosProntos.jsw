@@ -39,11 +39,6 @@ function phone(v) {
   return n.length === 10 || n.length === 11 ? `+55${n}` : "";
 }
 
-function validaPayPhone(v) {
-  let n = digits(v);
-  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);
-  return n.length === 10 || n.length === 11 ? n : "";
-}
 
 function productType(v) {
   const t = safe(v)
@@ -311,7 +306,7 @@ function cumulativeAccess(existing, tipoProduto) {
 
 function processingIsStale(item) {
   const stamp = new Date(item?.dataProcessamento || item?._updatedDate || 0).getTime();
-  return !stamp || (Date.now() - stamp) > (10 * 60 * 1000);
+  return !stamp || (Date.now() - stamp) > 15000;
 }
 function shouldTriggerMake(purchase) {
   const status = safe(purchase?.statusProcessamento).toUpperCase();
@@ -529,7 +524,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
         name: nome,
         email,
         documentNumber: cpfCnpj,
-        phone: validaPayPhone(whatsapp)
+        phone: whatsapp
       },
       card: {
         number,

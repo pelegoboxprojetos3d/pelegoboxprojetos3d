@@ -40,11 +40,6 @@ function normalizePhone(value) {
   return number.length === 10 || number.length === 11 ? `+55${number}` : "";
 }
 
-function validaPayPhone(value) {
-  let number = digits(value);
-  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);
-  return number.length === 10 || number.length === 11 ? number : "";
-}
 
 function normalizeType(value) {
   const type = safe(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
@@ -331,6 +326,14 @@ async function notifyApproved(checkoutId, chargeId, charge) {
     img: safe(session.img),
     valor: amount,
     valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + decodeTitle(session.produto),
+    tituloEmail: decodeTitle(session.produto),
+    botaoTexto: normalizeType(session.tipoProduto) === "GRAFICOS"
+      ? "BAIXAR GRÁFICOS"
+      : normalizeType(session.tipoProduto) === "PROJETO_COMPLETO"
+        ? "BAIXAR PROJETO COMPLETO"
+        : "BAIXAR MEDIDAS",
+    botaoUrl: SITE_BASE + "/entregaprojetosprontos?checkout_id=" + encodeURIComponent(checkoutId),
     deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(checkoutId)}`
   };
 
@@ -426,7 +429,7 @@ export async function criarCobrancaPixTransparente(input = {}) {
       paymentMethod: "pix",
       externalId: checkoutId,
       externalTxid: externalTxid(checkoutId, codigoProjeto, tipoProduto, valor),
-      customer: { name: nome, email, phone: validaPayPhone(whatsapp), documentNumber: cpfCnpj },
+      customer: { name: nome, email, phone: whatsapp, documentNumber: cpfCnpj },
       items: [{ priceId, quantity: 1 }],
       metadata: {
         origem: "PELEGO_BOX_PROJETOS_PRONTOS",

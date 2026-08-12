@@ -1,4 +1,6 @@
 import wixData from "wix-data";
+import { fetch } from "wix-fetch";
+import { getSecret } from "wix-secrets-backend";
 import { normalizarWhatsappBrasil, normalizarTituloProduto } from "backend/projetosProntosNormalizacao";
 
 // TÍTULO NO WIX: backend/entregaProjetosProntos.jsw
@@ -12,6 +14,12 @@ const PURCHASES_COLLECTION =
 
 const PROJECTS_COLLECTION =
   "Videosprojetos";
+
+const MAKE_PROCESS_SECRET =
+  "MAKE_WEBHOOK_PROJETOS_PRONTOS";
+
+const PROCESS_RETRY_MS =
+  15000;
 
 /*
   Nome visível: Clientes
@@ -925,6 +933,172 @@ async function resolveAccess({
   });
 }
 
+function arquivoAtualPronto(session, purchases, project) {
+  const tipo = normalizeType(session?.tipoProduto);
+
+  if (tipo === "PROJETO_COMPLETO") {
+    return Boolean(
+      firstMediaFromPurchases(
+        purchases,
+        "arquivoProjeto",
+        "arquivo_projeto",
+        "pdfProjeto"
+      ) ||
+      mediaSource(
+        project?.arquivoProjeto ||
+        project?.arquivo_projeto ||
+        project?.pdfProjeto
+      )
+    );
+  }
+
+  if (tipo === "GRAFICOS") {
+    const compra = [
+      "imagemGrafico1",
+      "imagemGrafico2",
+      "imagemGrafico3",
+      "imagemGrafico4"
+    ].some((field) => Boolean(firstMediaFromPurchases(purchases, field)));
+
+    const projeto = [
+      project?.imagemGrafico1,
+      project?.imagemGrafico2,
+      project?.imagemGrafico3,
+      project?.imagemGrafico4
+    ].some((value) => Boolean(mediaSource(value)));
+
+    return compra || projeto;
+  }
+
+  return Boolean(
+    firstMediaFromPurchases(purchases, "imagemMedidas") ||
+    mediaSource(project?.imagemMedidas)
+  );
+}
+
+function processamentoAtrasado(purchase) {
+  const stamp = new Date(
+    purchase?.dataProcessamento ||
+    purchase?._updatedDate ||
+    0
+  ).getTime();
+
+  return !stamp || (Date.now() - stamp) >= PROCESS_RETRY_MS;
+}
+
+async function garantirProcessamentoAtual(session, purchases, client, project) {
+  const paymentId = safe(session?.paymentId);
+  const purchase =
+    purchases.find((item) => purchaseMatchesPayment(item, paymentId)) ||
+    newestFirst(purchases)[0] ||
+    null;
+
+  if (!purchase) {
+    return { sent: false, reason: "purchase_not_found" };
+  }
+
+  if (arquivoAtualPronto(session, purchases, project)) {
+    return { sent: false, reason: "asset_ready" };
+  }
+
+  const status = safe(purchase?.statusProcessamento).toUpperCase();
+
+  if (status === "PROCESSANDO" && !processamentoAtrasado(purchase)) {
+    return { sent: false, reason: "already_processing" };
+  }
+
+  let url = "";
+  try {
+    url = safe(await getSecret(MAKE_PROCESS_SECRET));
+  } catch (_) {
+    url = "";
+  }
+
+  if (!url) {
+    return { sent: false, reason: "make_secret_missing" };
+  }
+
+  let processingPurchase = {
+    ...purchase,
+    statusProcessamento: "PROCESSANDO",
+    dataProcessamento: new Date()
+  };
+
+  try {
+    processingPurchase = await wixData.update(
+      PURCHASES_COLLECTION,
+      processingPurchase,
+      DB_OPTS
+    );
+  } catch (_) {}
+
+  const payload = {
+    event: "pagamento_aprovado_projeto_pronto",
+    clienteId: firstValue(client?.clienteId, session?.clienteId),
+    nomeCliente: firstValue(client?.nome, session?.nomeCliente),
+    email: normalizeEmail(firstValue(client?.email, session?.email)),
+    whatsapp: normalizarWhatsappBrasil(
+      firstValue(client?.whatsapp, sessionWhatsapp(session))
+    ),
+    cpfCnpj: safe(session?.cpfCnpj).replace(/\D/g, ""),
+    codigoProjeto: normalizeProjectCode(session?.codigoProjeto),
+    produto: safe(session?.produto),
+    tipoProduto: normalizeType(session?.tipoProduto),
+    valor: Number(session?.valor || processingPurchase?.valor || 0),
+    pagamento: "approved",
+    statusCompra: "approved",
+    idPagamento: paymentId,
+    checkoutId: safe(session?.checkoutId),
+    tokenDeEntrega: sessionToken(session),
+    chaveCompra: safe(processingPurchase?.chaveCompra)
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "post",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      try {
+        await wixData.update(
+          PURCHASES_COLLECTION,
+          {
+            ...processingPurchase,
+            statusProcessamento: "PENDENTE",
+            dataProcessamento: new Date()
+          },
+          DB_OPTS
+        );
+      } catch (_) {}
+
+      return { sent: false, reason: "make_http_error", status: response.status };
+    }
+
+    return { sent: true };
+  } catch (error) {
+    try {
+      await wixData.update(
+        PURCHASES_COLLECTION,
+        {
+          ...processingPurchase,
+          statusProcessamento: "PENDENTE",
+          dataProcessamento: new Date()
+        },
+        DB_OPTS
+      );
+    } catch (_) {}
+
+    console.error(
+      "Falha ao reenviar processamento para o Make:",
+      error?.message || error
+    );
+
+    return { sent: false, reason: "make_fetch_error" };
+  }
+}
+
 function stagePaymentValue(
   purchases,
   type,
@@ -1523,6 +1697,13 @@ export async function buscarEntregaProjetoPronto(
       session,
       allPurchases
     );
+
+  await garantirProcessamentoAtual(
+    session,
+    allPurchases,
+    client,
+    project
+  );
 
   const result =
     resolveAccessFromPurchases({

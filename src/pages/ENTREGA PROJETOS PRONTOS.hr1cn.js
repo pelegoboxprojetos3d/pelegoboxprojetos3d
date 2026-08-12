@@ -130,9 +130,9 @@ const INTERVALO =
 const MIN_PROCESSAMENTO_VISIVEL =
   500;
 
-/* Nunca deixar a impressora dominar a pagina por mais de 5 segundos. */
-const MAX_PROCESSAMENTO_VISIVEL =
-  5000;
+const CHARME_DOWNLOAD_MS =
+  3500;
+
 
 let processamentoVisivelDesde =
   0;
@@ -319,6 +319,15 @@ async function mostrarDadosCarregados() {
   );
 }
 
+
+function blindarGaleriaPadrao() {
+  /* Nunca permitir que a mídia de demonstração do Editor apareça. */
+  try {
+    const galeria = $w(IDS.galeria);
+    galeria.items = [];
+    galeria.hide();
+  } catch (_) {}
+}
 
 // ======================================================
 // PROCESSAMENTO VISUAL DA ENTREGA
@@ -1086,6 +1095,26 @@ async function baixarArquivo(
   }
 }
 
+
+async function mostrarCharmeDownload() {
+  /* Arquivo já pronto: impressora por 3,5 s apenas como transição visual. */
+  const estadoAnterior = processamentoVisualEncerrado;
+  processamentoVisualEncerrado = false;
+
+  try {
+    await mostrarProcessamento();
+    await esperar(CHARME_DOWNLOAD_MS);
+    await esconderProcessamento();
+    await mostrarGaleria();
+  } catch (erro) {
+    console.warn(
+      "Falha no charme visual do download:",
+      erro?.message || erro
+    );
+  } finally {
+    processamentoVisualEncerrado = estadoAnterior;
+  }
+}
 
 async function baixarMedidas() {
   const projeto =
@@ -1959,6 +1988,7 @@ function ligarEventos() {
           ?.access
           ?.medidas
       ) {
+        await mostrarCharmeDownload();
         await baixarMedidas();
       }
     }
@@ -1973,6 +2003,7 @@ function ligarEventos() {
           ?.access
           ?.graficos
       ) {
+        await mostrarCharmeDownload();
         await baixarProximoGrafico();
 
         return;
@@ -1999,6 +2030,7 @@ function ligarEventos() {
           ?.access
           ?.projeto
       ) {
+        await mostrarCharmeDownload();
         await baixarProjetoCompleto();
 
         return;
@@ -2258,33 +2290,14 @@ async function carregarEntrega() {
           return;
         }
 
-        if (!processamentoVisualEncerrado) {
-          await mostrarProcessamento();
-
-          const tempoProcessando =
-            processamentoVisivelDesde
-              ? Date.now() - processamentoVisivelDesde
-              : 0;
-
-          if (
-            tempoProcessando >=
-            MAX_PROCESSAMENTO_VISIVEL
-          ) {
-            processamentoVisualEncerrado = true;
-
-            try {
-              await $w(IDS.processando).hide();
-              await $w(IDS.processando).collapse();
-            } catch (_) {}
-
-            processamentoVisivelDesde = 0;
-          }
-        }
+        /*
+          Após pagamento, a impressora permanece até o arquivo real da etapa
+          existir. Ela não desaparece por cronômetro e não deixa tela vazia.
+        */
+        await mostrarProcessamento();
 
         alterarDescricao(
-          processamentoVisualEncerrado
-            ? "Pagamento aprovado. Seus acessos já estão disponíveis; finalizando os arquivos..."
-            : "Pagamento aprovado. Estamos preparando seus arquivos..."
+          "Pagamento aprovado. Estamos preparando seus arquivos..."
         );
 
         await esperar(
@@ -2352,6 +2365,8 @@ $w.onReady(
   function () {
     checkoutEmAndamento =
       false;
+
+    blindarGaleriaPadrao();
 
     /*
       PRIMEIRO A IMPRESSORA.

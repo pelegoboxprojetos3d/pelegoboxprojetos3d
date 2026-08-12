@@ -66,6 +66,14 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     img: safe(session.img),
     valor: amount,
     valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + safe(session.produto),
+    tituloEmail: safe(session.produto),
+    botaoTexto: type(session.tipoProduto) === "GRAFICOS"
+      ? "BAIXAR GRÁFICOS"
+      : type(session.tipoProduto) === "PROJETO_COMPLETO"
+        ? "BAIXAR PROJETO COMPLETO"
+        : "BAIXAR MEDIDAS",
+    botaoUrl: SITE_BASE + "/entregaprojetosprontos?checkout_id=" + encodeURIComponent(safe(session.checkoutId)),
     deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`
   };
 

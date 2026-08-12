@@ -133,6 +133,7 @@ const MIN_PROCESSAMENTO_VISIVEL =
 
 
 
+
 const EMAIL_PROCESSAMENTO_MS =
   7000;
 
@@ -162,10 +163,15 @@ let processamentoVisualEncerrado =
   Só a primeira retirada da impressora usa os 5 s quando a URL veio do e-mail.
   Depois disso a flag é desligada, evitando contaminar os cliques da página.
 */
+const origemViaEmail =
+  (Array.isArray(wixLocation?.query?.via)
+    ? wixLocation.query.via
+    : String(wixLocation?.query?.via ?? "").split(","))
+    .map((valor) => String(valor ?? "").trim().toLowerCase())
+    .includes("email");
+
 let processamentoEmailPendente =
-  String(wixLocation?.query?.via ?? "")
-    .trim()
-    .toLowerCase() === "email";
+  origemViaEmail;
 
 let entrega =
   null;
@@ -1225,6 +1231,18 @@ async function baixarProximoGrafico() {
 }
 
 
+function linkDownloadDiretoOneDrive(url) {
+  const arquivo = safe(url);
+  if (!arquivo) return "";
+
+  if (/[?&]download=1(?:&|$)/i.test(arquivo)) {
+    return arquivo;
+  }
+
+  return arquivo + (arquivo.includes("?") ? "&" : "?") + "download=1";
+}
+
+
 async function baixarProjetoCompleto() {
   if (
     entrega?.access?.projeto !== true
@@ -1300,9 +1318,12 @@ async function baixarProjetoCompleto() {
     return;
   }
 
-  /* Abre o compartilhamento original do OneDrive para visualizar o PDF online. */
+  /* Projeto Completo: baixa diretamente do compartilhamento permanente do OneDrive. */
+  const downloadDireto =
+    linkDownloadDiretoOneDrive(arquivo);
+
   wixLocation.to(
-    arquivo
+    downloadDireto
   );
 }
 

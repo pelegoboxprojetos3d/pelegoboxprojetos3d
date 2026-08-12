@@ -49,6 +49,13 @@ function productType(v) {
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";
 }
 
+function priceTitleForType(value) {
+  const tipo = productType(value);
+  if (tipo === "GRAFICOS") return "Botão 2";
+  if (tipo === "PROJETO_COMPLETO") return "Botão 3";
+  return "Botão 1";
+}
+
 function decodeTitle(v) {
   return safe(v)
     .replace(/&amp;quot;/gi, '"')
@@ -245,6 +252,46 @@ async function reenviarNotificacaoValidaPay(chargeId) {
   return last;
 }
 
+async function garantirFaturaValidaPay(checkoutId, chargeId, knownSession = null) {
+  const session = knownSession || await findSession(checkoutId);
+
+  if (session?.faturaValidaPayEnviada === true) {
+    return { sent: true, skipped: true, reason: "already_sent" };
+  }
+
+  const ultimaTentativa = new Date(
+    session?.faturaValidaPayUltimaTentativaEm || 0
+  ).getTime();
+
+  if (ultimaTentativa && Date.now() - ultimaTentativa < 30000) {
+    return {
+      sent: false,
+      skipped: true,
+      reason: "cooldown",
+      statusCode: Number(session?.faturaValidaPayStatusCode || 0),
+      error: safe(session?.faturaValidaPayErro)
+    };
+  }
+
+  await saveSession(checkoutId, {
+    faturaValidaPayUltimaTentativaEm: new Date(),
+    updatedAtDate: new Date()
+  }, session || undefined);
+
+  const result = await reenviarNotificacaoValidaPay(chargeId);
+
+  await saveSession(checkoutId, {
+    faturaValidaPayEnviada: result?.sent === true,
+    faturaValidaPayStatusCode: Number(result?.statusCode || 0),
+    faturaValidaPayErro: safe(result?.error),
+    faturaValidaPayTentativa: Number(result?.attempt || 0),
+    faturaValidaPayUltimaTentativaEm: new Date(),
+    updatedAtDate: new Date()
+  });
+
+  return result;
+}
+
 async function findSession(checkoutId) {
   const r = await wixData
     .query(SESSIONS)
@@ -265,8 +312,9 @@ async function saveSession(checkoutId, patch) {
 }
 
 
-async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
+async function buscarPriceIdExistenteValidaPay({ produto, valor, tipoProduto }) {
   const nomeEsperado = normalizarTituloProduto(produto).toLowerCase();
+  const tituloPrecoEsperado = priceTitleForType(tipoProduto).toUpperCase();
   if (!nomeEsperado || !(Number(valor) > 0)) return "";
 
   try {
@@ -292,7 +340,7 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
 
       const preco = (Array.isArray(prices) ? prices : []).find(price =>
         safe(price?.priceId || price?.id) &&
-        ["ÚNICO", "UNICO"].includes(safe(price?.title).toUpperCase()) &&
+        safe(price?.title).toUpperCase() === tituloPrecoEsperado &&
         Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&
         (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === "ONE_TIME")
       );
@@ -330,10 +378,11 @@ async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
 
 async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor }) {
   const current = await findSession(checkoutId);
-  if (safe(current?.validaPayPriceId) && normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()) return safe(current.validaPayPriceId);
-  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });
+  const tituloPreco = priceTitleForType(tipoProduto);
+  if (safe(current?.validaPayPriceId) && safe(current?.validaPayPriceLabel) === tituloPreco && normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()) return safe(current.validaPayPriceId);
+  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor, tipoProduto });
   if (providerReused) {
-    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });
+    await saveSession(checkoutId, { validaPayPriceId: providerReused, validaPayPriceLabel: tituloPreco, updatedAtDate: new Date() });
     return providerReused;
   }
 
@@ -349,7 +398,7 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
       codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)
     },
     prices: [{
-      title: "Único",
+      title: tituloPreco,
       amount: valor,
       currency: "BRL",
       recurrenceType: "ONE_TIME",
@@ -364,7 +413,7 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
 
   const priceId = safe(response.data?.prices?.[0]?.priceId);
   if (priceId) {
-    await saveSession(checkoutId, { validaPayPriceId: priceId, updatedAtDate: new Date() });
+    await saveSession(checkoutId, { validaPayPriceId: priceId, validaPayPriceLabel: tituloPreco, updatedAtDate: new Date() });
   }
   return priceId;
 }
@@ -437,7 +486,8 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
       chargeId,
       paymentMethod:"CARD"
     });
-    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};
+    const faturaValidaPay=await garantirFaturaValidaPay(checkoutId,chargeId,session);
+    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao,faturaValidaPay};
   }
   const samePayment=Boolean(existente && safe(existente.idPagamento)===safe(chargeId));
   const access=cumulativeAccess(existente,tipoProduto),now=new Date();

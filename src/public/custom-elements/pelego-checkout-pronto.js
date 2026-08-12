@@ -683,7 +683,20 @@ window.addEventListener("resize",function(){
  layoutMode(CURRENT_LAYOUT_MODE);
 });
 
+function setPaymentMethodStatus(node,text){
+ if(!node)return;
+ var status=node.querySelector(".methodStatus");
+ if(status)status.textContent=text;
+}
+function selectPaymentMethod(method){
+ var selected=safe(method).toUpperCase();
+ setPaymentMethodStatus(E.pix,selected==="PIX"?"Selecionado":"Ativo");
+ setPaymentMethodStatus(E.card,selected==="CARD"?"Selecionado":"Ativo");
+ setPaymentMethodStatus(E.cardSelected,"Selecionado");
+ setPaymentMethodStatus(E.pixFromCard,"Ativo");
+}
 function openPix(){
+ selectPaymentMethod("PIX");
  E.cardMode.classList.add("hidden");E.normal.classList.remove("hidden");E.pixArea.classList.remove("hidden");
  S.pixCode="";E.pixCode.value="";E.copy.disabled=true;E.qr.innerHTML="";E.tetrisWrap.classList.remove("hidden");
  E.pixStatus.className="pixStatus";E.pixStatusText.textContent="AGUARDANDO PIX";
@@ -729,6 +742,7 @@ function mobileCardOrder(){
  }
 }
 function openCard(){
+ selectPaymentMethod("CARD");
  restoreDesktopOrder();
 
  /* Aproveita os dados já informados no checkout. */

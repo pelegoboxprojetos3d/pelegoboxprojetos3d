@@ -51,11 +51,21 @@ if (atual !== regraNova) {
 }
 
 /*
-  Mantém a revalidação mobile já existente.
-  O cache serve só para pintar rápido; o backend confirma as compras
-  e corrige banners antigos logo depois.
+  Compatibilidade:
+  - fluxo antigo: revalidava somente no mobile;
+  - fluxo atual: usa o cache apenas para pintar rápido e revalida no backend
+    em segundo plano no desktop e no mobile.
+
+  Se a revalidação cross-browser já existe, não tentamos reintroduzir o
+  bloco mobile antigo.
 */
-if (!codigo.includes("Erro ao revalidar acessos mobile:")) {
+const temRevalidacaoMobileAntiga =
+  codigo.includes("Erro ao revalidar acessos mobile:");
+
+const temRevalidacaoCrossBrowser =
+  codigo.includes("Erro ao atualizar acessos em segundo plano:");
+
+if (!temRevalidacaoMobileAntiga && !temRevalidacaoCrossBrowser) {
   const cacheAntigo = `        await mostrarValoresEAcessos();
         return;`;
 

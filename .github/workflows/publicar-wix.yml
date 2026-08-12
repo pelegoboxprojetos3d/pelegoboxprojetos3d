@@ -63,6 +63,9 @@ jobs:
       - name: Otimizar abertura imediata do checkout
         run: node scripts/otimizar-checkout-inicializacao.cjs
 
+      - name: Abrir cliente recorrente direto no pagamento
+        run: node scripts/corrigir-cliente-recorrente-fastboot.cjs
+
       - name: Validar código
         run: npm run lint
 

@@ -2,6 +2,7 @@ import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
 import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
+import { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";
 
 // CARTÃO TRANSPARENTE VALIDAPAY
 // - Não grava PAN completo nem CVV.
@@ -36,6 +37,12 @@ function phone(v) {
   let n = digits(v);
   if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);
   return n.length === 10 || n.length === 11 ? `+55${n}` : "";
+}
+
+function validaPayPhone(v) {
+  let n = digits(v);
+  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);
+  return n.length === 10 || n.length === 11 ? n : "";
 }
 
 function productType(v) {
@@ -351,7 +358,12 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
   const existente=await findPurchase(chaveCompra);
   if (session.compraRegistrada===true && safe(session.status).toLowerCase()==="approved" && existente) {
     const make=await triggerMake({session,purchase:existente,paymentId:chargeId});
-    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make};
+    const notificacao=await notificarVendaProjetoProntoAprovada({
+      checkoutId,
+      chargeId,
+      paymentMethod:"CARD"
+    });
+    return {compraRegistrada:true,purchaseId:safe(existente._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};
   }
   const samePayment=Boolean(existente && safe(existente.idPagamento)===safe(chargeId));
   const access=cumulativeAccess(existente,tipoProduto),now=new Date();
@@ -368,7 +380,12 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
   const savedPurchase=existente?await wixData.update(PURCHASES,purchase,DB):await wixData.insert(PURCHASES,purchase,DB);
   session=await saveSession(checkoutId,{status:"approved",paymentId:safe(chargeId),validaPayChargeId:safe(chargeId),tokenEntrega:safe(session.tokenEntrega),compraRegistrada:true,updatedAtDate:new Date()});
   const make=await triggerMake({session,purchase:savedPurchase,paymentId:chargeId});
-  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make};
+  const notificacao=await notificarVendaProjetoProntoAprovada({
+    checkoutId,
+    chargeId,
+    paymentMethod:"CARD"
+  });
+  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};
 }
 
 export async function criarCobrancaCartaoTransparente(input = {}) {
@@ -512,7 +529,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
         name: nome,
         email,
         documentNumber: cpfCnpj,
-        phone: whatsapp
+        phone: validaPayPhone(whatsapp)
       },
       card: {
         number,

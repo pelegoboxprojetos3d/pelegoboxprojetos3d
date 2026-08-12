@@ -13,11 +13,17 @@ function replaceOnce(text, from, to, label) {
 
 let page = fs.readFileSync(pagePath, 'utf8');
 page = page.replace(
-  /(const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*)3000(\s*;)/,
-  '$14000$2'
+  /(const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*)\d+(\s*;)/,
+  '$1500$2'
 );
-if (!/const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*4000\s*;/.test(page)) {
-  throw new Error('Não foi possível configurar a impressora para 4 segundos.');
+if (!/const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*500\s*;/.test(page)) {
+  throw new Error('Não foi possível configurar a impressora mínima para 0,5 segundo.');
+}
+if (!/const\s+MAX_PROCESSAMENTO_VISIVEL\s*=\s*5000\s*;/.test(page)) {
+  page = page.replace(
+    /const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*500\s*;/,
+    'const MIN_PROCESSAMENTO_VISIVEL =\n  500;\n\nconst MAX_PROCESSAMENTO_VISIVEL =\n  5000;'
+  );
 }
 fs.writeFileSync(pagePath, `${page.trimEnd()}\n`, 'utf8');
 
@@ -52,4 +58,4 @@ if (!backend.includes('consistentRead: true')) {
 }
 
 fs.writeFileSync(backendPath, `${backend.trimEnd()}\n`, 'utf8');
-console.log('Entrega pós-cartão corrigida: arquivo_projeto, leitura consistente e impressora mínima de 4s.');
+console.log('Entrega pós-cartão corrigida: arquivo_projeto, leitura consistente e impressora mínima de 0,5s e máxima de 5s.');

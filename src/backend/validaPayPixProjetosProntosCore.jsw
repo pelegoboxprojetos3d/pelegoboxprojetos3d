@@ -40,6 +40,12 @@ function normalizePhone(value) {
   return number.length === 10 || number.length === 11 ? `+55${number}` : "";
 }
 
+function validaPayPhone(value) {
+  let number = digits(value);
+  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);
+  return number.length === 10 || number.length === 11 ? number : "";
+}
+
 function normalizeType(value) {
   const type = safe(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(type) ? type : "MEDIDAS";
@@ -420,7 +426,7 @@ export async function criarCobrancaPixTransparente(input = {}) {
       paymentMethod: "pix",
       externalId: checkoutId,
       externalTxid: externalTxid(checkoutId, codigoProjeto, tipoProduto, valor),
-      customer: { name: nome, email, phone: whatsapp, documentNumber: cpfCnpj },
+      customer: { name: nome, email, phone: validaPayPhone(whatsapp), documentNumber: cpfCnpj },
       items: [{ priceId, quantity: 1 }],
       metadata: {
         origem: "PELEGO_BOX_PROJETOS_PRONTOS",
@@ -516,9 +522,11 @@ export async function consultarCobrancaPix(input = {}) {
         validaPayChargeId: chargeId,
         updatedAtDate: new Date()
       }, current);
-      notifyApproved(checkoutId, chargeId, response.data || {}).catch(error => {
+      try {
+        await notifyApproved(checkoutId, chargeId, response.data || {});
+      } catch (error) {
         console.error("Falha ao notificar venda aprovada:", error?.message || error);
-      });
+      }
     }
 
     return result;

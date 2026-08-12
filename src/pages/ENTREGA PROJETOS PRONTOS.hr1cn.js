@@ -128,7 +128,11 @@ const INTERVALO =
   a impressora fica alguns segundos visível para comunicar processamento.
 */
 const MIN_PROCESSAMENTO_VISIVEL =
-  4000;
+  500;
+
+/* Nunca deixar a impressora dominar a pagina por mais de 5 segundos. */
+const MAX_PROCESSAMENTO_VISIVEL =
+  5000;
 
 let processamentoVisivelDesde =
   0;
@@ -1183,11 +1187,9 @@ async function baixarProjetoCompleto() {
     return;
   }
 
-  await baixarArquivo(
-    projeto.pdfProjeto,
-    "PROJETO-COMPLETO",
-    "pdf",
-    true
+  /* Projeto completo: abre o link original do OneDrive. */
+  wixLocation.to(
+    safe(projeto.pdfProjeto)
   );
 }
 
@@ -1663,15 +1665,23 @@ async function prepararBotaoVideo() {
           ?.codigoProjeto
       );
 
-    const item =
-      await buscarItemProjetoVideo(
-        codigoProjeto
+    /* Usa primeiro o video que o backend ja devolveu. */
+    let url =
+      normalizarVideoUrl(
+        entrega?.project?.videoUrl
       );
 
-    const url =
-      linkVideoDoItem(
-        item
-      );
+    if (!url) {
+      const item =
+        await buscarItemProjetoVideo(
+          codigoProjeto
+        );
+
+      url =
+        linkVideoDoItem(
+          item
+        );
+    }
 
     if (!url) {
       await esconderBotaoVideo();
@@ -2226,6 +2236,14 @@ async function carregarEntrega() {
           await renderizarBotoes();
           await mostrarDadosCarregados();
           await mostrarAvisosEntrega();
+
+          /* Video independe do processamento do Make/OneDrive. */
+          prepararBotaoVideo().catch((erro) => {
+            console.warn(
+              "Falha ao preparar video durante a aprovacao:",
+              erro?.message || erro
+            );
+          });
         }
 
         if (

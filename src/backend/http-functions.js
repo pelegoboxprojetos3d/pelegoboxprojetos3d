@@ -14,6 +14,7 @@ import { getSecret } from "wix-secrets-backend";
 import { checkAbandoned } from "backend/checkAbandoned";
 import { importarImagensProjetoPronto } from "backend/processarImagensProjetosProntos";
 import { processarCompraProjetoPronto } from "backend/processarCompraProjetoPronto";
+import { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";
 
 const DB_OPTS = {
   suppressAuth: true
@@ -1524,7 +1525,9 @@ export async function post_mercadoPagoWebhookPro(
         ),
 
         make:
-          makeResult
+          makeResult,
+        notification:
+          notificationResult
       }
     });
   } catch (error) {
@@ -2487,6 +2490,13 @@ export async function post_validaPayWebhookPro(
           purchaseResult.purchase,
         paymentId,
         client
+      });
+
+    const notificationResult =
+      await notificarVendaProjetoProntoAprovada({
+        checkoutId: safe(session.checkoutId),
+        chargeId,
+        paymentMethod: safe(session.paymentMethod) || "VALIDAPAY"
       });
 
     console.log(

@@ -1360,6 +1360,16 @@ function projectPayload(
     pdfProjeto:
       pdfProject,
 
+    videoUrl:
+      firstValue(
+        project?.link_video,
+        project?.linkVideo,
+        project?.url_video,
+        project?.urlVideo,
+        project?.youtube,
+        project?.youtubeUrl
+      ),
+
     statusProcessamento,
 
     valorMedidas:

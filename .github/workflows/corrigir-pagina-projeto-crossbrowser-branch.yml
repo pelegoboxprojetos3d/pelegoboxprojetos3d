@@ -2,6 +2,8 @@ name: Corrigir pagina projeto crossbrowser em branch
 
 on:
   push:
+    branches:
+      - corrigir-pagina-projeto-crossbrowser-20260812
     paths:
       - ".github/workflows/corrigir-pagina-projeto-crossbrowser-branch.yml"
 
@@ -29,8 +31,6 @@ jobs:
           path = Path('src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js')
           text = path.read_text(encoding='utf-8')
 
-          # 1) O hover em Velo alterava borderWidth de caixas e podia provocar
-          # relayout/repaint pesado, especialmente no Firefox.
           pattern_hover = re.compile(
               r'function ligarDestaqueAoPassarMouse\([\s\S]*?function ligarDestaquesDosAvisos\(\) \{[\s\S]*?\n\}\n\n\n// ======================================================\n// ESTADO DAS ETAPAS',
               re.M
@@ -41,105 +41,63 @@ jobs:
               count=1
           )
           if n != 1:
-              raise SystemExit('Nao encontrei o bloco de hover para remover')
+              raise SystemExit('Bloco de hover nao encontrado')
 
-          # 2) Ao voltar do checkout nao escondemos thumbnail/titulo/botoes.
-          # Apenas deixamos os botoes bloqueados ate a identificacao local ser aplicada.
           pattern_hide = re.compile(
               r'function esconderConteudoPrincipal\(\) \{[\s\S]*?\n\}\n\nasync function mostrarProjetoCompleto',
               re.M
           )
           replacement_hide = '''function esconderConteudoPrincipal() {
-  /*
-    Não apaga a página enquanto o CMS responde.
-    No Voltar/BFCache isso preserva thumbnail e conteúdo já renderizados.
-    Os botões continuam seguros porque ficam desabilitados até restaurarmos
-    a identificação e os acessos.
-  */
   bloquearSemIdentificacao();
 }
 
 async function mostrarProjetoCompleto'''
           text, n = pattern_hide.subn(replacement_hide, text, count=1)
           if n != 1:
-              raise SystemExit('Nao encontrei esconderConteudoPrincipal')
+              raise SystemExit('esconderConteudoPrincipal nao encontrado')
 
-          # 3) Remove a chamada do hover que sobrou em ligarEventos, caso exista.
-          text = text.replace('''  ligarDestaquesDosAvisos();\n\n''', '', 1)
+          text = text.replace('  ligarDestaquesDosAvisos();\n\n', '', 1)
 
-          # 4) Revalida acessos diretamente pelo backend usando a identificacao
-          # completa já salva. Não faz buscarCliente + obterAcessos em série.
           marker = 'async function iniciarPagina() {'
           if marker not in text:
-              raise SystemExit('Nao encontrei iniciarPagina')
+              raise SystemExit('iniciarPagina nao encontrado')
 
-          helper = r'''async function revalidarAcessosSalvos(data = identificacao) {
-  if (
-    !projeto ||
-    !cadastroProntoParaPagamento(data)
-  ) {
+          helper = '''async function revalidarAcessosSalvos(data = identificacao) {
+  if (!projeto || !cadastroProntoParaPagamento(data)) {
     return;
   }
 
-  const telefone =
-    normalizarTelefone(data);
+  const telefone = normalizarTelefone(data);
 
   try {
-    const resultado =
-      await comTimeout(
-        obterAcessosProjeto({
-          codigoProjeto:
-            codigoPublico(projeto),
+    const resultado = await comTimeout(
+      obterAcessosProjeto({
+        codigoProjeto: codigoPublico(projeto),
+        clienteId: safe(data.clienteId),
+        email: normalizeEmail(data.email),
+        whatsapp: onlyDigits(telefone.whatsappE164)
+      }),
+      6000,
+      "A atualizacao dos acessos demorou mais que o esperado."
+    );
 
-          clienteId:
-            safe(data.clienteId),
-
-          email:
-            normalizeEmail(data.email),
-
-          whatsapp:
-            onlyDigits(
-              telefone.whatsappE164
-            )
-        }),
-
-        6000,
-
-        "A atualização dos acessos demorou mais que o esperado."
-      );
-
-    if (
-      !resultado?.ok ||
-      !resultado?.access
-    ) {
+    if (!resultado?.ok || !resultado?.access) {
       return;
     }
 
     acessos = {
-      medidas:
-        resultado.access.medidas === true,
-
-      graficos:
-        resultado.access.graficos === true,
-
-      projeto:
-        resultado.access.projeto === true
+      medidas: resultado.access.medidas === true,
+      graficos: resultado.access.graficos === true,
+      projeto: resultado.access.projeto === true
     };
 
     capturarDownloads(resultado);
-
-    salvarAcessosLocais(
-      codigoPublico(projeto),
-      acessos
-    );
-
+    salvarAcessosLocais(codigoPublico(projeto), acessos);
     consultaConcluida = true;
-
     await mostrarValoresEAcessos();
-
   } catch (error) {
     console.warn(
-      "Revalidação de acessos em segundo plano falhou:",
+      "Revalidacao de acessos em segundo plano falhou:",
       error?.message || error
     );
   }
@@ -149,15 +107,11 @@ async function mostrarProjetoCompleto'''
 '''
           text = text.replace(marker, helper + marker, 1)
 
-          # 5) Cliente completo entra na página imediatamente com o melhor estado
-          # local disponível. A revalidação do backend roda em segundo plano em
-          # TODOS os navegadores, inclusive desktop, evitando cache velho que
-          # mantinha o Botão 2 preso depois do pagamento do Botão 1.
           pattern_fast = re.compile(
-              r'''    if \(confirmacaoAtualValida\) \{[\s\S]*?      await identificarCliente\(salva\);\n      return;\n    \}''',
+              r'    if \(confirmacaoAtualValida\) \{[\s\S]*?      await identificarCliente\(salva\);\n      return;\n    \}',
               re.M
           )
-          replacement_fast = r'''    if (confirmacaoAtualValida) {
+          replacement_fast = '''    if (confirmacaoAtualValida) {
       const acessosSalvos =
         lerAcessosLocais(
           codigoPublico(projeto)
@@ -167,12 +121,11 @@ async function mostrarProjetoCompleto'''
         identificado = true;
         consultaConcluida = Boolean(acessosSalvos);
 
-        acessos =
-          acessosSalvos || {
-            medidas: false,
-            graficos: false,
-            projeto: false
-          };
+        acessos = acessosSalvos || {
+          medidas: false,
+          graficos: false,
+          projeto: false
+        };
 
         clienteAtual = {
           _id: safe(salva.clienteId),
@@ -183,39 +136,26 @@ async function mostrarProjetoCompleto'''
           cpfCnpj: onlyDigits(salva.cpfCnpj)
         };
 
-        capturarDownloads({
-          access: acessos
-        });
-
+        capturarDownloads({ access: acessos });
         await mostrarValoresEAcessos();
 
-        /*
-          O cache só serve para pintar a tela sem atraso.
-          A verdade vem do backend em segundo plano em desktop e mobile.
-        */
         revalidarAcessosSalvos(salva)
-          .catch(
-            (error) => {
-              console.error(
-                "Erro ao atualizar acessos em segundo plano:",
-                error?.message || error
-              );
-            }
-          );
+          .catch((error) => {
+            console.error(
+              "Erro ao atualizar acessos em segundo plano:",
+              error?.message || error
+            );
+          });
 
         return;
       }
 
-      /*
-        Identificação antiga/incompleta: somente aqui ainda precisamos
-        reconstruir o cliente antes de liberar o fluxo.
-      */
       await identificarCliente(salva);
       return;
     }'''
           text, n = pattern_fast.subn(replacement_fast, text, count=1)
           if n != 1:
-              raise SystemExit('Nao encontrei o bloco de restauracao rapida')
+              raise SystemExit('Bloco de restauracao rapida nao encontrado')
 
           path.write_text(text.rstrip() + '\n', encoding='utf-8')
           PY
@@ -236,8 +176,8 @@ async function mostrarProjetoCompleto'''
         shell: bash
         run: |
           rm -f .github/workflows/corrigir-pagina-projeto-crossbrowser-branch.yml
-          git config user.name "PELEGO BOX Automação"
+          git config user.name "PELEGO BOX Automacao"
           git config user.email "pelegobox82@gmail.com"
           git add -A
-          git commit -m "Corrige retorno, cache e hover da pagina de projetos"
+          git commit -m "Corrige retorno cache e hover da pagina de projetos"
           git push origin HEAD:corrigir-pagina-projeto-crossbrowser-20260812

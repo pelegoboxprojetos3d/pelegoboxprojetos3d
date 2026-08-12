@@ -11,6 +11,8 @@ const PROJECTS_COLLECTION = "Videosprojetos";
 const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
 const VERIFIED_SESSION_KEY = "pp_checkout_cliente_validado_sessao";
+const CHECKOUT_AUTH_KEY = "pp_checkout_autorizado";
+const CHECKOUT_AUTH_MAX_AGE = 5 * 60 * 1000;
 const PIX_CREATE_TIMEOUT = 12000;
 const PIX_READ_TIMEOUT = 3500;
 const PIX_INTERVAL = 2000;
@@ -65,6 +67,34 @@ function identityComplete(value = ctx) {
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email(value?.email)) &&
     validCpf(value?.cpfCnpj || value?.cpf)
   );
+}
+
+function checkoutHandoffVerified(saved = {}, project = "", type = "") {
+  if (!safe(saved?.clienteId) || saved?.whatsappConfirmado !== true || !identityComplete(saved)) {
+    return false;
+  }
+
+  try {
+    const raw = session.getItem(CHECKOUT_AUTH_KEY);
+    if (!raw) return false;
+
+    const marker = JSON.parse(raw);
+    if (!marker || typeof marker !== "object") return false;
+
+    const createdAt = Number(marker.criadoEm || 0);
+    const age = Date.now() - createdAt;
+
+    return Boolean(
+      createdAt > 0 &&
+      age >= 0 &&
+      age <= CHECKOUT_AUTH_MAX_AGE &&
+      digits(marker.codigoProjeto) === digits(project) &&
+      safe(marker.tipoProduto).toUpperCase() === safe(type).toUpperCase() &&
+      safe(marker.clienteId) === safe(saved.clienteId)
+    );
+  } catch (_) {
+    return false;
+  }
 }
 
 function sessionIdentityCandidate() {
@@ -138,7 +168,7 @@ async function hydrateReturningCustomer() {
     A consulta ao backend continua acontecendo, mas não faz a etapa de
     identificação piscar antes de mostrar as formas de pagamento.
   */
-  ctx.skipIdentity = alreadyVerifiedThisSession;
+  ctx.skipIdentity = alreadyVerifiedThisSession || ctx.skipIdentity === true;
 
   try {
     const found = await waitTimeout(buscarClienteCadastrado(n), 3500, "");
@@ -168,7 +198,7 @@ async function hydrateReturningCustomer() {
     ctx.skipIdentity = true;
     markSessionIdentityVerified(ctx);
   } catch (_) {
-    if (!alreadyVerifiedThisSession) ctx.skipIdentity = false;
+    if (!alreadyVerifiedThisSession && ctx.skipIdentity !== true) ctx.skipIdentity = false;
   }
 }
 
@@ -209,8 +239,10 @@ function mediaSource(value) {
 function contextFromUrl() {
   const q=wixLocation.query || {};
   const s=savedIdentity();
-  const verifiedSession=sessionIdentityVerified(s);
   const project=digits(q.codigoProjeto || q.ordemVideo || q.codigo);
+  const type=safe(q.tipoProduto || "MEDIDAS").toUpperCase();
+  const verifiedSession=sessionIdentityVerified(s);
+  const verifiedHandoff=checkoutHandoffVerified(s,project,type);
   const number=phone(s.whatsappE164 || s.whatsapp);
   const product=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");
   return {
@@ -222,7 +254,7 @@ function contextFromUrl() {
     imagem:safe(q.imagem || q.img),
     valor:Number(q.valor || q.price || 0),
     price:Number(q.valor || q.price || 0),
-    tipoProduto:safe(q.tipoProduto || "MEDIDAS").toUpperCase(),
+    tipoProduto:type,
     whatsapp:number,
     whatsappE164:number ? `+55${number}` : "",
     ddi:"55", country:"br",
@@ -231,7 +263,7 @@ function contextFromUrl() {
     email:email(s.email),
     cpfCnpj:cpf(s.cpfCnpj || s.cpf),
     whatsappConfirmado:s.whatsappConfirmado === true,
-    skipIdentity:verifiedSession,
+    skipIdentity:verifiedSession || verifiedHandoff,
     hideSku:true,
     returnUrl:safe(q.returnUrl) || (project ? `/checkoutprojetosprontos?codigo=${encodeURIComponent(project)}` : "/checkoutprojetosprontos")
   };

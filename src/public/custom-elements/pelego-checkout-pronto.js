@@ -566,6 +566,14 @@ function syncIdentityButton(){
  if(!E.identityBtn)return;
  E.identityBtn.disabled=S.saving || !identityFieldsReady();
 }
+function identityFieldsReady(){
+ var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value),b=email(E.email2.value);
+ return Boolean(p && n.length>=3 && validCpf(c) && validEmail(a) && validEmail(b) && a===b)
+}
+function syncIdentityButton(){
+ if(!E.identityBtn)return;
+ E.identityBtn.disabled=S.saving || !identityFieldsReady();
+}
 function validateIdentity(){
  var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
  if(!p){setAlert(E.identityAlert,"error","Informe um WhatsApp válido com DDD.");E.phone.focus();return false}

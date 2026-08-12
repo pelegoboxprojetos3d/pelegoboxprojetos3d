@@ -2622,7 +2622,12 @@ function solicitarLoginSocial() {
     )
     .catch(
       () => {
-        wixLocation.to("/");
+        /*
+          Fechar o login social no X ou clicar fora NÃO tira o visitante
+          da página do projeto. Carregamos a página normalmente, mantendo
+          valores e compras bloqueados até ele tentar fazer login novamente.
+        */
+        iniciarPaginaComTratamento();
       }
     );
 }

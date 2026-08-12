@@ -57,6 +57,9 @@ jobs:
       - name: Aplicar 7s da impressora ao abrir pelo e-mail
         run: node scripts/ajustar-impressora-email-5s.cjs
 
+      - name: Preparar próximo teste real
+        run: node scripts/ajustar-pre-teste-real-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 

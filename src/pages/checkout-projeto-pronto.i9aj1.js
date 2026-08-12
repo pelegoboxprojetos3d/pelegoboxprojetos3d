@@ -382,10 +382,9 @@ function basePayload(data={}) {
 }
 
 function avisarDadosSalvos(payload) {
+  // Um único evento é suficiente. O HTML trata os aliases antigos, mas
+  // disparar quatro mensagens iguais só multiplica trabalho no Custom Element.
   post({type:"CUSTOMER_READY",...payload});
-  post({type:"DATA_SAVED",...payload});
-  post({type:"PAYMENT_READY",...payload});
-  post({type:"SHOW_PAYMENT",...payload});
 }
 
 async function saveCustomer(data={}) {

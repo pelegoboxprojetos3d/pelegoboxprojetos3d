@@ -434,6 +434,8 @@ function post(data){try{window.parent.postMessage(data,"*")}catch(_){}}
 
 var CURRENT_LAYOUT_MODE="INITIAL";
 var HEIGHT_TIMER=null;
+var LAST_EMITTED_HEIGHT=0;
+var LAST_VIEWPORT_MOBILE=window.innerWidth<=680;
 
 function checkoutRealHeight(){
   var wrap=document.querySelector(".wrap");
@@ -460,6 +462,8 @@ function checkoutRealHeight(){
 function emitCheckoutHeight(){
   var h=checkoutRealHeight();
   if(!h)return;
+  if(Math.abs(h-LAST_EMITTED_HEIGHT)<=1)return;
+  LAST_EMITTED_HEIGHT=h;
   post({
     type:"CHECKOUT_LAYOUT",
     mode:CURRENT_LAYOUT_MODE,
@@ -469,11 +473,9 @@ function emitCheckoutHeight(){
 
 function layoutMode(mode){
   CURRENT_LAYOUT_MODE=String(mode||"INITIAL").toUpperCase();
-
   clearTimeout(HEIGHT_TIMER);
-  [0,40,120,280,650].forEach(function(ms){
-    setTimeout(emitCheckoutHeight,ms);
-  });
+  emitCheckoutHeight();
+  HEIGHT_TIMER=setTimeout(emitCheckoutHeight,140);
 }
 function incoming(raw){var d=raw;if(typeof d==="string"){try{d=JSON.parse(d)}catch(_){d={type:d}}}if(d&&d.data&&typeof d.data==="object"&&!d.type)d=d.data;return d&&typeof d==="object"?d:{}}
 function deepPixValue(obj){
@@ -606,7 +608,7 @@ function startTetris(){
   for(var r=0;r<rows;r++)for(var c=0;c<cols;c++)if(board[r][c])block(c,r,false);
   for(var py=0;py<piece.length;py++)for(var px=0;px<piece[py].length;px++)if(piece[py][px])block(x+px,y+py,true);
  }
- function loop(ts){if(!last)last=ts;if(ts-last>125){playMove();last=ts}draw();S.tetris=requestAnimationFrame(loop)}
+ function loop(ts){if(!last||ts-last>125){if(last)playMove();last=ts;draw()}S.tetris=requestAnimationFrame(loop)}
  seed();spawn();S.tetris=requestAnimationFrame(loop)
 }
 function stopTetris(){if(S.tetris){cancelAnimationFrame(S.tetris);S.tetris=null}}
@@ -620,9 +622,26 @@ function mobilePixOrder(){
 function restoreDesktopOrder(){
  if(window.innerWidth<=680)return;
  E.topGrid.classList.remove("pix-selected");E.deferred.classList.remove("active");
- E.left.appendChild(E.card);E.left.appendChild(E.google);E.center.appendChild(E.pixAuto);E.center.appendChild(E.apple);E.center.appendChild(E.paypal);E.topGrid.appendChild(E.notice);
+ if(E.card.parentElement!==E.left)E.left.appendChild(E.card);
+ if(E.google.parentElement!==E.left)E.left.appendChild(E.google);
+ if(E.pixAuto.parentElement!==E.center)E.center.appendChild(E.pixAuto);
+ if(E.apple.parentElement!==E.center)E.center.appendChild(E.apple);
+ if(E.paypal.parentElement!==E.center)E.center.appendChild(E.paypal);
+ if(E.notice.parentElement!==E.topGrid)E.topGrid.appendChild(E.notice);
 }
-window.addEventListener("resize",function(){restoreDesktopOrder();restoreCardDesktop()});
+window.addEventListener("resize",function(){
+ var mobile=window.innerWidth<=680;
+ if(mobile===LAST_VIEWPORT_MOBILE)return;
+ LAST_VIEWPORT_MOBILE=mobile;
+ if(mobile){
+   if(!E.pixArea.classList.contains("hidden"))mobilePixOrder();
+   if(!E.cardMode.classList.contains("hidden"))mobileCardOrder();
+ }else{
+   restoreDesktopOrder();
+   restoreCardDesktop();
+ }
+ layoutMode(CURRENT_LAYOUT_MODE);
+});
 
 function openPix(){
  E.cardMode.classList.add("hidden");E.normal.classList.remove("hidden");E.pixArea.classList.remove("hidden");
@@ -755,12 +774,12 @@ window.addEventListener("message",function(event){
 
 if(typeof ResizeObserver!=="undefined"){
   try{
+    var checkoutObservedWrap=document.querySelector(".wrap");
     var checkoutHeightObserver=new ResizeObserver(function(){
       clearTimeout(HEIGHT_TIMER);
-      HEIGHT_TIMER=setTimeout(emitCheckoutHeight,35);
+      HEIGHT_TIMER=setTimeout(emitCheckoutHeight,80);
     });
-    checkoutHeightObserver.observe(document.documentElement);
-    if(document.body)checkoutHeightObserver.observe(document.body);
+    if(checkoutObservedWrap)checkoutHeightObserver.observe(checkoutObservedWrap);
   }catch(_){}
 }
 
@@ -782,6 +801,7 @@ class PelegoCheckoutPronto extends HTMLElement {
     this._mounted = false;
     this._pending = null;
     this._frameReady = false;
+    this._appliedHeight = 0;
     this._windowHandler = this._onWindowMessage.bind(this);
   }
   connectedCallback() {
@@ -882,16 +902,13 @@ class PelegoCheckoutPronto extends HTMLElement {
     const requested = Math.ceil(Number(value || 0));
     if (!Number.isFinite(requested) || requested <= 0) return;
     const height = Math.max(180, Math.min(2300, requested + 2));
+    if (Math.abs(height - this._appliedHeight) <= 1) return;
+    this._appliedHeight = height;
     const css = `${height}px`;
     this.style.height = css;
     this.style.minHeight = css;
     this.style.maxHeight = css;
     if (this._frame) this._frame.style.height = css;
-    requestAnimationFrame(() => {
-      this.style.height = css;
-      this.style.minHeight = css;
-      this.style.maxHeight = css;
-    });
     this.dispatchEvent(new CustomEvent("checkout-height-change", { detail: { height }, bubbles: true, composed: true }));
   }
   _onWindowMessage(event) {

@@ -1,0 +1,90 @@
+name: Hotfix loader entrega maximo 5 segundos
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/hotfix-loader-entrega-max-5s.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Limitar impressora a cinco segundos
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              'const INTERVALO =\n  2000;',
+              'const INTERVALO =\n  1000;',
+              1
+          )
+
+          text = text.replace(
+              'const MIN_PROCESSAMENTO_VISIVEL =\n  3000;',
+              'const MIN_PROCESSAMENTO_VISIVEL =\n  400;\n\n/* A impressora nunca pode dominar a tela por mais de 5 segundos. */\nconst MAX_PROCESSAMENTO_VISIVEL =\n  5000;',
+              1
+          )
+
+          anchor = 'let processamentoVisivelDesde =\n  0;\n'
+          if 'let processamentoVisualEncerrado =' not in text:
+              if anchor not in text:
+                  raise SystemExit('Ancora processamentoVisivelDesde nao encontrada')
+              text = text.replace(
+                  anchor,
+                  anchor + '\nlet processamentoVisualEncerrado =\n  false;\n',
+                  1
+              )
+
+          marker = 'async function mostrarProcessamento() {\n'
+          if 'if (processamentoVisualEncerrado)' not in text:
+              if marker not in text:
+                  raise SystemExit('mostrarProcessamento nao encontrado')
+              text = text.replace(
+                  marker,
+                  marker + '  if (processamentoVisualEncerrado) {\n    return;\n  }\n\n',
+                  1
+              )
+
+          old = '''        await mostrarProcessamento();\n\n        alterarDescricao(\n          "Pagamento aprovado. Estamos preparando seus arquivos..."\n        );\n\n        await esperar(\n          INTERVALO\n        );\n\n        continue;'''
+
+          new = '''        if (!processamentoVisualEncerrado) {\n          await mostrarProcessamento();\n\n          const tempoProcessando =\n            processamentoVisivelDesde\n              ? Date.now() - processamentoVisivelDesde\n              : 0;\n\n          if (\n            tempoProcessando >=\n            MAX_PROCESSAMENTO_VISIVEL\n          ) {\n            processamentoVisualEncerrado = true;\n\n            try {\n              await $w(IDS.processando).hide();\n              await $w(IDS.processando).collapse();\n            } catch (_) {}\n\n            processamentoVisivelDesde = 0;\n          }\n        }\n\n        alterarDescricao(\n          processamentoVisualEncerrado\n            ? "Pagamento aprovado. Seus acessos já estão disponíveis; finalizando os arquivos..."\n            : "Pagamento aprovado. Estamos preparando seus arquivos..."\n        );\n\n        await esperar(\n          INTERVALO\n        );\n\n        continue;'''
+
+          if old not in text:
+              if new not in text:
+                  raise SystemExit('Bloco de espera aprovado nao encontrado')
+          else:
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validar codigo
+        run: |
+          npm ci --ignore-scripts
+          npm run lint
+
+      - name: Gravar correcao
+        run: |
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if git diff --cached --quiet; then
+            echo "Correcao ja aplicada"
+            exit 0
+          fi
+          git commit -m "Limita impressora da entrega a 5 segundos"
+          git push origin HEAD:main

@@ -768,7 +768,7 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML32_TIGHT_MOBILE"});
+post({type:"READY",version:"HTML33_FAST_BOOT"});
 })();
 </script>
 </body>
@@ -781,11 +781,13 @@ class PelegoCheckoutPronto extends HTMLElement {
     this._frame = null;
     this._mounted = false;
     this._pending = null;
+    this._frameReady = false;
     this._windowHandler = this._onWindowMessage.bind(this);
   }
   connectedCallback() {
     if (this._mounted) return;
     this._mounted = true;
+    this._frameReady = false;
     this.style.display = "block";
     // O Wix pode publicar o slot do Custom Element com largura intrínseca estreita.
     // No site publicado, usamos a viewport real para o checkout não cair no CSS mobile no desktop.
@@ -835,6 +837,7 @@ class PelegoCheckoutPronto extends HTMLElement {
   disconnectedCallback() {
     window.removeEventListener("message", this._windowHandler);
     this._mounted = false;
+    this._frameReady = false;
   }
   attributeChangedCallback(name, oldValue, newValue) {
     if (name !== "checkout-message" || !newValue || oldValue === newValue) return;
@@ -843,6 +846,17 @@ class PelegoCheckoutPronto extends HTMLElement {
   }
   sendToCheckout(data) {
     if (!data || typeof data !== "object") return;
+
+    /*
+      Não joga INIT dentro do about:blank. Antes isso podia perder a primeira
+      mensagem quando a página era rápida demais. Guardamos o último payload
+      até o HTML interno avisar READY.
+    */
+    if (!this._frameReady) {
+      this._pending = data;
+      return;
+    }
+
     if (this._frame?.contentWindow) {
       try { this._frame.contentWindow.postMessage(data, "*"); return; }
       catch (_) {}
@@ -884,6 +898,10 @@ class PelegoCheckoutPronto extends HTMLElement {
     if (!this._frame?.contentWindow || event.source !== this._frame.contentWindow) return;
     const data = this._normalize(event.data);
     const type = String(data.type || data.tipo || data.action || "").trim().toUpperCase();
+    if (type === "READY") {
+      this._frameReady = true;
+      this._flush();
+    }
     if (type === "CHECKOUT_LAYOUT") { this._height(data.height); return; }
     this.dispatchEvent(new CustomEvent("checkout-message", { detail: data, bubbles: true, composed: true }));
   }

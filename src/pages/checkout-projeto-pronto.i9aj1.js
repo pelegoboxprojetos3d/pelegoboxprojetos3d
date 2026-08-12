@@ -555,13 +555,51 @@ $w.onReady(function(){
     if(type==="CHECK_PIX"){if(!polling){polling=true;pollPix(1).catch(console.error)}return;}
     if(["CLOSE","BACK","CANCEL","ACCESS_ACK"].includes(type)){back();return;}
   });
-  Promise.allSettled([
-    completarContextoPelaColecao(),
-    hydrateReturningCustomer()
-  ])
-    .finally(() => {
-      contextReady=true;
-      checkoutUiReady=true;
-      sendInit(true);
+  /*
+    FAST BOOT:
+    o checkout visual não espera consultas de coleção/cliente.
+    O contexto da URL + storage é enviado imediatamente e as consultas
+    complementares continuam em paralelo, sem bloquear a renderização.
+  */
+  contextReady=true;
+  sendInit(true);
+
+  completarContextoPelaColecao()
+    .then(() => {
+      /* Se o iframe ainda não ficou pronto, atualiza o INIT pendente. */
+      if (!checkoutUiReady) sendInit(true);
+    })
+    .catch(error => {
+      console.warn("Complemento do projeto em segundo plano falhou:", error?.message || error);
+    });
+
+  hydrateReturningCustomer()
+    .then(() => {
+      /*
+        Cliente recorrente: se a confirmação do backend terminar antes do
+        iframe, substituímos o INIT pendente. Se terminar depois, avançamos
+        diretamente para pagamento sem reconstruir o checkout.
+      */
+      if (!checkoutUiReady) {
+        sendInit(true);
+        return;
+      }
+
+      if (ctx.skipIdentity === true) {
+        post({
+          type:"CUSTOMER_READY",
+          ok:true,
+          exists:true,
+          clienteId:safe(customer?._id || customer?.clienteId || ctx.clienteId),
+          nome:ctx.nome,
+          email:ctx.email,
+          cpfCnpj:ctx.cpfCnpj,
+          whatsapp:ctx.whatsapp,
+          whatsappE164:ctx.whatsappE164
+        });
+      }
+    })
+    .catch(error => {
+      console.warn("Identificação em segundo plano falhou:", error?.message || error);
     });
 });

@@ -1653,6 +1653,41 @@ function agendarPopupWhatsapp(
     );
 }
 
+function agendarRetornoLoginSocial(
+  milliseconds = POPUP_REOPEN_DELAY
+) {
+  cancelarPopupAgendado();
+
+  if (identificado) {
+    return;
+  }
+
+  popupAgendado = setTimeout(
+    () => {
+      popupAgendado = null;
+
+      if (identificado || popupAberto) {
+        return;
+      }
+
+      /*
+        O cancelamento pode ocorrer antes de a consulta do projeto terminar.
+        Os 3 segundos contam a partir do fechamento. Se o projeto ainda não
+        estiver pronto, tentamos novamente em 250 ms, sem mandar o visitante
+        para outra página.
+      */
+      if (!projeto) {
+        agendarRetornoLoginSocial(250);
+        return;
+      }
+
+      abrirPopupWhatsapp()
+        .catch(console.error);
+    },
+    milliseconds
+  );
+}
+
 function perfilMembroFrontend(membro = {}) {
   const emails =
     Array.isArray(membro?.contactDetails?.emails)
@@ -2226,6 +2261,9 @@ async function abrirPopupWhatsapp() {
   popupAberto =
     true;
 
+  let reabrirAposCancelamento =
+    false;
+
   try {
     const membro =
       await currentMember.getMember();
@@ -2246,10 +2284,20 @@ async function abrirPopupWhatsapp() {
       error?.message || error
     );
 
+    reabrirAposCancelamento =
+      true;
+
     bloquearSemIdentificacao();
   } finally {
     popupAberto =
       false;
+
+    if (
+      reabrirAposCancelamento &&
+      !identificado
+    ) {
+      agendarRetornoLoginSocial();
+    }
   }
 }
 
@@ -2623,11 +2671,11 @@ function solicitarLoginSocial() {
     .catch(
       () => {
         /*
-          Fechar o login social no X ou clicar fora NÃO tira o visitante
-          da página do projeto. Carregamos a página normalmente, mantendo
-          valores e compras bloqueados até ele tentar fazer login novamente.
+          Fechar no X ou clicar fora mantém o visitante nesta página e
+          reabre o login automaticamente após 3 segundos.
         */
         iniciarPaginaComTratamento();
+        agendarRetornoLoginSocial();
       }
     );
 }

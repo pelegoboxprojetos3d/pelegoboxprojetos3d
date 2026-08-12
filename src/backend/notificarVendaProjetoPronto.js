@@ -30,10 +30,44 @@ async function optionalSecret(name) {
 async function postJson(url, payload) {
   const response = await fetch(url, {
     method: "post",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/plain, */*"
+    },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) throw new Error(`Webhook respondeu HTTP ${response.status}.`);
+
+  let responseText = "";
+  try { responseText = safe(await response.text()).slice(0, 800); } catch (_) {}
+
+  if (!response.ok) {
+    const error = new Error("Webhook respondeu HTTP " + response.status + (responseText ? ": " + responseText : "") + ".");
+    error.statusCode = Number(response.status || 0);
+    error.responseText = responseText;
+    throw error;
+  }
+
+  return { statusCode: Number(response.status || 0), responseText };
+}
+
+async function postJsonRetry(url, payload) {
+  const delays = [0, 700, 1600];
+  let lastError = null;
+
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    if (delays[attempt]) await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+    try {
+      const result = await postJson(url, payload);
+      return { ...result, attempt: attempt + 1 };
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.statusCode || 0);
+      const transient = !status || status === 408 || status === 425 || status === 429 || status >= 500;
+      if (!transient) break;
+    }
+  }
+
+  throw lastError || new Error("Falha ao enviar webhook.");
 }
 
 async function findSession(checkoutId) {
@@ -59,6 +93,8 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     nome: safe(session.nomeCliente || session.nome),
     email: safe(session.email).toLowerCase(),
     whatsapp: phone(session.whatsapp || session.whatsappE164 || session.whatsApp),
+    telefone: phone(session.whatsapp || session.whatsappE164 || session.whatsApp),
+    phone: phone(session.whatsapp || session.whatsappE164 || session.whatsApp),
     cpfCnpj: digits(session.cpfCnpj),
     produto: safe(session.produto),
     tipoProduto: type(session.tipoProduto),
@@ -101,17 +137,32 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
 
   if (session.chatbotVendaEnviado !== true) {
     const url = await optionalSecret(CHATBOT_SECRET);
+    patch.chatbotVendaUltimaTentativaEm = new Date();
+    changed = true;
+
     if (url) {
       try {
-        await postJson(url, payload);
+        const envio = await postJsonRetry(url, payload);
         patch.chatbotVendaEnviado = true;
-        changed = true;
+        patch.chatbotVendaStatusCode = Number(envio?.statusCode || 0);
+        patch.chatbotVendaResposta = safe(envio?.responseText);
+        patch.chatbotVendaErro = "";
+        patch.chatbotVendaTentativa = Number(envio?.attempt || 1);
         result.chatbot = "sent";
+        result.chatbotStatusCode = Number(envio?.statusCode || 0);
       } catch (error) {
+        patch.chatbotVendaEnviado = false;
+        patch.chatbotVendaStatusCode = Number(error?.statusCode || 0);
+        patch.chatbotVendaResposta = safe(error?.responseText);
+        patch.chatbotVendaErro = safe(error?.message || error).slice(0, 800);
         result.chatbot = "error";
+        result.chatbotStatusCode = Number(error?.statusCode || 0);
+        result.chatbotError = patch.chatbotVendaErro;
         console.error("Falha ao disparar chatbot da venda:", error?.message || error);
       }
     } else {
+      patch.chatbotVendaEnviado = false;
+      patch.chatbotVendaErro = "secret_missing";
       result.chatbot = "secret_missing";
     }
   }

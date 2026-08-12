@@ -2727,3 +2727,25 @@ export async function post_processarCompraProjetoPronto(
     });
   }
 }
+
+
+// TEMPORÁRIO: diagnóstico do webhook da venda Pix já paga em 12/08/2026 00:18.
+export async function get_diagnosticoRespondeChatPP(request) {
+  const checkoutId = safe(request?.query?.checkoutId);
+  const checkoutTeste = "ckpro_mspipf5y_b81ebde8";
+
+  if (checkoutId !== checkoutTeste) {
+    return forbidden({ body: { ok: false, error: "forbidden" } });
+  }
+
+  try {
+    const result = await notificarVendaProjetoProntoAprovada({
+      checkoutId,
+      chargeId: "cha_1786504677536_km2wxmld3",
+      paymentMethod: "PIX"
+    });
+    return ok({ body: result });
+  } catch (error) {
+    return ok({ body: { ok: false, error: safe(error?.message || error) } });
+  }
+}

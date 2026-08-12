@@ -2,6 +2,7 @@ import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
 import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
+import { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";
 
 const AUTH_URL = "https://oauth2.validapay.com.br/auth/token";
 const API_BASE = "https://api.validapay.com.br";
@@ -182,6 +183,9 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
         prices = detalhe?.prices || detalhe?.data?.prices || [];
       }
 
+      const descricaoProduto = normalizarTituloProduto(detalhe?.description).toLowerCase();
+      if (descricaoProduto && descricaoProduto === nomeEsperado) continue;
+
       const preco = (Array.isArray(prices) ? prices : []).find(price =>
         safe(price?.priceId || price?.id) &&
         ["ÚNICO", "UNICO"].includes(safe(price?.title).toUpperCase()) &&
@@ -238,7 +242,6 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
 
   const response = await requestValidaPay("/v1/products", "post", {
     name: produto,
-    description: produto,
     type: "ONE_TIME",
     statementDescriptor: "PELEGO BOX",
     isActive: true,
@@ -568,7 +571,11 @@ export async function consultarCobrancaPix(input = {}) {
         updatedAtDate: new Date()
       }, current);
       try {
-        await notifyApproved(checkoutId, chargeId, response.data || {});
+        await notificarVendaProjetoProntoAprovada({
+          checkoutId,
+          chargeId,
+          paymentMethod: "PIX"
+        });
       } catch (error) {
         console.error("Falha ao notificar venda aprovada:", error?.message || error);
       }

@@ -287,6 +287,9 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
         prices = detalhe?.prices || detalhe?.data?.prices || [];
       }
 
+      const descricaoProduto = normalizarTituloProduto(detalhe?.description).toLowerCase();
+      if (descricaoProduto && descricaoProduto === nomeEsperado) continue;
+
       const preco = (Array.isArray(prices) ? prices : []).find(price =>
         safe(price?.priceId || price?.id) &&
         ["ÚNICO", "UNICO"].includes(safe(price?.title).toUpperCase()) &&
@@ -336,7 +339,6 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
 
   const response = await api("post", "/v1/products", {
     name: produto,
-    description: produto,
     type: "ONE_TIME",
     statementDescriptor: "PELEGO BOX",
     isActive: true,

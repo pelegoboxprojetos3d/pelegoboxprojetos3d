@@ -27,64 +27,140 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          files = [
-              Path('src/backend/validaPayCartaoProjetosProntos.jsw'),
-              Path('src/backend/validaPayPixProjetosProntosCore.jsw'),
-          ]
+          def js_helper(api_name, pix=False):
+              text = r'''
+async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
+  const nomeEsperado = normalizarTituloProduto(produto).toLowerCase();
+  if (!nomeEsperado || !(Number(valor) > 0)) return "";
 
-          def helper(api_name):
-              return f'''\nasync function buscarPriceIdExistenteValidaPay({{ produto, valor }}) {{\n  const nomeEsperado = normalizarTituloProduto(produto).toLowerCase();\n  if (!nomeEsperado || !(Number(valor) > 0)) return \"\";\n\n  try {{\n    const lista = await {api_name}(\"get\", `/v1/products?limit=50&status=active&search=${{encodeURIComponent(produto)}}`);\n    if (!lista.ok) return \"\";\n\n    const items = lista.data?.items || lista.data?.data?.items || [];\n    for (const item of items) {{\n      if (normalizarTituloProduto(item?.name).toLowerCase() !== nomeEsperado) continue;\n\n      let detalhe = item;\n      let prices = item?.prices || [];\n      const productId = safe(item?.productId || item?.id);\n\n      if ((!Array.isArray(prices) || !prices.length) && productId) {{\n        const respostaDetalhe = await {api_name}(\"get\", `/v1/products/${{encodeURIComponent(productId)}}`);\n        if (respostaDetalhe.ok) detalhe = respostaDetalhe.data?.data || respostaDetalhe.data || detalhe;\n        prices = detalhe?.prices || detalhe?.data?.prices || [];\n      }}\n\n      const preco = (Array.isArray(prices) ? prices : []).find(price =>\n        safe(price?.priceId || price?.id) &&\n        Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&\n        (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === \"ONE_TIME\")\n      );\n\n      if (preco) return safe(preco?.priceId || preco?.id);\n    }}\n  }} catch (error) {{\n    console.warn(\"Não foi possível localizar produto existente na ValidaPay:\", error?.message || error);\n  }}\n\n  return \"\";\n}}\n'''
+  try {
+    const lista = await __LIST_CALL__;
+    if (!lista.ok) return "";
 
-          # CARD
-          p = files[0]
+    const items = lista.data?.items || lista.data?.data?.items || [];
+    for (const item of items) {
+      if (normalizarTituloProduto(item?.name).toLowerCase() !== nomeEsperado) continue;
+
+      let detalhe = item;
+      let prices = item?.prices || [];
+      const productId = safe(item?.productId || item?.id);
+
+      if ((!Array.isArray(prices) || !prices.length) && productId) {
+        const respostaDetalhe = await __DETAIL_CALL__;
+        if (respostaDetalhe.ok) detalhe = respostaDetalhe.data?.data || respostaDetalhe.data || detalhe;
+        prices = detalhe?.prices || detalhe?.data?.prices || [];
+      }
+
+      const preco = (Array.isArray(prices) ? prices : []).find(price =>
+        safe(price?.priceId || price?.id) &&
+        Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&
+        (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === "ONE_TIME")
+      );
+
+      if (preco) return safe(preco?.priceId || preco?.id);
+    }
+  } catch (error) {
+    console.warn("Não foi possível localizar produto existente na ValidaPay:", error?.message || error);
+  }
+
+  return "";
+}
+'''
+              search_path = '`/v1/products?limit=50&status=active&search=__DOLLAR__{encodeURIComponent(produto)}`'
+              detail_path = '`/v1/products/__DOLLAR__{encodeURIComponent(productId)}`'
+              if pix:
+                  list_call = f'requestValidaPay({search_path}, "get")'
+                  detail_call = f'requestValidaPay({detail_path}, "get")'
+              else:
+                  list_call = f'api("get", {search_path})'
+                  detail_call = f'api("get", {detail_path})'
+              return text.replace('__LIST_CALL__', list_call).replace('__DETAIL_CALL__', detail_call).replace('__DOLLAR__', '$')
+
+          # CARTÃO
+          p = Path('src/backend/validaPayCartaoProjetosProntos.jsw')
           s = p.read_text(encoding='utf-8')
           old_scope = 'scope=${encodeURIComponent("checkouts/write products/write checkouts/read pix.cob/read")}'
           new_scope = 'scope=${encodeURIComponent("checkouts/write products/write products/read checkouts/read pix.cob/read")}'
-          if old_scope not in s:
+          if old_scope in s:
+              s = s.replace(old_scope, new_scope, 1)
+          elif 'products/read' not in s:
               raise SystemExit('Escopo esperado do cartão não encontrado')
-          s = s.replace(old_scope, new_scope, 1)
 
           marker = 'async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {'
           if 'async function buscarPriceIdExistenteValidaPay' not in s:
               if marker not in s:
                   raise SystemExit('Ponto de helper do cartão não encontrado')
-              s = s.replace(marker, helper('api') + '\n' + marker, 1)
+              s = s.replace(marker, js_helper('api', pix=False) + '\n' + marker, 1)
 
-          old = '''  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });\n  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const response = await api("post", "/v1/products", {'''
-          new = '''  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });\n  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });\n  if (providerReused) {\n    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });\n    return providerReused;\n  }\n\n  const response = await api("post", "/v1/products", {'''
-          if old not in s:
-              raise SystemExit('ensurePriceId do cartão não encontrado')
-          s = s.replace(old, new, 1)
+          old = '''  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
+  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const response = await api("post", "/v1/products", {'''
+          new = '''  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
+  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });
+  if (providerReused) {
+    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });
+    return providerReused;
+  }
+
+  const response = await api("post", "/v1/products", {'''
+          if 'const providerReused = await buscarPriceIdExistenteValidaPay' not in s:
+              if old not in s:
+                  raise SystemExit('ensurePriceId do cartão não encontrado')
+              s = s.replace(old, new, 1)
           p.write_text(s.rstrip() + '\n', encoding='utf-8')
 
           # PIX
-          p = files[1]
+          p = Path('src/backend/validaPayPixProjetosProntosCore.jsw')
           s = p.read_text(encoding='utf-8')
           old_request = 'const scope = method.toLowerCase() === "post" ? "checkouts/write products/write checkouts/read" : "pix.cob/read";'
-          new_request = '''const lowerMethod = method.toLowerCase();\n  const scope = lowerMethod === "post"\n    ? "checkouts/write products/write products/read checkouts/read"\n    : path.startsWith("/v1/products")\n      ? "products/read"\n      : "pix.cob/read";'''
-          if old_request not in s:
+          new_request = '''const lowerMethod = method.toLowerCase();
+  const scope = lowerMethod === "post"
+    ? "checkouts/write products/write products/read checkouts/read"
+    : path.startsWith("/v1/products")
+      ? "products/read"
+      : "pix.cob/read";'''
+          if old_request in s:
+              s = s.replace(old_request, new_request, 1)
+          elif 'path.startsWith("/v1/products")' not in s:
               raise SystemExit('Seleção de escopo do Pix não encontrada')
-          s = s.replace(old_request, new_request, 1)
 
-          # adapter because requestValidaPay params are path, method, body
-          pix_helper = helper('requestValidaPay').replace(
-              'await requestValidaPay("get", `/v1/products?limit=50&status=active&search=${encodeURIComponent(produto)}`)',
-              'await requestValidaPay(`/v1/products?limit=50&status=active&search=${encodeURIComponent(produto)}`, "get")'
-          ).replace(
-              'await requestValidaPay("get", `/v1/products/${encodeURIComponent(productId)}`)',
-              'await requestValidaPay(`/v1/products/${encodeURIComponent(productId)}`, "get")'
-          )
           marker = 'async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {'
           if 'async function buscarPriceIdExistenteValidaPay' not in s:
               if marker not in s:
                   raise SystemExit('Ponto de helper do Pix não encontrado')
-              s = s.replace(marker, pix_helper + '\n' + marker, 1)
+              s = s.replace(marker, js_helper('requestValidaPay', pix=True) + '\n' + marker, 1)
 
-          old = '''  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const response = await requestValidaPay("/v1/products", "post", {'''
-          new = '''  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });\n  if (providerReused) {\n    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });\n    return providerReused;\n  }\n\n  const response = await requestValidaPay("/v1/products", "post", {'''
-          if old not in s:
-              raise SystemExit('ensurePriceId do Pix não encontrado')
-          s = s.replace(old, new, 1)
+          old = '''  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const response = await requestValidaPay("/v1/products", "post", {'''
+          new = '''  if (reused) {
+    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
+    return reused;
+  }
+
+  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });
+  if (providerReused) {
+    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });
+    return providerReused;
+  }
+
+  const response = await requestValidaPay("/v1/products", "post", {'''
+          if 'const providerReused = await buscarPriceIdExistenteValidaPay' not in s:
+              if old not in s:
+                  raise SystemExit('ensurePriceId do Pix não encontrado')
+              s = s.replace(old, new, 1)
           p.write_text(s.rstrip() + '\n', encoding='utf-8')
           PY
 

@@ -54,6 +54,9 @@ jobs:
       - name: Corrigir entrega, Make e notificações
         run: node scripts/corrigir-entrega-emails-impressora.cjs
 
+      - name: Aplicar 5s da impressora ao abrir pelo e-mail
+        run: node scripts/ajustar-impressora-email-5s.cjs
+
       - name: Validar código
         run: npm run lint
 

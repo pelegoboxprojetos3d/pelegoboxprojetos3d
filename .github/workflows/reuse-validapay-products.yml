@@ -1,0 +1,105 @@
+name: Reutilizar produtos existentes na ValidaPay
+
+on:
+  push:
+    paths:
+      - ".github/workflows/reuse-validapay-products.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Reutilizar produto e preço já cadastrados
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('src/backend/validaPayCartaoProjetosProntos.jsw'),
+              Path('src/backend/validaPayPixProjetosProntosCore.jsw'),
+          ]
+
+          def helper(api_name):
+              return f'''\nasync function buscarPriceIdExistenteValidaPay({{ produto, valor }}) {{\n  const nomeEsperado = normalizarTituloProduto(produto).toLowerCase();\n  if (!nomeEsperado || !(Number(valor) > 0)) return \"\";\n\n  try {{\n    const lista = await {api_name}(\"get\", `/v1/products?limit=50&status=active&search=${{encodeURIComponent(produto)}}`);\n    if (!lista.ok) return \"\";\n\n    const items = lista.data?.items || lista.data?.data?.items || [];\n    for (const item of items) {{\n      if (normalizarTituloProduto(item?.name).toLowerCase() !== nomeEsperado) continue;\n\n      let detalhe = item;\n      let prices = item?.prices || [];\n      const productId = safe(item?.productId || item?.id);\n\n      if ((!Array.isArray(prices) || !prices.length) && productId) {{\n        const respostaDetalhe = await {api_name}(\"get\", `/v1/products/${{encodeURIComponent(productId)}}`);\n        if (respostaDetalhe.ok) detalhe = respostaDetalhe.data?.data || respostaDetalhe.data || detalhe;\n        prices = detalhe?.prices || detalhe?.data?.prices || [];\n      }}\n\n      const preco = (Array.isArray(prices) ? prices : []).find(price =>\n        safe(price?.priceId || price?.id) &&\n        Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&\n        (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === \"ONE_TIME\")\n      );\n\n      if (preco) return safe(preco?.priceId || preco?.id);\n    }}\n  }} catch (error) {{\n    console.warn(\"Não foi possível localizar produto existente na ValidaPay:\", error?.message || error);\n  }}\n\n  return \"\";\n}}\n'''
+
+          # CARD
+          p = files[0]
+          s = p.read_text(encoding='utf-8')
+          old_scope = 'scope=${encodeURIComponent("checkouts/write products/write checkouts/read pix.cob/read")}'
+          new_scope = 'scope=${encodeURIComponent("checkouts/write products/write products/read checkouts/read pix.cob/read")}'
+          if old_scope not in s:
+              raise SystemExit('Escopo esperado do cartão não encontrado')
+          s = s.replace(old_scope, new_scope, 1)
+
+          marker = 'async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {'
+          if 'async function buscarPriceIdExistenteValidaPay' not in s:
+              if marker not in s:
+                  raise SystemExit('Ponto de helper do cartão não encontrado')
+              s = s.replace(marker, helper('api') + '\n' + marker, 1)
+
+          old = '''  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });\n  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const response = await api("post", "/v1/products", {'''
+          new = '''  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });\n  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });\n  if (providerReused) {\n    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });\n    return providerReused;\n  }\n\n  const response = await api("post", "/v1/products", {'''
+          if old not in s:
+              raise SystemExit('ensurePriceId do cartão não encontrado')
+          s = s.replace(old, new, 1)
+          p.write_text(s.rstrip() + '\n', encoding='utf-8')
+
+          # PIX
+          p = files[1]
+          s = p.read_text(encoding='utf-8')
+          old_request = 'const scope = method.toLowerCase() === "post" ? "checkouts/write products/write checkouts/read" : "pix.cob/read";'
+          new_request = '''const lowerMethod = method.toLowerCase();\n  const scope = lowerMethod === "post"\n    ? "checkouts/write products/write products/read checkouts/read"\n    : path.startsWith("/v1/products")\n      ? "products/read"\n      : "pix.cob/read";'''
+          if old_request not in s:
+              raise SystemExit('Seleção de escopo do Pix não encontrada')
+          s = s.replace(old_request, new_request, 1)
+
+          # adapter because requestValidaPay params are path, method, body
+          pix_helper = helper('requestValidaPay').replace(
+              'await requestValidaPay("get", `/v1/products?limit=50&status=active&search=${encodeURIComponent(produto)}`)',
+              'await requestValidaPay(`/v1/products?limit=50&status=active&search=${encodeURIComponent(produto)}`, "get")'
+          ).replace(
+              'await requestValidaPay("get", `/v1/products/${encodeURIComponent(productId)}`)',
+              'await requestValidaPay(`/v1/products/${encodeURIComponent(productId)}`, "get")'
+          )
+          marker = 'async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {'
+          if 'async function buscarPriceIdExistenteValidaPay' not in s:
+              if marker not in s:
+                  raise SystemExit('Ponto de helper do Pix não encontrado')
+              s = s.replace(marker, pix_helper + '\n' + marker, 1)
+
+          old = '''  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const response = await requestValidaPay("/v1/products", "post", {'''
+          new = '''  if (reused) {\n    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });\n    return reused;\n  }\n\n  const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });\n  if (providerReused) {\n    await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });\n    return providerReused;\n  }\n\n  const response = await requestValidaPay("/v1/products", "post", {'''
+          if old not in s:
+              raise SystemExit('ensurePriceId do Pix não encontrado')
+          s = s.replace(old, new, 1)
+          p.write_text(s.rstrip() + '\n', encoding='utf-8')
+          PY
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção
+        shell: bash
+        run: |
+          rm -f .github/workflows/reuse-validapay-products.yml
+          git config user.name 'Pelego Checkout Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Reutiliza produtos existentes na ValidaPay'
+          git push origin HEAD:main

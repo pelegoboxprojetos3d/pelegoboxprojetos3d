@@ -6,7 +6,7 @@ const SESSIONS = "SessoesProjetosProntos2";
 const DB = { suppressAuth: true };
 const SITE_BASE = "https://www.pelegobox.com.br";
 const MAKE_SALE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
-const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";
+const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBH";
 
 const safe = value => String(value ?? "").trim();
 const digits = value => safe(value).replace(/\D/g, "");

@@ -9,7 +9,7 @@ const SESSIONS = "SessoesProjetosProntos2";
 const DB = { suppressAuth: true };
 const SITE_BASE = "https://www.pelegobox.com.br";
 const MAKE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
-const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBHOOK";
+const CHATBOT_SECRET = "RESPONDECHAT_VENDA_PROJETOS_PRONTOS_WEBH";
 
 let writeToken = "";
 let writeExpiresAt = 0;
@@ -176,7 +176,7 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
       let prices = item?.prices || [];
       const productId = safe(item?.productId || item?.id);
 
-      if ((!Array.isArray(prices) || !prices.length) && productId) {
+      if (productId) {
         const respostaDetalhe = await requestValidaPay(`/v1/products/${encodeURIComponent(productId)}`, "get");
         if (respostaDetalhe.ok) detalhe = respostaDetalhe.data?.data || respostaDetalhe.data || detalhe;
         prices = detalhe?.prices || detalhe?.data?.prices || [];
@@ -184,6 +184,7 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
 
       const preco = (Array.isArray(prices) ? prices : []).find(price =>
         safe(price?.priceId || price?.id) &&
+        ["ÚNICO", "UNICO"].includes(safe(price?.title).toUpperCase()) &&
         Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&
         (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === "ONE_TIME")
       );
@@ -229,14 +230,6 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
   ) {
     return safe(current.validaPayPriceId);
   }
-
-  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
-
-  if (reused) {
-    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
-    return reused;
-  }
-
   const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });
   if (providerReused) {
     await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });
@@ -256,7 +249,7 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
       codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)
     },
     prices: [{
-      title: produto,
+      title: "Único",
       amount: valor,
       currency: "BRL",
       recurrenceType: "ONE_TIME",

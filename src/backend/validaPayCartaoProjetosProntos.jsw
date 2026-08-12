@@ -210,22 +210,39 @@ async function reenviarNotificacaoValidaPay(chargeId) {
   const id = safe(chargeId);
   if (!id) return { sent: false, error: "charge_id_missing" };
 
-  try {
-    const response = await api("post", "/v1/users/notifications/resend", { chargeId: id });
-    if (!response.ok) {
+  // O painel da ValidaPay consegue reenviar depois que a cobrança já está materializada.
+  // Na aprovação transparente a consulta pode chegar cedo demais, então aguardamos e repetimos
+  // somente em caso de falha. Uma resposta 2xx encerra imediatamente e não consome reenvios extras.
+  const waits = [900, 1400, 2100];
+  let last = { sent: false, error: "notification_resend_failed" };
+
+  for (let attempt = 0; attempt < waits.length; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, waits[attempt]));
+    try {
+      const response = await api("post", "/v1/users/notifications/resend", { chargeId: id });
+      if (response.ok) {
+        return {
+          sent: true,
+          statusCode: response.statusCode,
+          event: safe(response.data?.event),
+          success: response.data?.success === true,
+          attempt: attempt + 1
+        };
+      }
+      last = {
+        sent: false,
+        statusCode: response.statusCode,
+        error: response.error || "notification_resend_failed",
+        attempt: attempt + 1
+      };
       console.warn("ValidaPay não enviou a notificação da fatura:", response.statusCode, response.error);
-      return { sent: false, statusCode: response.statusCode, error: response.error || "notification_resend_failed" };
+    } catch (error) {
+      last = { sent: false, error: error?.message || "notification_resend_error", attempt: attempt + 1 };
+      console.warn("Falha ao chamar reenvio de notificação ValidaPay:", error?.message || error);
     }
-    return {
-      sent: true,
-      statusCode: response.statusCode,
-      event: safe(response.data?.event),
-      success: response.data?.success === true
-    };
-  } catch (error) {
-    console.warn("Falha ao chamar reenvio de notificação ValidaPay:", error?.message || error);
-    return { sent: false, error: error?.message || "notification_resend_error" };
   }
+
+  return last;
 }
 
 async function findSession(checkoutId) {
@@ -264,7 +281,7 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
       let prices = item?.prices || [];
       const productId = safe(item?.productId || item?.id);
 
-      if ((!Array.isArray(prices) || !prices.length) && productId) {
+      if (productId) {
         const respostaDetalhe = await api("get", `/v1/products/${encodeURIComponent(productId)}`);
         if (respostaDetalhe.ok) detalhe = respostaDetalhe.data?.data || respostaDetalhe.data || detalhe;
         prices = detalhe?.prices || detalhe?.data?.prices || [];
@@ -272,6 +289,7 @@ async function buscarPriceIdExistenteValidaPay({ produto, valor }) {
 
       const preco = (Array.isArray(prices) ? prices : []).find(price =>
         safe(price?.priceId || price?.id) &&
+        ["ÚNICO", "UNICO"].includes(safe(price?.title).toUpperCase()) &&
         Math.abs(Number(price?.amount || 0) - Number(valor || 0)) <= 0.01 &&
         (!safe(price?.recurrenceType) || safe(price?.recurrenceType).toUpperCase() === "ONE_TIME")
       );
@@ -310,13 +328,6 @@ async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
 async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, valor }) {
   const current = await findSession(checkoutId);
   if (safe(current?.validaPayPriceId) && normalizarTituloProduto(current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()) return safe(current.validaPayPriceId);
-
-  const reused = await reusablePriceId({ codigoProjeto, tipoProduto, produto, valor });
-  if (reused) {
-    await saveSession(checkoutId, { validaPayPriceId: reused, updatedAtDate: new Date() });
-    return reused;
-  }
-
   const providerReused = await buscarPriceIdExistenteValidaPay({ produto, valor });
   if (providerReused) {
     await saveSession(checkoutId, { validaPayPriceId: providerReused, updatedAtDate: new Date() });
@@ -336,7 +347,7 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
       codigoQuestionario: extrairCodigoQuestionarioTitulo(produto)
     },
     prices: [{
-      title: produto,
+      title: "Único",
       amount: valor,
       currency: "BRL",
       recurrenceType: "ONE_TIME",
@@ -449,6 +460,13 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
   // O painel oficial da ValidaPay usa esta rota para enviar/re-enviar a fatura por e-mail.
   // Chamamos somente na primeira finalizacao da compra; o branch de compra ja registrada nao repete.
   const faturaValidaPay=await reenviarNotificacaoValidaPay(chargeId);
+  await saveSession(checkoutId,{
+    faturaValidaPayEnviada:faturaValidaPay?.sent===true,
+    faturaValidaPayStatusCode:Number(faturaValidaPay?.statusCode||0),
+    faturaValidaPayErro:safe(faturaValidaPay?.error),
+    faturaValidaPayTentativa:Number(faturaValidaPay?.attempt||0),
+    updatedAtDate:new Date()
+  });
   return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao,faturaValidaPay};
 }
 

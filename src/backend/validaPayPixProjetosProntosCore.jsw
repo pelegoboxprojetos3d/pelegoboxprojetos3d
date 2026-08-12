@@ -382,12 +382,18 @@ async function notifyApproved(checkoutId, chargeId, charge) {
     deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(checkoutId)}`
   };
 
+  const emailPayload = {
+    ...payload,
+    botaoUrl: payload.botaoUrl + "&via=email",
+    deliveryUrl: payload.deliveryUrl + "&via=email"
+  };
+
   const patch = { updatedAtDate: new Date() };
 
   if (!session.emailEnviadoEm) {
     const makeUrl = await optionalSecret(MAKE_SECRET);
     if (makeUrl) {
-      try { await postJson(makeUrl, payload); patch.emailEnviadoEm = new Date(); }
+      try { await postJson(makeUrl, emailPayload); patch.emailEnviadoEm = new Date(); }
       catch (error) { console.error("Falha no webhook do Make:", error?.message || error); }
     }
   }

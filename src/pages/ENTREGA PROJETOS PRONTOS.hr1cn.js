@@ -130,6 +130,10 @@ const INTERVALO =
 const MIN_PROCESSAMENTO_VISIVEL =
   500;
 
+const EMAIL_PROCESSAMENTO_MS =
+  5000;
+
+
 
 
 
@@ -150,6 +154,15 @@ let processamentoVisivelDesde =
 
 let processamentoVisualEncerrado =
   false;
+
+/*
+  Só a primeira retirada da impressora usa os 5 s quando a URL veio do e-mail.
+  Depois disso a flag é desligada, evitando contaminar os cliques da página.
+*/
+let processamentoEmailPendente =
+  String(wixLocation?.query?.via ?? "")
+    .trim()
+    .toLowerCase() === "email";
 
 let entrega =
   null;
@@ -409,8 +422,13 @@ async function esconderProcessamento() {
       const tempoVisivel =
         Date.now() - processamentoVisivelDesde;
 
+      const minimoVisivel =
+        processamentoEmailPendente
+          ? EMAIL_PROCESSAMENTO_MS
+          : MIN_PROCESSAMENTO_VISIVEL;
+
       const restante =
-        MIN_PROCESSAMENTO_VISIVEL - tempoVisivel;
+        minimoVisivel - tempoVisivel;
 
       if (restante > 0) {
         await esperar(restante);
@@ -420,6 +438,7 @@ async function esconderProcessamento() {
     await $w(IDS.processando).hide();
     await $w(IDS.processando).collapse();
     processamentoVisivelDesde = 0;
+    processamentoEmailPendente = false;
   } catch (erro) {
     console.warn(
       "Falha ao esconder o HTML de processamento:",

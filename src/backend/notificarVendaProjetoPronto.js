@@ -113,6 +113,12 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`
   };
 
+  const emailPayload = {
+    ...payload,
+    botaoUrl: payload.botaoUrl + "&via=email",
+    deliveryUrl: payload.deliveryUrl + "&via=email"
+  };
+
   const patch = { ...session, updatedAtDate: new Date() };
   let changed = false;
   const result = { ok: true, email: "skipped", chatbot: "skipped" };
@@ -121,7 +127,7 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     const url = await optionalSecret(MAKE_SALE_SECRET);
     if (url) {
       try {
-        await postJson(url, payload);
+        await postJson(url, emailPayload);
         patch.emailEnviadoEm = new Date();
         patch.emailEnviado = true;
         changed = true;

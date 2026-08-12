@@ -66,6 +66,9 @@ jobs:
       - name: Aplicar correção estável do checkout
         run: node scripts/corrigir-fluxo-checkout-estavel-2026-08-12.cjs
 
+      - name: Limpar duplicatas do checkout estável
+        run: node scripts/limpar-duplicatas-checkout-estavel-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 

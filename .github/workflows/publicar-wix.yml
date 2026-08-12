@@ -60,8 +60,8 @@ jobs:
       - name: Preparar próximo teste real
         run: node scripts/ajustar-pre-teste-real-2026-08-12.cjs
 
-      - name: Corrigir handoff botão para checkout
-        run: node scripts/corrigir-handoff-cliente-checkout.cjs
+      - name: Cliente cadastrado direto ao pagamento
+        run: node scripts/corrigir-fluxo-cliente-direto.cjs
 
       - name: Validar código
         run: npm run lint

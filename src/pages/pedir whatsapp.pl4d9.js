@@ -6,11 +6,11 @@ import {
 
 // POPUP: pedir whatsapp
 // HTML OFICIAL: #htmlWhatsappInicial
-// R7 — DUPLA CONFIRMAÇÃO SEM EXCEÇÃO
+// R8 — CLIENTE EXISTENTE NÃO REPETE WHATSAPP
 // 1) Digita WhatsApp.
-// 2) Consulta cadastro em paralelo.
-// 3) Digita o MESMO WhatsApp novamente.
-// 4) Só então fecha o Pega Zap.
+// 2) Consulta cadastro.
+// 3) Se já existe cliente, fecha imediatamente com o cadastro encontrado.
+// 4) Só cliente novo confirma o mesmo WhatsApp uma segunda vez.
 
 const HTML_WHATSAPP_INICIAL = "#htmlWhatsappInicial";
 const CONFIRMACAO_FLUXO_VERSAO = 4;
@@ -93,6 +93,24 @@ function telefoneNormalizado(data = {}) {
   };
 }
 
+function fecharComoClienteExistente(telefone, cliente) {
+  wixWindowFrontend.lightbox.close({
+    action: "VERIFY",
+    whatsapp: telefone.whatsapp,
+    whatsappE164: telefone.whatsappE164,
+    ddi: telefone.ddi,
+    country: telefone.country,
+    countryName: telefone.countryName,
+    whatsappConfirmado: true,
+    confirmacaoWhatsappVersao: CONFIRMACAO_FLUXO_VERSAO,
+    confirmadoEm: new Date().toISOString(),
+    clienteExiste: true,
+    cliente: cliente && typeof cliente === "object"
+      ? cliente
+      : null
+  });
+}
+
 async function consultarPrimeiraEntrada(data = {}) {
   if (consultando) return;
 
@@ -108,10 +126,22 @@ async function consultarPrimeiraEntrada(data = {}) {
 
   try {
     clienteLocalizado = await buscarCliente(telefone.whatsappE164);
+
+    /*
+      Regra oficial:
+      WhatsApp já cadastrado não é digitado uma segunda vez.
+      O cadastro encontrado segue junto para a página principal, evitando
+      uma nova busca do mesmo cliente antes de abrir o pagamento.
+    */
+    if (clienteLocalizado) {
+      fecharComoClienteExistente(telefone, clienteLocalizado);
+      return;
+    }
+
     enviar({
       type: "LOOKUP_RESULT",
       ok: true,
-      exists: Boolean(clienteLocalizado),
+      exists: false,
       whatsapp: telefone.whatsapp,
       whatsappE164: telefone.whatsappE164,
       ddi: telefone.ddi,
@@ -154,10 +184,8 @@ function confirmarSegundaEntrada(data = {}) {
     whatsappConfirmado: true,
     confirmacaoWhatsappVersao: CONFIRMACAO_FLUXO_VERSAO,
     confirmadoEm: new Date().toISOString(),
-    clienteExiste: Boolean(clienteLocalizado),
-    cliente: clienteLocalizado && typeof clienteLocalizado === "object"
-      ? clienteLocalizado
-      : null
+    clienteExiste: false,
+    cliente: null
   });
 }
 

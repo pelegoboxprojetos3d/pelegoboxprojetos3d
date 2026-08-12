@@ -206,6 +206,28 @@ async function api(method, path, body) {
   return { ok: false, statusCode: 0, data: {}, error: "Falha ao consultar a ValidaPay." };
 }
 
+async function reenviarNotificacaoValidaPay(chargeId) {
+  const id = safe(chargeId);
+  if (!id) return { sent: false, error: "charge_id_missing" };
+
+  try {
+    const response = await api("post", "/v1/users/notifications/resend", { chargeId: id });
+    if (!response.ok) {
+      console.warn("ValidaPay não enviou a notificação da fatura:", response.statusCode, response.error);
+      return { sent: false, statusCode: response.statusCode, error: response.error || "notification_resend_failed" };
+    }
+    return {
+      sent: true,
+      statusCode: response.statusCode,
+      event: safe(response.data?.event),
+      success: response.data?.success === true
+    };
+  } catch (error) {
+    console.warn("Falha ao chamar reenvio de notificação ValidaPay:", error?.message || error);
+    return { sent: false, error: error?.message || "notification_resend_error" };
+  }
+}
+
 async function findSession(checkoutId) {
   const r = await wixData
     .query(SESSIONS)
@@ -380,7 +402,10 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
     chargeId,
     paymentMethod:"CARD"
   });
-  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao};
+  // O painel oficial da ValidaPay usa esta rota para enviar/re-enviar a fatura por e-mail.
+  // Chamamos somente na primeira finalizacao da compra; o branch de compra ja registrada nao repete.
+  const faturaValidaPay=await reenviarNotificacaoValidaPay(chargeId);
+  return {compraRegistrada:true,purchaseId:safe(savedPurchase?._id),tokenEntrega:safe(session.tokenEntrega),make,notificacao,faturaValidaPay};
 }
 
 export async function criarCobrancaCartaoTransparente(input = {}) {

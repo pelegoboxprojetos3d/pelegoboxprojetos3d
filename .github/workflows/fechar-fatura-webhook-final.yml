@@ -21,7 +21,7 @@ jobs:
           node-version: 20
       - run: npm ci --ignore-scripts
       - name: Aplicar hotfix
-        run: node scripts/fechar-fatura-webhook-final.cjs
+        run: node scripts/fechar-fatura-webhook-final-v2.cjs
       - name: Validar
         run: npm run lint
       - name: Gravar correção

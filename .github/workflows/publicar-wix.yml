@@ -60,6 +60,9 @@ jobs:
       - name: Preparar próximo teste real
         run: node scripts/ajustar-pre-teste-real-2026-08-12.cjs
 
+      - name: Preparar handoff para correção estável
+        run: node scripts/preparar-handoff-estavel-2026-08-12.cjs
+
       - name: Aplicar correção estável do checkout
         run: node scripts/corrigir-fluxo-checkout-estavel-2026-08-12.cjs
 
@@ -106,7 +109,7 @@ jobs:
             --request POST \
             "https://www.wixapis.com/site-publisher/v1/site/publish" \
             --header "Authorization: $WIX_API_KEY" \
-            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "wix-site-id: d1022df4-d4fd-4561-8909-a59d876691b3" \
             --header "Content-Type: application/json" \
             --data '{}')"
           echo "Wix Site Publisher HTTP $status"

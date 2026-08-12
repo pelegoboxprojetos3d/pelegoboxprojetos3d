@@ -222,8 +222,8 @@ button{cursor:pointer}
     <div class="content">
       <section id="identityPanel">
         <div class="panelHeader">
-          <h2>Complete seus dados</h2>
-          <p>Confira seu WhatsApp e complete os dados antes de escolher a forma de pagamento.</p>
+          <h2>Confira seus dados</h2>
+          <p>Seu e-mail já vem da conta Google/Facebook. Confira nome, WhatsApp e CPF uma única vez neste navegador.</p>
         </div>
         <div class="formGrid">
           <div class="fieldFull">
@@ -243,15 +243,12 @@ button{cursor:pointer}
             <input id="cpfInput" class="control" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00">
             <p class="hint">Informe o CPF do responsável pela compra.</p>
           </div>
-          <div>
-            <label class="label">Seu melhor e-mail <span class="required">*</span></label>
-            <input id="emailInput" class="control" type="email" autocomplete="email" maxlength="254" placeholder="Ex: nome@email.com">
+          <div class="fieldFull">
+            <label class="label">E-mail da sua conta</label>
+            <input id="emailInput" class="control" type="email" autocomplete="email" maxlength="254" readonly aria-readonly="true">
+            <input id="emailConfirmInput" type="hidden">
+            <p class="hint">Esse e-mail vem do seu login Google/Facebook e não pode ser alterado aqui.</p>
           </div>
-          <div>
-            <label class="label">Confirme seu e-mail <span class="required">*</span></label>
-            <input id="emailConfirmInput" class="control" type="email" autocomplete="off" maxlength="254" placeholder="Digite o mesmo e-mail novamente">
-          </div>
-          <div class="emailNotice fieldFull">Confira com atenção. Esse e-mail será usado para identificar sua compra e enviar o acesso ao produto.</div>
         </div>
         <div id="identityAlert" class="alert"></div>
         <button id="identityButton" class="button buttonPrimary" type="button" disabled>Continuar para pagamento</button>
@@ -559,21 +556,22 @@ function hydrate(ctx){
 
 
 
+
+
 function identityFieldsReady(){
- var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value),b=email(E.email2.value);
- return Boolean(p && n.length>=3 && validCpf(c) && validEmail(a) && validEmail(b) && a===b)
+ var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
+ return Boolean(p && n.length>=3 && validCpf(c) && validEmail(a))
 }
 function syncIdentityButton(){
  if(!E.identityBtn)return;
  E.identityBtn.disabled=S.saving || !identityFieldsReady();
 }
 function validateIdentity(){
- var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value),b=email(E.email2.value);
+ var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
  if(!p){setAlert(E.identityAlert,"error","Informe um WhatsApp válido com DDD.");E.phone.focus();return false}
  if(n.length<3){setAlert(E.identityAlert,"error","Informe seu nome completo.");E.name.focus();return false}
  if(!validCpf(c)){setAlert(E.identityAlert,"error","Informe um CPF válido.");E.cpf.focus();return false}
- if(!validEmail(a)){setAlert(E.identityAlert,"error","Informe um e-mail válido.");E.email.focus();return false}
- if(!validEmail(b)||a!==b){setAlert(E.identityAlert,"error","Os e-mails não coincidem. Confira os dois campos.");E.email2.focus();return false}
+ if(!validEmail(a)){setAlert(E.identityAlert,"error","Não foi possível carregar o e-mail da sua conta Google/Facebook.");return false}
  return true
 }
 
@@ -810,7 +808,7 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML35_PERSISTENT_FAST_RETURN"});
+post({type:"READY",version:"HTML36_SOCIAL_MINIMAL_DATA"});
 })();
 </script>
 </body>

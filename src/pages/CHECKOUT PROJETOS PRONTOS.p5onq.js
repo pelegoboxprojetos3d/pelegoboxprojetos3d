@@ -1653,26 +1653,226 @@ function agendarPopupWhatsapp(
     );
 }
 
-async function identificarMembroSocial() {
-  cancelarPopupAgendado();
-
-  consultaConcluida =
-    false;
-
-  const perfil =
-    await comTimeout(
-      buscarClienteDoMembroAtual(),
-      7000,
-      "A identificação do membro Wix não respondeu."
-    );
+function perfilMembroFrontend(membro = {}) {
+  const emails =
+    Array.isArray(membro?.contactDetails?.emails)
+      ? membro.contactDetails.emails
+      : [];
 
   const memberId =
-    safe(perfil?.memberId);
+    safe(membro?._id);
 
   const memberEmail =
     normalizeEmail(
-      perfil?.email
+      membro?.loginEmail ||
+      emails[0] ||
+      membro?.contactDetails?.email
     );
+
+  const memberName =
+    safe(
+      membro?.profile?.nickname ||
+      [
+        membro?.contactDetails?.firstName,
+        membro?.contactDetails?.lastName
+      ]
+        .filter(Boolean)
+        .join(" ")
+    ).replace(/\s+/g, " ");
+
+  return {
+    memberId,
+    memberEmail,
+    memberName
+  };
+}
+
+async function hidratarClienteMembroSocial(memberEmail) {
+  try {
+    const perfil =
+      await comTimeout(
+        buscarClienteDoMembroAtual(),
+        7000,
+        "A identificação do membro Wix não respondeu."
+      );
+
+    const emailSeguro =
+      normalizeEmail(
+        perfil?.email ||
+        memberEmail
+      );
+
+    if (!emailSeguro) {
+      return;
+    }
+
+    const cliente =
+      perfil?.cliente &&
+      typeof perfil.cliente === "object"
+        ? perfil.cliente
+        : null;
+
+    if (!cliente) {
+      identificacao = {
+        ...identificacao,
+        nome:
+          firstValue(
+            identificacao.nome,
+            perfil?.nome
+          ),
+        email:
+          emailSeguro
+      };
+
+      salvarIdentificacao();
+      return;
+    }
+
+    const telefone =
+      normalizarTelefone({
+        whatsapp:
+          cliente.whatsappNacional ||
+          cliente.whatsapp,
+        whatsappE164:
+          cliente.whatsappE164 ||
+          cliente.whatsapp,
+        ddi: "55",
+        country: "br"
+      });
+
+    /*
+      Encontrar o cadastro pelo e-mail social NÃO significa que os dados já
+      foram conferidos neste navegador. Preservamos a confirmação anterior
+      somente quando ela já existia no próprio navegador.
+    */
+    const jaConfirmadoAqui =
+      identificacao.whatsappConfirmado === true;
+
+    identificacao = {
+      ...identificacao,
+      whatsapp:
+        telefone.whatsapp ||
+        identificacao.whatsapp,
+      whatsappE164:
+        telefone.whatsappE164 ||
+        identificacao.whatsappE164,
+      ddi: "55",
+      country: "br",
+      countryName: "Brasil",
+      clienteId:
+        firstValue(
+          cliente._id,
+          cliente.clienteId,
+          identificacao.clienteId
+        ),
+      nome:
+        firstValue(
+          cliente.nome,
+          identificacao.nome,
+          perfil?.nome
+        ),
+      email:
+        emailSeguro,
+      cpfCnpj:
+        onlyDigits(
+          cliente.cpfCnpj ||
+          cliente.cpf ||
+          identificacao.cpfCnpj
+        ),
+      whatsappConfirmado:
+        jaConfirmadoAqui,
+      confirmacaoWhatsappVersao:
+        jaConfirmadoAqui
+          ? Number(
+              identificacao.confirmacaoWhatsappVersao ||
+              CONFIRMACAO_FLUXO_VERSAO
+            )
+          : 0,
+      confirmadoEm:
+        jaConfirmadoAqui
+          ? safe(identificacao.confirmadoEm)
+          : ""
+    };
+
+    clienteAtual =
+      cliente;
+
+    if (
+      identificacao.clienteId
+    ) {
+      try {
+        const resultado =
+          await comTimeout(
+            obterAcessosProjeto({
+              codigoProjeto:
+                codigoPublico(projeto),
+              clienteId:
+                identificacao.clienteId,
+              email:
+                identificacao.email,
+              whatsapp:
+                onlyDigits(
+                  identificacao.whatsappE164
+                )
+            }),
+            7000,
+            "A consulta das compras não respondeu."
+          );
+
+        if (
+          resultado?.ok &&
+          resultado?.access
+        ) {
+          acessos = {
+            medidas:
+              resultado.access.medidas === true,
+            graficos:
+              resultado.access.graficos === true,
+            projeto:
+              resultado.access.projeto === true
+          };
+
+          capturarDownloads(
+            resultado
+          );
+
+          salvarAcessosLocais(
+            codigoPublico(projeto),
+            acessos
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "Falha ao carregar compras do membro Wix:",
+          error?.message || error
+        );
+      }
+    }
+
+    salvarIdentificacao();
+    await mostrarValoresEAcessos();
+
+  } catch (error) {
+    console.warn(
+      "Hidratação social em segundo plano falhou:",
+      error?.message || error
+    );
+  }
+}
+
+async function identificarMembroSocial() {
+  cancelarPopupAgendado();
+
+  const membro =
+    await currentMember.getMember();
+
+  const {
+    memberId,
+    memberEmail,
+    memberName
+  } = perfilMembroFrontend(
+    membro
+  );
 
   if (!memberId || !memberEmail) {
     identificado = false;
@@ -1682,24 +1882,19 @@ async function identificarMembroSocial() {
     );
   }
 
-  const cliente =
-    perfil?.cliente &&
-    typeof perfil.cliente === "object"
-      ? perfil.cliente
-      : null;
+  const salva =
+    lerIdentificacaoSalva();
 
-  const telefone =
-    cliente
-      ? normalizarTelefone({
-          whatsapp:
-            cliente.whatsappNacional ||
-            cliente.whatsapp,
-          whatsappE164:
-            cliente.whatsappE164 ||
-            cliente.whatsapp,
-          ddi: "55",
-          country: "br"
-        })
+  const mesmoMembro =
+    Boolean(
+      salva &&
+      normalizeEmail(salva.email) ===
+        memberEmail
+    );
+
+  const telefoneSalvo =
+    mesmoMembro
+      ? normalizarTelefone(salva)
       : {
           whatsapp: "",
           whatsappE164: "",
@@ -1709,72 +1904,72 @@ async function identificarMembroSocial() {
 
   identificacao = {
     whatsapp:
-      telefone.whatsapp,
+      telefoneSalvo.whatsapp,
     whatsappE164:
-      telefone.whatsappE164,
-    ddi:
-      telefone.ddi || "55",
-    country:
-      telefone.country || "br",
-    countryName:
-      "Brasil",
+      telefoneSalvo.whatsappE164,
+    ddi: "55",
+    country: "br",
+    countryName: "Brasil",
     clienteId:
-      cliente
-        ? firstValue(
-            cliente._id,
-            cliente.clienteId
-          )
+      mesmoMembro
+        ? safe(salva.clienteId)
         : "",
     nome:
       firstValue(
-        cliente?.nome,
-        perfil?.nome
+        mesmoMembro
+          ? salva.nome
+          : "",
+        memberName
       ),
     email:
-      normalizeEmail(
-        firstValue(
-          cliente?.email,
-          memberEmail
-        )
-      ),
+      memberEmail,
     cpfCnpj:
-      onlyDigits(
-        cliente?.cpfCnpj ||
-        cliente?.cpf ||
-        ""
-      ),
-    /*
-      Compatibilidade com o checkout atual: quando o cliente foi
-      localizado por e-mail autenticado do Wix, a identidade já foi
-      confirmada pelo login social. O WhatsApp abaixo vem do cadastro
-      existente, não de um número digitado por um visitante anônimo.
-    */
+      mesmoMembro
+        ? onlyDigits(
+            salva.cpfCnpj ||
+            salva.cpf
+          )
+        : "",
     whatsappConfirmado:
-      Boolean(
-        cliente &&
-        telefone.whatsapp
-      ),
+      mesmoMembro &&
+      salva.whatsappConfirmado === true,
     confirmacaoWhatsappVersao:
-      cliente && telefone.whatsapp
-        ? CONFIRMACAO_FLUXO_VERSAO
+      mesmoMembro &&
+      salva.whatsappConfirmado === true
+        ? Number(
+            salva.confirmacaoWhatsappVersao ||
+            CONFIRMACAO_FLUXO_VERSAO
+          )
         : 0,
     confirmadoEm:
-      cliente && telefone.whatsapp
-        ? new Date().toISOString()
+      mesmoMembro &&
+      salva.whatsappConfirmado === true
+        ? safe(salva.confirmadoEm)
         : ""
   };
 
   clienteAtual =
-    cliente;
+    null;
 
   identificado =
     true;
 
-  acessos = {
-    medidas: false,
-    graficos: false,
-    projeto: false
-  };
+  consultaConcluida =
+    true;
+
+  const acessosLocais =
+    mesmoMembro
+      ? lerAcessosLocais(
+          codigoPublico(projeto)
+        )
+      : null;
+
+  acessos =
+    acessosLocais || {
+      medidas: false,
+      graficos: false,
+      projeto: false
+    };
 
   downloads = {
     medidas: "",
@@ -1782,67 +1977,18 @@ async function identificarMembroSocial() {
     projeto: ""
   };
 
-  if (
-    clienteAtual &&
-    identificacao.clienteId
-  ) {
-    try {
-      const resultado =
-        await comTimeout(
-          obterAcessosProjeto({
-            codigoProjeto:
-              codigoPublico(
-                projeto
-              ),
-            clienteId:
-              identificacao.clienteId,
-            email:
-              identificacao.email,
-            whatsapp:
-              onlyDigits(
-                identificacao.whatsappE164
-              )
-          }),
-          7000,
-          "A consulta das compras não respondeu."
-        );
-
-      if (
-        resultado?.ok &&
-        resultado?.access
-      ) {
-        acessos = {
-          medidas:
-            resultado.access.medidas === true,
-          graficos:
-            resultado.access.graficos === true,
-          projeto:
-            resultado.access.projeto === true
-        };
-
-        capturarDownloads(
-          resultado
-        );
-
-        salvarAcessosLocais(
-          codigoPublico(projeto),
-          acessos
-        );
-      }
-    } catch (error) {
-      console.error(
-        "Falha ao carregar acessos pelo membro Wix:",
-        error?.message || error
-      );
-    }
-  }
-
-  consultaConcluida =
-    true;
-
   salvarIdentificacao();
 
+  /*
+    REGRA DE PERFORMANCE:
+    login Google/Facebook confirmado libera valores e o primeiro botão agora.
+    A coleção de clientes e as compras são consultadas depois, sem prender a UI.
+  */
   await mostrarValoresEAcessos();
+
+  hidratarClienteMembroSocial(
+    memberEmail
+  ).catch(console.error);
 }
 
 async function identificarCliente(

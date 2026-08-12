@@ -1,7 +1,7 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
-import { criarCliente, buscarClienteCadastrado } from "backend/clientes.web";
+import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual } from "backend/clientes.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
@@ -12,6 +12,7 @@ const SESSION_KEY = "pp_identificacao_atual";
 const LOCAL_KEY = "pp_identificacao_persistente";
 const VERIFIED_SESSION_KEY = "pp_checkout_cliente_validado_sessao";
 const CHECKOUT_AUTH_KEY = "pp_checkout_autorizado";
+const SOCIAL_CONFIRM_KEY = "pp_social_dados_confirmados_v1";
 const CHECKOUT_AUTH_MAX_AGE = 5 * 60 * 1000;
 const PIX_CREATE_TIMEOUT = 12000;
 const PIX_READ_TIMEOUT = 3500;
@@ -176,7 +177,7 @@ async function hydrateReturningCustomer() {
     A consulta ao backend continua acontecendo, mas não faz a etapa de
     identificação piscar antes de mostrar as formas de pagamento.
   */
-  ctx.skipIdentity = alreadyVerifiedThisSession || ctx.skipIdentity === true;
+  ctx.skipIdentity = (alreadyVerifiedThisSession || ctx.skipIdentity === true) && socialDataConfirmed(ctx.email);
 
   try {
     const found = await waitTimeout(buscarClienteCadastrado(n), 3500, "");
@@ -203,7 +204,7 @@ async function hydrateReturningCustomer() {
       whatsappE164:`+55${n}`,
       whatsappConfirmado:true
     });
-    ctx.skipIdentity = true;
+    ctx.skipIdentity = socialDataConfirmed(cadastroBackend.email);
     markSessionIdentityVerified(ctx);
   } catch (_) {
     if (!alreadyVerifiedThisSession && ctx.skipIdentity !== true) ctx.skipIdentity = false;
@@ -233,6 +234,41 @@ function saveIdentity(patch) {
   try { session.setItem(SESSION_KEY,raw); } catch(_) {}
   try { local.setItem(LOCAL_KEY,raw); } catch(_) {}
   ctx = { ...ctx, ...next };
+}
+
+function socialDataConfirmed(mail) {
+  const target = email(mail);
+  if (!target) return false;
+
+  for (const store of [session, local]) {
+    try {
+      const raw = store.getItem(SOCIAL_CONFIRM_KEY);
+      if (!raw) continue;
+      const marker = JSON.parse(raw);
+      if (
+        marker?.ok === true &&
+        email(marker.email) === target
+      ) {
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  return false;
+}
+
+function markSocialDataConfirmed(mail) {
+  const target = email(mail);
+  if (!target) return;
+
+  const raw = JSON.stringify({
+    ok: true,
+    email: target,
+    confirmedAt: Date.now()
+  });
+
+  try { session.setItem(SOCIAL_CONFIRM_KEY, raw); } catch (_) {}
+  try { local.setItem(SOCIAL_CONFIRM_KEY, raw); } catch (_) {}
 }
 
 function mediaSource(value) {
@@ -272,7 +308,7 @@ function contextFromUrl() {
     email:email(source.email),
     cpfCnpj:cpf(source.cpfCnpj || source.cpf),
     whatsappConfirmado:source.whatsappConfirmado === true,
-    skipIdentity:Boolean(handoff) || verifiedSession,
+    skipIdentity:(Boolean(handoff) || verifiedSession) && socialDataConfirmed(email(source.email)),
     hideSku:true,
     returnUrl:safe(q.returnUrl) || (project ? `/checkoutprojetosprontos?codigo=${encodeURIComponent(project)}` : "/checkoutprojetosprontos")
   };
@@ -395,7 +431,7 @@ function sendInit(force=false) {
     skipIdentity:ctx.skipIdentity === true,
     hasWhatsappFromPreviousStep:Boolean(ctx.whatsapp),
     hideSku:true,
-    requiredFields:{name:true,email:true,cpfCnpj:true},
+    requiredFields:{name:true,email:false,cpfCnpj:true,whatsapp:true},
     ctx:{...ctx}
   });
 }
@@ -430,53 +466,202 @@ function avisarDadosSalvos(payload) {
 
 async function saveCustomer(data={}) {
   if (busy) return;
-  const n=phone(data.whatsappE164 || data.whatsapp || ctx.whatsappE164 || ctx.whatsapp);
-  const name=safe(data.nome || data.nomeCliente).replace(/\s+/g," ");
-  const mail=email(data.email);
-  const document=cpf(data.cpfCnpj || data.cpf);
-  if(!n) return post({type:"CUSTOMER_RESULT",ok:false,error:"WhatsApp inválido."});
-  if(name.length<3) return post({type:"CUSTOMER_RESULT",ok:false,error:"Informe seu nome completo."});
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(mail)) return post({type:"CUSTOMER_RESULT",ok:false,error:"Informe um e-mail válido."});
-  if(!validCpf(document)) return post({type:"CUSTOMER_RESULT",ok:false,error:"Informe um CPF válido."});
 
-  busy=true;
-  try {
-    customer=await waitTimeout(criarCliente({
-      whatsapp:`+55${n}`, nome:name, email:mail, cpfCnpj:document, origem:"CHECKOUT_PROJETOS_PRONTOS"
-    }),8000,"O cadastro demorou para responder.");
-    if(!customer) throw new Error("Não foi possível salvar o cadastro.");
+  const n =
+    phone(
+      data.whatsappE164 ||
+      data.whatsapp ||
+      ctx.whatsappE164 ||
+      ctx.whatsapp
+    );
 
-    const id=safe(customer._id || customer.clienteId);
-    saveIdentity({
-      clienteId:id, nome:safe(customer.nome || name), email:email(customer.email || mail),
-      cpfCnpj:cpf(customer.cpfCnpj || document), whatsapp:n, whatsappE164:`+55${n}`,
-      whatsappConfirmado:true
+  const name =
+    safe(
+      data.nome ||
+      data.nomeCliente ||
+      ctx.nome
+    ).replace(/\s+/g, " ");
+
+  const document =
+    cpf(
+      data.cpfCnpj ||
+      data.cpf ||
+      ctx.cpfCnpj
+    );
+
+  if (!n) {
+    return post({
+      type:"CUSTOMER_RESULT",
+      ok:false,
+      error:"WhatsApp inválido."
     });
+  }
+
+  if (name.length < 3) {
+    return post({
+      type:"CUSTOMER_RESULT",
+      ok:false,
+      error:"Informe seu nome completo."
+    });
+  }
+
+  if (!validCpf(document)) {
+    return post({
+      type:"CUSTOMER_RESULT",
+      ok:false,
+      error:"Informe um CPF válido."
+    });
+  }
+
+  busy = true;
+
+  try {
+    /*
+      O e-mail NÃO vem do campo do HTML. Ele é relido do membro Wix autenticado,
+      portanto o usuário não consegue trocar o destino da compra no formulário.
+    */
+    const perfil =
+      await waitTimeout(
+        buscarClienteDoMembroAtual(),
+        7000,
+        "Não foi possível confirmar sua conta Wix."
+      );
+
+    const mail =
+      email(
+        perfil?.email ||
+        ctx.email
+      );
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(mail)) {
+      throw new Error(
+        "Não foi possível obter o e-mail autenticado da sua conta."
+      );
+    }
+
+    customer =
+      await waitTimeout(
+        criarCliente({
+          whatsapp:
+            `+55${n}`,
+          nome:
+            name,
+          email:
+            mail,
+          cpfCnpj:
+            document,
+          origem:
+            "CHECKOUT_PROJETOS_PRONTOS_SOCIAL"
+        }),
+        8000,
+        "O cadastro demorou para responder."
+      );
+
+    if (!customer) {
+      throw new Error(
+        "Não foi possível salvar o cadastro."
+      );
+    }
+
+    const id =
+      safe(
+        customer._id ||
+        customer.clienteId
+      );
+
+    saveIdentity({
+      clienteId: id,
+      nome:
+        safe(
+          customer.nome ||
+          name
+        ),
+      email:
+        mail,
+      cpfCnpj:
+        cpf(
+          customer.cpfCnpj ||
+          document
+        ),
+      whatsapp: n,
+      whatsappE164:
+        `+55${n}`,
+      whatsappConfirmado: true,
+      confirmacaoWhatsappVersao: 5,
+      confirmadoEm:
+        new Date().toISOString()
+    });
+
     markSessionIdentityVerified(ctx);
+    markSocialDataConfirmed(mail);
 
     try {
-      const a=await waitTimeout(obterAcessosProjeto({
-        codigoProjeto:ctx.codigoProjeto, clienteId:id, email:ctx.email, whatsapp:n
-      }),3500,"");
-      const access=a?.access || {};
-      const bought=ctx.tipoProduto==="GRAFICOS" ? access.graficos===true :
-        ctx.tipoProduto==="PROJETO_COMPLETO" ? access.projeto===true : access.medidas===true;
-      if(bought) {
-        post({type:"ALREADY_PURCHASED",ok:true,tipoProduto:ctx.tipoProduto,access});
+      const a =
+        await waitTimeout(
+          obterAcessosProjeto({
+            codigoProjeto:
+              ctx.codigoProjeto,
+            clienteId:
+              id,
+            email:
+              mail,
+            whatsapp:
+              n
+          }),
+          3500,
+          ""
+        );
+
+      const access =
+        a?.access || {};
+
+      const bought =
+        ctx.tipoProduto === "GRAFICOS"
+          ? access.graficos === true
+          : ctx.tipoProduto === "PROJETO_COMPLETO"
+            ? access.projeto === true
+            : access.medidas === true;
+
+      if (bought) {
+        post({
+          type:"ALREADY_PURCHASED",
+          ok:true,
+          tipoProduto:ctx.tipoProduto,
+          access
+        });
         return;
       }
-    } catch(_) {}
+    } catch (_) {}
 
     avisarDadosSalvos({
-      ok:true,exists:true,clienteId:id,
-      nome:ctx.nome,email:ctx.email,cpfCnpj:ctx.cpfCnpj,
-      whatsapp:ctx.whatsapp,whatsappE164:ctx.whatsappE164,
+      ok:true,
+      exists:true,
+      clienteId:id,
+      nome:ctx.nome,
+      email:mail,
+      cpfCnpj:ctx.cpfCnpj,
+      whatsapp:ctx.whatsapp,
+      whatsappE164:ctx.whatsappE164,
       autoPayment:false
     });
-  } catch(e) {
-    console.error("saveCustomer:",e?.message||e);
-    post({type:"CUSTOMER_RESULT",ok:false,error:e?.message||"Não foi possível salvar os dados."});
-  } finally { busy=false; }
+
+  } catch (e) {
+    console.error(
+      "saveCustomer:",
+      e?.message || e
+    );
+
+    post({
+      type:"CUSTOMER_RESULT",
+      ok:false,
+      error:
+        e?.message ||
+        "Não foi possível salvar os dados."
+    });
+
+  } finally {
+    busy = false;
+  }
 }
 
 function stopPoll() {

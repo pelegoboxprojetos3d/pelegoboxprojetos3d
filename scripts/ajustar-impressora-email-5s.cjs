@@ -22,7 +22,7 @@ function replaceRequired(text, from, to, label) {
 
 // -----------------------------------------------------------------------------
 // PÁGINA DE ENTREGA
-// A regra de 5 segundos existe SOMENTE para a primeira abertura originada do
+// A regra de 7 segundos existe SOMENTE para a primeira abertura originada do
 // botão do e-mail. Pagamento normal, atualização comum e cliques internos
 // continuam com o comportamento atual.
 // -----------------------------------------------------------------------------
@@ -32,8 +32,13 @@ if (!page.includes("const EMAIL_PROCESSAMENTO_MS =")) {
   page = replaceRequired(
     page,
     "const MIN_PROCESSAMENTO_VISIVEL =\n  500;",
-    "const MIN_PROCESSAMENTO_VISIVEL =\n  500;\n\nconst EMAIL_PROCESSAMENTO_MS =\n  5000;",
-    "constante de 5s do e-mail"
+    "const MIN_PROCESSAMENTO_VISIVEL =\n  500;\n\nconst EMAIL_PROCESSAMENTO_MS =\n  7000;",
+    "constante de 7s do e-mail"
+  );
+} else {
+  page = page.replace(
+    /const EMAIL_PROCESSAMENTO_MS =\s*\n?\s*\d+;/,
+    "const EMAIL_PROCESSAMENTO_MS =\n  7000;"
   );
 }
 
@@ -41,7 +46,7 @@ if (!page.includes("let processamentoEmailPendente =")) {
   page = replaceRequired(
     page,
     "let processamentoVisualEncerrado =\n  false;",
-    "let processamentoVisualEncerrado =\n  false;\n\n/*\n  Só a primeira retirada da impressora usa os 5 s quando a URL veio do e-mail.\n  Depois disso a flag é desligada, evitando contaminar os cliques da página.\n*/\nlet processamentoEmailPendente =\n  String(wixLocation?.query?.via ?? \"\")\n    .trim()\n    .toLowerCase() === \"email\";",
+    "let processamentoVisualEncerrado =\n  false;\n\n/*\n  Só a primeira retirada da impressora usa os 7 s quando a URL veio do e-mail.\n  Depois disso a flag é desligada, evitando contaminar os cliques da página.\n*/\nlet processamentoEmailPendente =\n  String(wixLocation?.query?.via ?? \"\")\n    .trim()\n    .toLowerCase() === \"email\";",
     "flag de acesso pelo e-mail"
   );
 }
@@ -114,4 +119,4 @@ if (!pix.includes("const emailPayload = {\n    ...payload,")) {
 
 write(PIX, pix);
 
-console.log("Regra aplicada: link do e-mail mantém a impressora por no mínimo 5 s; demais acessos não mudam.");
+console.log("Regra aplicada: link do e-mail mantém a impressora por no mínimo 7 s; demais acessos não mudam.");

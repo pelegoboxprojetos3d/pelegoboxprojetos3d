@@ -69,6 +69,9 @@ jobs:
       - name: Limpar duplicatas do checkout estável
         run: node scripts/limpar-duplicatas-checkout-estavel-2026-08-12.cjs
 
+      - name: Aplicar login social em Projetos Prontos
+        run: node scripts/aplicar-login-social-projetos-prontos.cjs
+
       - name: Validar código
         run: npm run lint
 
@@ -81,6 +84,7 @@ jobs:
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
             git add \
+              "src/backend/clientes.web.js" \
               "src/backend/entregaProjetosProntos.jsw" \
               "src/backend/http-functions.js" \
               "src/backend/notificarVendaProjetoPronto.js" \

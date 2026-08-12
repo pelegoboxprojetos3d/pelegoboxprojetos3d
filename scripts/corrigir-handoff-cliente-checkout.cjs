@@ -6,10 +6,6 @@ const checkoutPath = "src/pages/checkout-projeto-pronto.i9aj1.js";
 function replaceBetween(source, startMarker, endMarker, replacement, label) {
   const start = source.indexOf(startMarker);
   if (start < 0) {
-    if (source.includes(replacement.trim().slice(0, 80))) {
-      console.log(`${label}: já aplicado.`);
-      return source;
-    }
     throw new Error(`${label}: início não encontrado.`);
   }
   const end = source.indexOf(endMarker, start);
@@ -46,10 +42,11 @@ function replaceOnce(source, oldText, newText, label) {
 
 let buttons = fs.readFileSync(buttonsPath, "utf8");
 
-buttons = replaceBetween(
-  buttons,
-  "function lerIdentificacaoSalva() {",
-  "function salvarWhatsappPrimeiroEstagio(",
+if (!buttons.includes("function pontuarIdentificacaoSalva(data) {")) {
+  buttons = replaceBetween(
+    buttons,
+    "function lerIdentificacaoSalva() {",
+    "function salvarWhatsappPrimeiroEstagio(",
 `function pontuarIdentificacaoSalva(data) {
   const normalized = normalizarIdentificacaoSalva(data);
 
@@ -104,7 +101,17 @@ function lerIdentificacaoSalva() {
 
   return melhor;
 }`,
-  "Botões: preferir identificação mais completa"
+    "Botões: preferir identificação mais completa"
+  );
+} else {
+  console.log("Botões: preferir identificação mais completa: já aplicado.");
+}
+
+buttons = replaceOnce(
+  buttons,
+  "let eventosLigados =\n  false;",
+  "let eventosLigados =\n  false;\n\nlet hidratacaoClienteCheckout =\n  null;",
+  "Botões: estado da hidratação antecipada"
 );
 
 buttons = insertBeforeOnce(
@@ -227,19 +234,37 @@ buttons = replaceOnce(
 
 buttons = insertBeforeOnce(
   buttons,
+`        /*
+          Ao voltar do checkout, a página usa o estado que já foi validado`,
+`        /*
+          Se o cache de acessos veio antes do cadastro completo, iniciamos a
+          hidratação do cliente imediatamente. Normalmente ela termina antes
+          de a pessoa conseguir clicar no botão.
+        */
+        if (!identificacaoCompletaParaCheckout(identificacao)) {
+          hidratacaoClienteCheckout = completarCadastroClienteRapido(salva);
+        }`,
+  "hidratacaoClienteCheckout = completarCadastroClienteRapido(salva);",
+  "Botões: antecipar hidratação do cliente recorrente"
+);
+
+buttons = insertBeforeOnce(
+  buttons,
 `  /*
     A identificação já foi feita antes. Não repetimos consulta de cliente
     e acessos no clique, porque isso segurava a navegação para o checkout.
     O clique deve decidir com o estado já carregado e navegar imediatamente.
   */`,
 `  /*
-    Se o cache liberou os botões antes de termos nome/e-mail/CPF em memória,
-    aproveitamos a consulta que já deveria ter ocorrido nesta página e fazemos
-    uma última hidratação curta aqui. Cliente conhecido entra no checkout já
-    completo; cliente novo continua vendo a etapa de cadastro normalmente.
+    Se o cache da página iniciou a recuperação do cadastro, esperamos apenas
+    essa mesma promessa. Não fazemos uma segunda consulta no clique e não
+    adicionamos atraso ao cliente novo.
   */
-  if (!identificacaoCompletaParaCheckout(identificacao)) {
-    await completarCadastroClienteRapido(identificacao);
+  if (
+    !identificacaoCompletaParaCheckout(identificacao) &&
+    hidratacaoClienteCheckout
+  ) {
+    await hidratacaoClienteCheckout;
   }
 
   /* Handoff direto botão -> checkout: persistimos a melhor identidade antes de navegar. */
@@ -263,10 +288,11 @@ checkout = replaceOnce(
   "Checkout: chave do handoff do botão"
 );
 
-checkout = replaceBetween(
-  checkout,
-  "function savedIdentity() {",
-  "function saveIdentity(patch) {",
+if (!checkout.includes("function identityStorageScore(value) {")) {
+  checkout = replaceBetween(
+    checkout,
+    "function savedIdentity() {",
+    "function saveIdentity(patch) {",
 `function identityStorageScore(value) {
   if (!value || typeof value !== "object") return -1;
 
@@ -304,8 +330,11 @@ function savedIdentity() {
 
   return best;
 }`,
-  "Checkout: preferir storage mais completo"
-);
+    "Checkout: preferir storage mais completo"
+  );
+} else {
+  console.log("Checkout: preferir storage mais completo: já aplicado.");
+}
 
 checkout = insertBeforeOnce(
   checkout,
@@ -339,15 +368,14 @@ checkout = insertBeforeOnce(
       return {};
     }
 
+    const handoffPhone = phone(value.whatsappE164 || value.whatsapp);
     const candidate = {
       clienteId: safe(value.clienteId),
       nome: safe(value.nome),
       email: email(value.email),
       cpfCnpj: cpf(value.cpfCnpj),
-      whatsapp: phone(value.whatsappE164 || value.whatsapp),
-      whatsappE164: phone(value.whatsappE164 || value.whatsapp)
-        ? `+55${phone(value.whatsappE164 || value.whatsapp)}`
-        : "",
+      whatsapp: handoffPhone,
+      whatsappE164: handoffPhone ? "+55" + handoffPhone : "",
       whatsappConfirmado: value.whatsappConfirmado === true
     };
 

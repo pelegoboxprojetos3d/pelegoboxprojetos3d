@@ -26,6 +26,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Corrigir literais internos do patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/segunda-via-projetos-prontos.js')
+          s = p.read_text()
+          s = s.replace('`#${digits(item.codigoProjeto)} ${safe(item.titulo)}`', '"#" + digits(item.codigoProjeto) + " " + safe(item.titulo)')
+          s = s.replace('`Abrindo novamente o projeto #${digits(item.codigoProjeto)}...`', '"Abrindo novamente o projeto #" + digits(item.codigoProjeto) + "..."')
+          p.write_text(s)
+          PY
+
       - name: Aplicar central de segunda via
         run: node .github/scripts/segunda-via-projetos-prontos.js
 

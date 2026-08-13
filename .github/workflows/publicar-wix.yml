@@ -57,6 +57,9 @@ jobs:
       - name: Aplicar suporte de DDI ao cadastro social
         run: node scripts/suporte-ddi-clientes-social-2026-08-12.cjs
 
+      - name: Completar DDI em pagamentos e notificações
+        run: node scripts/suporte-ddi-validapay-e-notificacoes-2026-08-12.cjs
+
       - name: Blindar pós-pagamento ValidaPay
         run: node scripts/blindar-pos-pagamento-validapay-2026-08-12.cjs
 
@@ -81,6 +84,8 @@ jobs:
               "src/backend/clientes.js" \
               "src/backend/clientes.web.js" \
               "src/backend/validaPayPixProjetosProntosCore.jsw" \
+              "src/backend/validaPayCartaoProjetosProntos.jsw" \
+              "src/backend/notificarVendaProjetoPronto.js" \
               "src/backend/http-functions.js"
             git commit -m "Automação: validar login, cadastro e pós-pagamento"
             git push origin HEAD:main

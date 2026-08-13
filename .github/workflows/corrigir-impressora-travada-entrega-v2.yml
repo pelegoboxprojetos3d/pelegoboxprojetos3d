@@ -1,0 +1,63 @@
+name: Corrigir Impressora Travada Entrega V2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-impressora-travada-entrega-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-impressora-travada-entrega-v2
+  cancel-in-progress: true
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Aplicar corretor
+        run: node scripts/corrigir-impressora-travada-entrega-2026-08-13.cjs
+
+      - name: Validar codigo
+        run: npm run lint
+
+      - name: Gravar correcao no main
+        run: |
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/backend/entregaProjetosProntos.jsw" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if ! git diff --cached --quiet; then
+            git commit -m "Impedir impressora infinita e reenvio excessivo ao Make"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronizacao GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          status=$(curl --silent --output /tmp/wix --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')
+          cat /tmp/wix || true
+          test "$status" -ge 200 -a "$status" -lt 300

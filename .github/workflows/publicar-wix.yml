@@ -66,6 +66,9 @@ jobs:
       - name: Adicionar celebrações pós-pagamento
         run: node scripts/adicionar-celebracoes-pagamento-2026-08-12.cjs
 
+      - name: Finalizar confete fullscreen e fatura ValidaPay
+        run: node scripts/finalizar-confete-fullscreen-fatura-validapay-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 

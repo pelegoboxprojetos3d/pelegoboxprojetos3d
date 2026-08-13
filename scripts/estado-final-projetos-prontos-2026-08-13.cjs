@@ -49,8 +49,6 @@ function patchInvoiceFunction(file, sleepCall) {
   let block = code.slice(start, end);
   block = block.replace("const waits = [900, 1400, 2100];", "const waits = [0, 900, 2200];");
 
-  // Remove versões anteriores da condição para reaplicar a regra comprovada pelo painel:
-  // somente { success:true } significa que a ValidaPay confirmou o reenvio.
   block = block.replace(
     "      const providerConfirmed = response.ok && response.data?.success !== false;\n      if (providerConfirmed) {",
     "      const providerConfirmed = response.ok && response.data?.success === true;\n      if (providerConfirmed) {"
@@ -131,4 +129,5 @@ patchInvoiceFunction(CARD, "timeout");
 patchInvoiceFunction(PIX, "sleep");
 patchDeliveryTime();
 patchRegressionScripts();
+require("./corrigir-central-projetos-email-2026-08-13.cjs");
 console.log("Estado final Projetos Prontos aplicado.");

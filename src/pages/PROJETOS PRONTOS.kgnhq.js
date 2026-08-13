@@ -49,6 +49,10 @@ function configurarProjetos() {
         // CHECK ESCONDIDO
         // ========================================
 
+        try {
+            $item("#checkVideo").hide();
+        } catch (_) {}
+
         $item("#checkVideo").collapse();
 
         // ========================================
@@ -77,12 +81,20 @@ function configurarProjetos() {
         $item("#btnProjetos").target =
             "_blank";
 
-        $item("#btnProjetos").onClick(() => {
+        $item("#btnProjetos").onClick(async () => {
 
-            $item("#checkVideo").checked =
+            const check = $item("#checkVideo");
+
+            check.checked =
                 true;
 
-            $item("#checkVideo").expand();
+            await check.expand();
+
+            try {
+                await check.show("fade");
+            } catch (_) {
+                check.show();
+            }
 
         });
 

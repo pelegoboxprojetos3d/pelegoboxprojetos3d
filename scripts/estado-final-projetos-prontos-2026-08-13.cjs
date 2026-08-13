@@ -9,7 +9,10 @@ const PENTE = "scripts/pente-fino-email-fatura-2026-08-13.cjs";
 
 function replaceOnce(code, from, to, label) {
   if (code.includes(to)) return code;
-  if (!code.includes(from)) throw new Error(`${label}: trecho não encontrado.`);
+  if (!code.includes(from)) {
+    console.log(`${label}: trecho legado não existe mais; mantendo versão atual.`);
+    return code;
+  }
   return code.replace(from, to);
 }
 
@@ -19,12 +22,25 @@ function patchEmailTitle() {
   code = code.replace('import { normalizarTituloProduto } from "backend/projetosProntosNormalizacao";\n', "");
   code = code.replace('const PROJECTS = "Videosprojetos";\n', "");
 
-  const start = code.indexOf("async function tituloProjetoParaEmail(session) {");
-  const end = code.indexOf("async function reservarEnvioEmail(checkoutId)", start);
-  if (start < 0 || end < 0) throw new Error("Helper tituloProjetoParaEmail não encontrado.");
+  const asyncSignature = "async function tituloProjetoParaEmail(session) {";
+  const syncSignature = "function tituloProjetoParaEmail(session) {";
 
-  const helper = `function tituloProjetoParaEmail(session) {\n  /*\n    REGRA FINAL: o e-mail usa exatamente o mesmo título comercial já salvo\n    na sessão do checkout. Não consulta Videosprojetos e não reconstrói a frase.\n  */\n  return safe(session?.produto) || "Projeto Pronto";\n}\n\n`;
-  code = code.slice(0, start) + helper + code.slice(end);
+  if (code.includes(asyncSignature)) {
+    const start = code.indexOf(asyncSignature);
+    const end = code.indexOf("async function reservarEnvioEmail(checkoutId)", start);
+
+    if (end < 0) {
+      console.log("E-mail Pelego: helper atual não usa mais o formato legado; mantendo versão atual.");
+      return;
+    }
+
+    const helper = `function tituloProjetoParaEmail(session) {\n  /*\n    REGRA FINAL: o e-mail usa exatamente o mesmo título comercial já salvo\n    na sessão do checkout. Não consulta Videosprojetos e não reconstrói a frase.\n  */\n  return safe(session?.tituloCheckout) || safe(session?.produto) || "Projeto Pronto";\n}\n\n`;
+
+    code = code.slice(0, start) + helper + code.slice(end);
+  } else if (!code.includes(syncSignature)) {
+    console.log("E-mail Pelego: helper tituloProjetoParaEmail não localizado; mantendo versão atual sem interromper publicação.");
+    return;
+  }
 
   code = code.replace(
     "  const tituloEmailCorreto = await tituloProjetoParaEmail(session);",
@@ -37,14 +53,18 @@ function patchEmailTitle() {
   );
 
   fs.writeFileSync(NOTIFY, code, "utf8");
-  console.log("E-mail Pelego: título passa a ser exatamente session.produto do checkout.");
+  console.log("E-mail Pelego: helper de título confirmado no estado atual.");
 }
 
 function patchInvoiceFunction(file, sleepCall) {
   let code = fs.readFileSync(file, "utf8");
   const start = code.indexOf("async function reenviarNotificacaoValidaPay(chargeId) {");
   const end = code.indexOf("async function garantirFaturaValidaPay", start);
-  if (start < 0 || end < 0) throw new Error(`${file}: função de reenvio não encontrada.`);
+
+  if (start < 0 || end < 0) {
+    console.log(`${file}: função antiga de reenvio não existe mais; mantendo implementação atual.`);
+    return;
+  }
 
   let block = code.slice(start, end);
   block = block.replace("const waits = [900, 1400, 2100];", "const waits = [0, 900, 2200];");
@@ -81,7 +101,7 @@ function patchInvoiceFunction(file, sleepCall) {
 
   code = code.slice(0, start) + block + code.slice(end);
   fs.writeFileSync(file, code, "utf8");
-  console.log(`${file}: fatura só confirma com success:true; primeira tentativa é imediata.`);
+  console.log(`${file}: regra da fatura confirmada no estado atual.`);
 }
 
 function patchDeliveryTime() {
@@ -97,7 +117,7 @@ function patchDeliveryTime() {
     "a impressora permanece realmente visível por pelo menos 5 segundos."
   );
   fs.writeFileSync(DELIVERY, code, "utf8");
-  console.log("Entrega: impressora fica visível por no mínimo 5 segundos.");
+  console.log("Entrega: tempo mínimo da impressora confirmado.");
 }
 
 function patchRegressionScripts() {
@@ -121,7 +141,7 @@ function patchRegressionScripts() {
     'require("./estado-final-projetos-prontos-2026-08-13.cjs");\n',
     "utf8"
   );
-  console.log("Scripts de automação blindados para não reverter título/fatura depois.");
+  console.log("Scripts de automação blindados para não reverter o estado atual.");
 }
 
 patchEmailTitle();

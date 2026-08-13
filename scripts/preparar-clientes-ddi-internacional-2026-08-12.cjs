@@ -31,9 +31,12 @@ const desired = `export function normalizarWhatsapp(numero) {
 }`;
 
 if (!code.includes(desired)) {
-  const re = /export function normalizarWhatsapp\(numero\) \{[\s\S]*?\n\}\n\nfunction criarVariantesWhatsapp/;
-  if (!re.test(code)) throw new Error("Função normalizarWhatsapp não encontrada.");
-  code = code.replace(re, desired + "\n\nfunction criarVariantesWhatsapp");
+  const start = code.indexOf("export function normalizarWhatsapp(numero)");
+  const next = code.indexOf("function criarVariantesWhatsapp", start + 1);
+  if (start < 0 || next < 0 || next <= start) {
+    throw new Error("Função normalizarWhatsapp não encontrada pelos marcadores.");
+  }
+  code = code.slice(0, start) + desired + "\n\n" + code.slice(next);
   changed = true;
 }
 

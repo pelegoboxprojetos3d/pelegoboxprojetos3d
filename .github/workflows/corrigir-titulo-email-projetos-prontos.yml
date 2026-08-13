@@ -1,0 +1,101 @@
+name: Corrigir Titulo Email Projetos Prontos
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-titulo-email-projetos-prontos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-titulo-email-projetos-prontos
+  cancel-in-progress: true
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Corrigir fonte do titulo do email
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const emailFile = 'src/backend/notificarVendaProjetoPronto.js';
+          let emailCode = fs.readFileSync(emailFile, 'utf8');
+
+          const trocasEmail = [
+            [
+              'return safe(session?.tituloCheckout) || safe(session?.produto) || "Projeto Pronto";',
+              'return safe(session?.produto) || safe(session?.tituloCheckout) || "Projeto Pronto";'
+            ],
+            [
+              'const produto = safe(session?.tituloCheckout) || safe(session?.produto);',
+              'const produto = safe(session?.produto) || safe(session?.tituloCheckout);'
+            ]
+          ];
+
+          for (const [antes, depois] of trocasEmail) {
+            if (emailCode.includes(antes)) emailCode = emailCode.replace(antes, depois);
+            else if (!emailCode.includes(depois)) throw new Error('Trecho esperado do email nao encontrado: ' + antes);
+          }
+
+          fs.writeFileSync(emailFile, emailCode, 'utf8');
+
+          const coreFile = 'src/backend/validaPayPixProjetosProntosCore.jsw';
+          let coreCode = fs.readFileSync(coreFile, 'utf8');
+          const antesCore = 'decodeTitle(session.tituloCheckout || session.produto)';
+          const depoisCore = 'decodeTitle(session.produto || session.tituloCheckout)';
+
+          if (coreCode.includes(antesCore)) {
+            coreCode = coreCode.split(antesCore).join(depoisCore);
+          } else if (!coreCode.includes(depoisCore)) {
+            throw new Error('Trecho legado do titulo no core nao encontrado.');
+          }
+
+          fs.writeFileSync(coreFile, coreCode, 'utf8');
+          console.log('Email passa a priorizar o mesmo produto normalizado usado pela ValidaPay.');
+          NODE
+
+      - name: Validar codigo
+        run: npm run lint
+
+      - name: Gravar correcao no main
+        run: |
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/backend/notificarVendaProjetoPronto.js" "src/backend/validaPayPixProjetosProntosCore.jsw"
+          if ! git diff --cached --quiet; then
+            git commit -m "Usar titulo da ValidaPay no email de confirmacao"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronizacao GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          status=$(curl --silent --output /tmp/wix --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')
+          cat /tmp/wix || true
+          test "$status" -ge 200 -a "$status" -lt 300

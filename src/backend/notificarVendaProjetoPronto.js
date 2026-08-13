@@ -1,9 +1,11 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import { normalizarTituloProduto } from "backend/projetosProntosNormalizacao";
 
 const SESSIONS = "SessoesProjetosProntos2";
 const HISTORICO_COMPRAS = "HistoricoComprasProjetosProntos";
+const PROJECTS = "Videosprojetos";
 const DB = { suppressAuth: true };
 const SITE_BASE = "https://www.pelegobox.com.br";
 const MAKE_SALE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
@@ -26,6 +28,71 @@ function phone(value) {
 function type(value) {
   const t = safe(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[\s-]+/g, "_");
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";
+}
+
+async function tituloProjetoParaEmail(session) {
+  const codigo = digits(session?.codigoProjeto);
+  let item = null;
+
+  if (codigo) {
+    const numeric = Number(codigo);
+    if (Number.isSafeInteger(numeric)) {
+      try {
+        const result = await wixData.query(PROJECTS).eq("ordem_video", numeric).limit(1).find({ ...DB, consistentRead: true });
+        item = result.items?.[0] || null;
+      } catch (_) {}
+    }
+
+    if (!item) {
+      try {
+        const result = await wixData.query(PROJECTS).eq("ordem_video", codigo).limit(1).find({ ...DB, consistentRead: true });
+        item = result.items?.[0] || null;
+      } catch (_) {}
+    }
+
+    if (!item) {
+      try {
+        const result = await wixData.query(PROJECTS).startsWith("titulo_video", `#${codigo}`).limit(1).find({ ...DB, consistentRead: true });
+        item = result.items?.[0] || null;
+      } catch (_) {}
+    }
+  }
+
+  const tituloColecao = normalizarTituloProduto(item?.titulo_video);
+  if (tituloColecao) return tituloColecao;
+
+  return normalizarTituloProduto(session?.produto) || safe(session?.produto) || "Projeto Pronto";
+}
+
+async function reservarEnvioEmail(checkoutId) {
+  const atual = await findSession(checkoutId);
+  if (!atual) return { ok:false, reason:"session_not_found" };
+  if (atual.emailEnviado === true || atual.emailEnviadoEm) return { ok:false, reason:"already_sent" };
+
+  const reservadoEm = new Date(atual.emailEnvioReservadoEm || 0).getTime();
+  if (reservadoEm && Date.now() - reservadoEm < 120000) {
+    return { ok:false, reason:"send_in_progress" };
+  }
+
+  const token = `mail_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,9)}`;
+  await wixData.update(SESSIONS, {
+    ...atual,
+    emailEnvioReservaToken: token,
+    emailEnvioReservadoEm: new Date(),
+    updatedAtDate: new Date()
+  }, DB);
+
+  // Duas confirmações podem chegar praticamente juntas. A pequena espera faz
+  // a última reserva vencer; somente quem ainda possuir o token envia o webhook.
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const confirmado = await findSession(checkoutId);
+  if (!confirmado || confirmado.emailEnvioReservaToken !== token) {
+    return { ok:false, reason:"lost_lock" };
+  }
+  if (confirmado.emailEnviado === true || confirmado.emailEnviadoEm) {
+    return { ok:false, reason:"already_sent" };
+  }
+  return { ok:true, token };
 }
 
 function gerarCodigoCompra() {
@@ -169,6 +236,7 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
   }
 
   const amount = Number(session.valor || 0);
+  const tituloEmailCorreto = await tituloProjetoParaEmail(session);
   const payload = {
     event: "venda_aprovada_PROJETOS_PRONTOS",
     origem: "PELEGO_BOX_PROJETOS_PRONTOS",
@@ -186,13 +254,14 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     phone: phone(session.whatsapp || session.whatsappE164 || session.whatsApp),
     cpfCnpj: digits(session.cpfCnpj),
     produto: safe(session.produto),
+    tituloProjeto: tituloEmailCorreto,
     tipoProduto: type(session.tipoProduto),
     codigoProjeto: digits(session.codigoProjeto),
     img: safe(session.img),
     valor: amount,
     valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + safe(session.produto),
-    tituloEmail: safe(session.produto),
+    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + tituloEmailCorreto,
+    tituloEmail: tituloEmailCorreto,
     botaoTexto: type(session.tipoProduto) === "GRAFICOS"
       ? "BAIXAR GRÁFICOS"
       : type(session.tipoProduto) === "PROJETO_COMPLETO"
@@ -209,25 +278,38 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     deliveryUrl: payload.deliveryUrl + "&via=email"
   };
 
-  const patch = { ...session, updatedAtDate: new Date() };
+  const patch = { updatedAtDate: new Date() };
   let changed = false;
   const result = { ok: true, email: "skipped", chatbot: "skipped", historico };
 
   if (!session.emailEnviadoEm && session.emailEnviado !== true) {
-    const url = await optionalSecret(MAKE_SALE_SECRET);
-    if (url) {
-      try {
-        await postJson(url, emailPayload);
-        patch.emailEnviadoEm = new Date();
-        patch.emailEnviado = true;
+    const reserva = await reservarEnvioEmail(checkoutId);
+    if (reserva.ok) {
+      const url = await optionalSecret(MAKE_SALE_SECRET);
+      if (url) {
+        try {
+          await postJson(url, emailPayload);
+          patch.emailEnviadoEm = new Date();
+          patch.emailEnviado = true;
+          patch.emailEnvioReservaToken = "";
+          patch.emailEnvioReservadoEm = null;
+          changed = true;
+          result.email = "sent";
+        } catch (error) {
+          patch.emailEnvioReservaToken = "";
+          patch.emailEnvioReservadoEm = null;
+          changed = true;
+          result.email = "error";
+          console.error("Falha ao disparar email da venda:", error?.message || error);
+        }
+      } else {
+        patch.emailEnvioReservaToken = "";
+        patch.emailEnvioReservadoEm = null;
         changed = true;
-        result.email = "sent";
-      } catch (error) {
-        result.email = "error";
-        console.error("Falha ao disparar email da venda:", error?.message || error);
+        result.email = "secret_missing";
       }
     } else {
-      result.email = "secret_missing";
+      result.email = reserva.reason === "already_sent" ? "skipped" : "locked";
     }
   }
 
@@ -263,6 +345,9 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     }
   }
 
-  if (changed) await wixData.update(SESSIONS, patch, DB);
+  if (changed) {
+    const latest = await findSession(checkoutId);
+    if (latest) await wixData.update(SESSIONS, { ...latest, ...patch, updatedAtDate: new Date() }, DB);
+  }
   return result;
 }

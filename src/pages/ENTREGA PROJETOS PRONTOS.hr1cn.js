@@ -7,7 +7,9 @@ import {
 } from "wix-storage-frontend";
 
 import {
-  buscarEntregaProjetoPronto
+  buscarEntregaProjetoPronto,
+  listarProjetosProntosDoMembroAtual,
+  buscarSegundaViaProjetoPronto
 } from "backend/entregaProjetosProntos.jsw";
 
 import {
@@ -216,6 +218,15 @@ let videoUrl =
 
 let videoCarregando =
   false;
+
+let centralSegundasViasAtiva =
+  false;
+
+let projetosSegundaVia =
+  [];
+
+let codigoSegundaViaAtual =
+  "";
 
 
 // ======================================================
@@ -1302,10 +1313,15 @@ async function baixarProjetoCompleto() {
     ) {
       try {
         const atualizado =
-          await buscarEntregaProjetoPronto({
-            checkoutId,
-            token
-          });
+          codigoSegundaViaAtual
+            ? await buscarSegundaViaProjetoPronto({
+              codigoProjeto:
+                codigoSegundaViaAtual
+            })
+            : await buscarEntregaProjetoPronto({
+              checkoutId,
+              token
+            });
 
         if (
           atualizado?.ok &&
@@ -2196,6 +2212,20 @@ function ligarEventos() {
     "projeto"
   );
 
+  try {
+    $w(IDS.galeria).onItemClicked(
+      (event) => {
+        abrirProjetoDaCentral(event)
+          .catch(console.error);
+      }
+    );
+  } catch (erro) {
+    console.warn(
+      "Não foi possível ligar a seleção da central de projetos:",
+      erro?.message || erro
+    );
+  }
+
   /*
     O botão do vídeo não usa onClick.
 
@@ -2204,6 +2234,203 @@ function ligarEventos() {
   */
 }
 
+
+// ======================================================
+// CENTRAL DE SEGUNDAS VIAS
+// ======================================================
+
+function descricaoAcessoCentral(item = {}) {
+  return firstValue(
+    item?.acessoTexto,
+    item?.access?.projeto === true
+      ? "Medidas, gráficos e projeto completo"
+      : item?.access?.graficos === true
+        ? "Medidas e gráficos"
+        : "Medidas"
+  );
+}
+
+async function esconderEtapasNaCentral() {
+  const ids = [
+    IDS.medidas,
+    IDS.valorMedidas,
+    IDS.graficos,
+    IDS.valorGraficos,
+    IDS.projeto,
+    IDS.valorProjeto,
+    IDS.boxMedidas,
+    IDS.boxGraficos,
+    IDS.boxProjeto,
+    IDS.avisosEtapas,
+    IDS.avisoImportante,
+    "#box4"
+  ];
+
+  await Promise.allSettled(
+    ids.map(async (id) => {
+      try {
+        const elemento = $w(id);
+        if (typeof elemento.hide === "function") {
+          await elemento.hide();
+        }
+        if (typeof elemento.collapse === "function") {
+          await elemento.collapse();
+        }
+      } catch (_) {}
+    })
+  );
+}
+
+async function carregarCentralSegundasVias() {
+  centralSegundasViasAtiva = true;
+  codigoSegundaViaAtual = "";
+  entrega = null;
+  projetosSegundaVia = [];
+
+  alterarDescricao(
+    "Localizando os projetos comprados na sua conta..."
+  );
+
+  try {
+    const resultado =
+      await listarProjetosProntosDoMembroAtual();
+
+    await esconderProcessamento();
+    await esconderBotaoVideo();
+    await esconderEtapasNaCentral();
+
+    try {
+      $w(IDS.titulo).text =
+        "SEUS PROJETOS PRONTOS";
+      await $w(IDS.titulo).show();
+    } catch (_) {}
+
+    if (!resultado?.ok) {
+      alterarDescricao(
+        resultado?.error === "LOGIN_NECESSARIO"
+          ? "Entre na sua conta para consultar seus Projetos Prontos."
+          : "Não foi possível consultar seus projetos agora."
+      );
+
+      try {
+        await $w(IDS.galeria).hide();
+        await $w(IDS.galeria).collapse();
+      } catch (_) {}
+
+      return;
+    }
+
+    projetosSegundaVia =
+      Array.isArray(resultado.items)
+        ? resultado.items
+        : [];
+
+    if (!projetosSegundaVia.length) {
+      alterarDescricao(
+        "Nenhum Projeto Pronto comprado foi encontrado nesta conta."
+      );
+
+      try {
+        await $w(IDS.galeria).hide();
+        await $w(IDS.galeria).collapse();
+      } catch (_) {}
+
+      return;
+    }
+
+    alterarDescricao(
+      "Clique no projeto que deseja abrir novamente."
+    );
+
+    const itensGaleria = projetosSegundaVia
+      .filter((item) => safe(item?.thumbnail))
+      .map((item) => ({
+        type: "image",
+        src: safe(item.thumbnail),
+        title:
+          "#" + digits(item.codigoProjeto) + " " + safe(item.titulo),
+        description:
+          descricaoAcessoCentral(item)
+      }));
+
+    $w(IDS.galeria).items =
+      itensGaleria;
+
+    try {
+      $w(IDS.galeria).clickAction = "none";
+    } catch (_) {}
+
+    await $w(IDS.galeria).expand();
+    await $w(IDS.galeria).show();
+
+  } catch (erro) {
+    console.error(
+      "Erro ao carregar central de segundas vias:",
+      erro?.message || erro
+    );
+
+    await esconderProcessamento();
+    alterarDescricao(
+      "Não foi possível consultar seus projetos agora. Tente novamente em instantes."
+    );
+  }
+}
+
+async function abrirProjetoDaCentral(event) {
+  if (!centralSegundasViasAtiva) {
+    return;
+  }
+
+  const indice = Number(event?.itemIndex);
+  const item = projetosSegundaVia[indice];
+
+  if (!item?.codigoProjeto) {
+    return;
+  }
+
+  try {
+    await mostrarProcessamento();
+
+    alterarDescricao(
+      "Abrindo novamente o projeto #" + digits(item.codigoProjeto) + "..."
+    );
+
+    const resultado =
+      await buscarSegundaViaProjetoPronto({
+        codigoProjeto:
+          item.codigoProjeto
+      });
+
+    if (!resultado?.ok || !resultado?.approved) {
+      await esconderProcessamento();
+      alterarDescricao(
+        resultado?.error === "COMPRA_NAO_ENCONTRADA"
+          ? "Esta compra não foi encontrada para a conta atual."
+          : "Não foi possível abrir este projeto agora."
+      );
+      return;
+    }
+
+    centralSegundasViasAtiva = false;
+    codigoSegundaViaAtual =
+      digits(item.codigoProjeto);
+
+    await renderizarEntrega(
+      resultado
+    );
+
+  } catch (erro) {
+    console.error(
+      "Erro ao abrir segunda via:",
+      erro?.message || erro
+    );
+
+    await esconderProcessamento();
+    alterarDescricao(
+      "Não foi possível abrir este projeto agora. Tente novamente."
+    );
+  }
+}
 
 // ======================================================
 // RENDERIZAR ENTREGA
@@ -2306,18 +2533,12 @@ async function carregarEntrega() {
     !checkoutId &&
     !token
   ) {
-    alterarDescricao(
-      "Link de entrega inválido: identificação da compra não encontrada."
-    );
-
-    await $w(
-      IDS.galeria
-    ).hide();
-
-    await esconderBotaoVideo();
-
+    await carregarCentralSegundasVias();
     return;
   }
+
+  centralSegundasViasAtiva = false;
+  codigoSegundaViaAtual = "";
 
   alterarDescricao(
     "Pagamento recebido. Preparando sua entrega..."

@@ -1,0 +1,91 @@
+name: Aplicar estado inicial da entrega
+
+on:
+  push:
+    branches:
+      - ocultar-repeater-ate-dados-20260813
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Ocultar repeater ate os dados chegarem
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
+          s = p.read_text(encoding='utf-8')
+
+          alvo = '''function configurarRepeater() {
+  const repetidor = $w(IDS.repetidor);
+'''
+          insercao = '''async function prepararRepeaterParaCarregamento() {
+  /*
+    O Editor mantém um item-modelo do Repeater visível antes de os dados reais
+    chegarem. Na abertura por e-mail/F5 isso expunha título, valores, botões e
+    setas crus. O Repeater fica vazio, oculto e recolhido até receber dados.
+  */
+  try {
+    const repetidor = $w(IDS.repetidor);
+    repetidor.data = [];
+
+    if (typeof repetidor.hide === "function") {
+      await repetidor.hide();
+    }
+
+    if (typeof repetidor.collapse === "function") {
+      await repetidor.collapse();
+    }
+  } catch (erro) {
+    console.warn(
+      "Não foi possível preparar o estado inicial do repeater:",
+      erro?.message || erro
+    );
+  }
+}
+
+function configurarRepeater() {
+  const repetidor = $w(IDS.repetidor);
+'''
+          assert alvo in s, 'Ponto configurarRepeater não encontrado'
+          s = s.replace(alvo, insercao, 1)
+
+          alvo_ready = '''$w.onReady(function () {
+  checkoutEmAndamento = false;
+
+  try {
+    configurarRepeater();
+'''
+          novo_ready = '''$w.onReady(async function () {
+  checkoutEmAndamento = false;
+
+  await prepararRepeaterParaCarregamento();
+
+  try {
+    configurarRepeater();
+'''
+          assert alvo_ready in s, 'Bloco onReady esperado não encontrado'
+          s = s.replace(alvo_ready, novo_ready, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+      - name: Validar pagina
+        run: npx eslint 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+      - name: Gravar pagina
+        run: |
+          git config user.name 'PELEGO BOX Automação'
+          git config user.email 'pelegobox82@gmail.com'
+          git add 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+          git commit -m 'Ocultar repeater ate a entrega estar pronta' || exit 0
+          git push origin HEAD

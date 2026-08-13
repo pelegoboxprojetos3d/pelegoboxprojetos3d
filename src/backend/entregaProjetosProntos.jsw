@@ -1636,6 +1636,7 @@ function projectPayload(
 }
 
 async function identidadeMembroAtual() {
+  // CENTRAL_MEMBRO_REAL_V2
   let membro = null;
 
   try {
@@ -1644,48 +1645,28 @@ async function identidadeMembroAtual() {
     return null;
   }
 
-  if (!membro?._id) {
+  const memberId = safe(membro?._id);
+  if (!memberId) {
     return null;
   }
 
-  const emailsContato =
-    Array.isArray(membro?.contactDetails?.emails)
-      ? membro.contactDetails.emails
-      : [];
+  const emailsContato = Array.isArray(membro?.contactDetails?.emails)
+    ? membro.contactDetails.emails
+    : [];
 
-  const emails = emailsContato
-    .map((item) =>
-      typeof item === "string"
-        ? item
-        : firstValue(item?.email, item?.value)
-    )
-    .filter(Boolean);
+  const emailsMembro = new Set();
+  const adicionarEmail = (value) => {
+    const email = normalizeEmail(
+      typeof value === "string"
+        ? value
+        : firstValue(value?.email, value?.value)
+    );
+    if (email) emailsMembro.add(email);
+  };
 
-  const email = normalizeEmail(
-    firstValue(
-      membro?.loginEmail,
-      emails[0],
-      membro?.contactDetails?.email
-    )
-  );
-
-  const phonesContato =
-    Array.isArray(membro?.contactDetails?.phones)
-      ? membro.contactDetails.phones
-      : [];
-
-  const telefones = phonesContato
-    .map((item) =>
-      typeof item === "string"
-        ? item
-        : firstValue(
-          item?.phone,
-          item?.value,
-          item?.number
-        )
-    )
-    .map(normalizeWhatsapp)
-    .filter(Boolean);
+  adicionarEmail(membro?.loginEmail);
+  emailsContato.forEach(adicionarEmail);
+  adicionarEmail(membro?.contactDetails?.email);
 
   const nomeMembro = firstValue(
     membro?.profile?.nickname,
@@ -1695,197 +1676,218 @@ async function identidadeMembroAtual() {
     ].filter(Boolean).join(" ")
   );
 
-  const phoneVariants = new Set();
-
-  for (const phone of telefones) {
-    if (!phone) continue;
-    phoneVariants.add(phone);
-    phoneVariants.add(`+${phone}`);
-
-    if (phone.startsWith("55") && phone.length >= 12) {
-      phoneVariants.add(phone.slice(2));
-    } else if (phone.length === 10 || phone.length === 11) {
-      phoneVariants.add(`55${phone}`);
-      phoneVariants.add(`+55${phone}`);
-    }
-  }
-
   const clientes = new Map();
-
-  if (email) {
-    for (const field of ["email", "Email"]) {
-      try {
-        const result = await wixData
-          .query(CLIENTS_COLLECTION)
-          .eq(field, email)
-          .limit(20)
-          .find(READ_OPTS);
-
-        for (const item of result.items || []) {
-          const id = safe(item?._id);
-          if (id) clientes.set(id, item);
-        }
-      } catch (_) {}
-    }
-  }
-
-  if (!clientes.size && phoneVariants.size) {
-    for (const field of ["whatsapp", "whatsApp"]) {
-      for (const value of phoneVariants) {
-        try {
-          const result = await wixData
-            .query(CLIENTS_COLLECTION)
-            .eq(field, value)
-            .limit(20)
-            .find(READ_OPTS);
-
-          for (const item of result.items || []) {
-            const id = safe(item?._id);
-            if (id) clientes.set(id, item);
-          }
-        } catch (_) {}
-      }
-    }
-  }
-
-  let cliente = newestFirst(
-    [...clientes.values()]
-  )[0] || null;
-
   const sessoes = new Map();
 
-  if (email) {
-    for (const field of ["email", "Email"]) {
-      try {
-        const result = await wixData
-          .query(SESSIONS_COLLECTION)
-          .eq(field, email)
-          .limit(50)
-          .find(READ_OPTS);
+  async function coletar(collection, field, value, target, limit = 100) {
+    if (!safe(value)) return;
+    try {
+      const result = await wixData
+        .query(collection)
+        .eq(field, value)
+        .limit(limit)
+        .find(READ_OPTS);
 
-        for (const item of result.items || []) {
-          const id = safe(item?._id);
-          if (id) sessoes.set(id, item);
-        }
-      } catch (_) {}
-    }
-  }
-
-  if (!sessoes.size && phoneVariants.size) {
-    for (const field of ["whatsapp", "whatsApp", "whatsappE164"]) {
-      for (const value of phoneVariants) {
-        try {
-          const result = await wixData
-            .query(SESSIONS_COLLECTION)
-            .eq(field, value)
-            .limit(50)
-            .find(READ_OPTS);
-
-          for (const item of result.items || []) {
-            const id = safe(item?._id);
-            if (id) sessoes.set(id, item);
-          }
-        } catch (_) {}
+      for (const item of result.items || []) {
+        const id = safe(item?._id);
+        if (id) target.set(id, item);
       }
-    }
+    } catch (_) {}
   }
 
-  const sessao = newestFirst(
-    [...sessoes.values()]
-  )[0] || null;
+  /*
+    O memberId/_owner é a ponte mais forte quando existe.
+    Depois ampliamos pelos e-mails autenticados do próprio membro.
+  */
+  await Promise.all([
+    coletar(CLIENTS_COLLECTION, "_owner", memberId, clientes, 100),
+    coletar(SESSIONS_COLLECTION, "_owner", memberId, sessoes, 200)
+  ]);
 
-  if (!cliente && sessao) {
-    const sessionClientId = firstValue(
-      sessao?.clienteId,
-      sessao?.["Cliente ID"]
+  for (const email of [...emailsMembro]) {
+    await Promise.all([
+      coletar(CLIENTS_COLLECTION, "email", email, clientes, 100),
+      coletar(CLIENTS_COLLECTION, "Email", email, clientes, 100),
+      coletar(SESSIONS_COLLECTION, "email", email, sessoes, 200),
+      coletar(SESSIONS_COLLECTION, "Email", email, sessoes, 200)
+    ]);
+  }
+
+  const clientIds = new Set();
+  const whatsapps = new Set();
+
+  for (const item of clientes.values()) {
+    const id = firstValue(
+      item?.clienteId,
+      item?.clienteID,
+      item?.["Cliente ID"],
+      item?._id
     );
+    if (id) clientIds.add(id);
 
-    if (sessionClientId) {
-      cliente =
-        await findOne(
-          CLIENTS_COLLECTION,
-          "clienteId",
-          sessionClientId
-        );
+    adicionarEmail(firstValue(item?.email, item?.Email, item?.["E-mail"]));
 
-      if (!cliente) {
-        try {
-          cliente = await wixData.get(
-            CLIENTS_COLLECTION,
-            sessionClientId,
-            READ_OPTS
-          );
-        } catch (_) {
-          cliente = null;
-        }
-      }
-    }
+    const whats = normalizeWhatsapp(
+      firstValue(item?.whatsapp, item?.whatsApp, item?.Whatsapp, item?.WhatsApp)
+    );
+    if (whats) whatsapps.add(whats);
   }
 
+  for (const item of sessoes.values()) {
+    const id = firstValue(
+      item?.clienteId,
+      item?.clienteID,
+      item?.["Cliente ID"]
+    );
+    if (id) clientIds.add(id);
+
+    adicionarEmail(firstValue(item?.email, item?.Email, item?.["E-mail"]));
+
+    const whats = normalizeWhatsapp(sessionWhatsapp(item));
+    if (whats) whatsapps.add(whats);
+  }
+
+  /*
+    Uma sessão autenticada pode apontar para um cliente criado em outra visita.
+    Carregamos esses clientes por ID para completar o grafo de identidade.
+  */
+  for (const id of [...clientIds]) {
+    await coletar(CLIENTS_COLLECTION, "clienteId", id, clientes, 20);
+    try {
+      const item = await wixData.get(CLIENTS_COLLECTION, id, READ_OPTS);
+      if (item?._id) clientes.set(safe(item._id), item);
+    } catch (_) {}
+  }
+
+  for (const item of clientes.values()) {
+    const id = firstValue(item?.clienteId, item?.clienteID, item?.["Cliente ID"], item?._id);
+    if (id) clientIds.add(id);
+    adicionarEmail(firstValue(item?.email, item?.Email, item?.["E-mail"]));
+  }
+
+  const cliente = newestFirst([...clientes.values()])[0] || null;
+  const sessao = newestFirst([...sessoes.values()])[0] || null;
   const payloadCliente = clientPayload(cliente);
+  const loginEmail = normalizeEmail(membro?.loginEmail);
 
   return {
-    memberId: safe(membro._id),
+    memberId,
     cliente,
     clienteId: firstValue(
       payloadCliente.clienteId,
+      [...clientIds][0],
       sessao?.clienteId,
-      sessao?.["Cliente ID"],
       cliente?._id
     ),
+    clientIds: [...clientIds],
     nome: firstValue(
       payloadCliente.nome,
       sessao?.nomeCliente,
       sessao?.nome,
       nomeMembro
     ),
-    loginEmail: email,
-    email: firstValue(
-      email,
-      payloadCliente.email,
-      normalizeEmail(sessao?.email),
-      normalizeEmail(sessao?.Email)
-    ),
+    loginEmail: firstValue(loginEmail, [...emailsMembro][0]),
+    email: firstValue(loginEmail, [...emailsMembro][0], payloadCliente.email),
+    emails: [...emailsMembro],
     whatsapp: firstValue(
       payloadCliente.whatsapp,
       sessionWhatsapp(sessao),
-      telefones[0]
-    )
+      [...whatsapps][0]
+    ),
+    whatsapps: [...whatsapps]
   };
 }
 
-async function queryPurchasesByIdentity(identity = {}) {
-  const loginEmail = normalizeEmail(
-    identity?.loginEmail || identity?.email
+function purchaseBelongsToMemberIdentity(purchase, identity = {}) {
+  const emails = new Set(
+    [
+      ...(Array.isArray(identity?.emails) ? identity.emails : []),
+      identity?.loginEmail,
+      identity?.email
+    ]
+      .map(normalizeEmail)
+      .filter(Boolean)
   );
 
-  if (!loginEmail) {
+  const clientIds = new Set(
+    [
+      ...(Array.isArray(identity?.clientIds) ? identity.clientIds : []),
+      identity?.clienteId,
+      identity?.cliente?._id
+    ]
+      .map(safe)
+      .filter(Boolean)
+  );
+
+  const itemEmail = purchaseEmail(purchase);
+  const itemClientId = purchaseClientId(purchase);
+
+  return Boolean(
+    (itemEmail && emails.has(itemEmail)) ||
+    (itemClientId && clientIds.has(itemClientId))
+  );
+}
+
+async function queryPurchasesByIdentity(identity = {}) {
+  const emails = new Set(
+    [
+      ...(Array.isArray(identity?.emails) ? identity.emails : []),
+      identity?.loginEmail,
+      identity?.email
+    ]
+      .map(normalizeEmail)
+      .filter(Boolean)
+  );
+
+  const clientIds = new Set(
+    [
+      ...(Array.isArray(identity?.clientIds) ? identity.clientIds : []),
+      identity?.clienteId,
+      identity?.cliente?._id
+    ]
+      .map(safe)
+      .filter(Boolean)
+  );
+
+  if (!emails.size && !clientIds.size) {
     return [];
   }
 
   const found = new Map();
 
-  for (const field of ["email", "Email"]) {
+  async function consultar(field, value) {
+    if (!safe(value)) return;
     try {
       const result = await wixData
         .query(PURCHASES_COLLECTION)
-        .eq(field, loginEmail)
+        .eq(field, value)
         .limit(1000)
         .find(READ_OPTS);
 
       for (const item of result.items || []) {
-        if (purchaseEmail(item) !== loginEmail) continue;
         const id = safe(item?._id);
         if (id) found.set(id, item);
       }
     } catch (error) {
       console.warn(
-        `Busca de compras do membro por e-mail em ${field} falhou:`,
+        `Busca de compras do membro por ${field} falhou:`,
         error?.message || error
       );
     }
   }
 
+  for (const email of emails) {
+    await consultar("email", email);
+    await consultar("Email", email);
+  }
+
+  for (const clientId of clientIds) {
+    await consultar("clienteId", clientId);
+    await consultar("clienteID", clientId);
+    await consultar("cliente", clientId);
+  }
+
+  /* Última rede de segurança para registros legados com IDs de campo diferentes. */
   if (!found.size) {
     try {
       let result = await wixData
@@ -1895,30 +1897,26 @@ async function queryPurchasesByIdentity(identity = {}) {
 
       while (result) {
         for (const item of result.items || []) {
-          if (purchaseEmail(item) === loginEmail) {
+          if (purchaseBelongsToMemberIdentity(item, identity)) {
             const id = safe(item?._id);
             if (id) found.set(id, item);
           }
         }
 
-        if (
-          typeof result.hasNext !== "function" ||
-          !result.hasNext()
-        ) {
-          break;
-        }
-
+        if (typeof result.hasNext !== "function" || !result.hasNext()) break;
         result = await result.next();
       }
     } catch (error) {
       console.warn(
-        "Varredura por e-mail das compras do membro falhou:",
+        "Varredura final das compras do membro falhou:",
         error?.message || error
       );
     }
   }
 
-  return [...found.values()];
+  return [...found.values()].filter((purchase) =>
+    purchaseBelongsToMemberIdentity(purchase, identity)
+  );
 }
 
 function acessoDescricao(access = {}) {
@@ -2010,6 +2008,9 @@ export async function listarProjetosProntosDoMembroAtual() {
   return {
     ok: true,
     memberId: identity.memberId,
+    email: identity.loginEmail || identity.email || "",
+    emailsReconhecidos: identity.emails || [],
+    clienteIdsReconhecidos: identity.clientIds || [],
     items
   };
 }
@@ -2039,17 +2040,10 @@ export async function buscarSegundaViaProjetoPronto(input = {}) {
     codigoProjeto
   );
 
-  const loginEmail = normalizeEmail(
-    identity?.loginEmail || identity?.email
-  );
-
   const purchases = allPurchases
     .filter(approvedPurchase)
     .filter((purchase) =>
-      Boolean(
-        loginEmail &&
-        purchaseEmail(purchase) === loginEmail
-      )
+      purchaseBelongsToMemberIdentity(purchase, identity)
     );
 
   if (!purchases.length) {
@@ -2084,7 +2078,11 @@ export async function buscarSegundaViaProjetoPronto(input = {}) {
       compraMaisRecente?.nomeCliente,
       identity.nome
     ),
-    email: loginEmail,
+    email: firstValue(
+      purchaseEmail(compraMaisRecente),
+      identity?.loginEmail,
+      identity?.email
+    ),
     whatsapp: firstValue(
       purchaseWhatsapp(compraMaisRecente),
       identity.whatsapp

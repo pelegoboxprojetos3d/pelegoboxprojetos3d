@@ -1,6 +1,7 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
 import wixWindowFrontend from "wix-window-frontend";
+import { authentication } from "wix-members-frontend";
 
 import {
   local
@@ -2815,6 +2816,14 @@ async function carregarCentralSegundasVias() {
 
   try {
     const resultado = await listarProjetosProntosDoMembroAtual();
+    console.log("Central Projetos Prontos - identidade resolvida:", {
+      ok: resultado?.ok,
+      memberId: resultado?.memberId,
+      email: resultado?.email,
+      emails: resultado?.emailsReconhecidos,
+      clienteIds: resultado?.clienteIdsReconhecidos,
+      projetos: Array.isArray(resultado?.items) ? resultado.items.map((item) => item.codigoProjeto) : []
+    });
     await esconderProcessamento();
 
     if (!resultado?.ok) {
@@ -3070,11 +3079,30 @@ async function carregarEntrega() {
 
 
 // ======================================================
+// LOGOUT NA PÁGINA DE ENTREGA
+// ======================================================
+
+function redirecionarHomeAoDeslogar() {
+  // REDIRECT_HOME_AO_LOGOUT_V1
+  try {
+    authentication.onLogout(() => {
+      wixLocation.to("/");
+    });
+  } catch (erro) {
+    console.warn(
+      "Não foi possível registrar o redirecionamento após logout:",
+      erro?.message || erro
+    );
+  }
+}
+
+// ======================================================
 // ON READY
 // ======================================================
 
 $w.onReady(async function () {
   checkoutEmAndamento = false;
+  redirecionarHomeAoDeslogar();
 
   await prepararRepeaterParaCarregamento();
 

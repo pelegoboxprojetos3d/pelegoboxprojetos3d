@@ -39,11 +39,26 @@ jobs:
       - name: Ajustar exemplo do WhatsApp
         run: node scripts/ajustar-placeholder-whatsapp-2026-08-12.cjs
 
+      - name: Adicionar seletor de país no WhatsApp
+        run: node scripts/adicionar-seletor-pais-whatsapp-2026-08-12.cjs
+
       - name: Reabrir login social após 3 segundos
         run: node scripts/reabrir-login-social-3s-2026-08-12.cjs
 
+      - name: Blindar reabertura do login social
+        run: node scripts/corrigir-login-social-reabertura-robusta-2026-08-12.cjs
+
       - name: Corrigir título pela coleção Videosprojetos
         run: node scripts/corrigir-titulo-videosprojetos-checkout-2026-08-12.cjs
+
+      - name: Aplicar suporte de DDI ao cadastro social
+        run: node scripts/suporte-ddi-clientes-social-2026-08-12.cjs
+
+      - name: Blindar pós-pagamento ValidaPay
+        run: node scripts/blindar-pos-pagamento-validapay-2026-08-12.cjs
+
+      - name: Adicionar celebrações pós-pagamento
+        run: node scripts/adicionar-celebracoes-pagamento-2026-08-12.cjs
 
       - name: Validar código
         run: npm run lint
@@ -59,8 +74,12 @@ jobs:
             git add \
               "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
               "src/pages/checkout-projeto-pronto.i9aj1.js" \
-              "src/public/custom-elements/pelego-checkout-pronto.js"
-            git commit -m "Automação: atualizar checkout Projetos Prontos"
+              "src/public/custom-elements/pelego-checkout-pronto.js" \
+              "src/backend/clientes.js" \
+              "src/backend/clientes.web.js" \
+              "src/backend/validaPayPixProjetosProntosCore.jsw" \
+              "src/backend/http-functions.js"
+            git commit -m "Automação: validar login, cadastro e pós-pagamento"
             git push origin HEAD:main
           fi
 

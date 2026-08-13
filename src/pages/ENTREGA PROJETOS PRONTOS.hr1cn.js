@@ -924,70 +924,17 @@ function imagensLiberadas(
 
 
 async function mostrarGaleria() {
-  if (!entrega) {
-    return;
-  }
-
-  const projeto =
-    entrega.project;
-
-  const acessos =
-    entrega.access || {};
-
-  alterarDescricao(
-    textoEntrega(
-      acessos
-    )
-  );
-
-  const imagens =
-    imagensLiberadas(
-      projeto,
-      acessos
-    );
-
-  if (
-    !imagens.length
-  ) {
-    await $w(
-      IDS.galeria
-    ).hide();
-
-    await $w(
-      IDS.galeria
-    ).collapse();
-
-    return;
-  }
-
-  $w(
-    IDS.galeria
-  ).items =
-    imagens.map(
-      (
-        imagem
-      ) => ({
-        type:
-          "image",
-
-        src:
-          imagem.src,
-
-        title:
-          imagem.title,
-
-        description:
-          ""
-      })
-    );
-
-  await $w(
-    IDS.galeria
-  ).expand();
-
-  await $w(
-    IDS.galeria
-  ).show();
+  /*
+    A Pro Gallery é apenas legado do layout antigo.
+    No modo com Repeater, cada projeto usa #imagemProjetoEntrega
+    e as setas próprias do item. Nunca reabrir #proGallery1.
+  */
+  try {
+    const galeria = $w(IDS.galeria);
+    galeria.items = [];
+    await galeria.hide();
+    await galeria.collapse();
+  } catch (_) {}
 }
 
 

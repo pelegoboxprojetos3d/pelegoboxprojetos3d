@@ -1,5 +1,12 @@
 // Padrões únicos dos Projetos Prontos.
 // Centraliza WhatsApp e títulos sem depender de SKU ou codigo_checkout.
+//
+// REGRA MESTRE DE TÍTULOS:
+// Antes do clique: manter o título-base visual atual, sem nome da etapa e sem 001–014.
+// Depois do clique:
+//   Botão 1 -> #CODIGO Medidas Projeto Pronto TITULO 001–014
+//   Botão 2 -> #CODIGO Gráficos Projeto Pronto TITULO 001–014
+//   Botão 3 -> #CODIGO Projeto Pronto Completo TITULO 001–014
 
 function safe(value) {
   return String(value ?? "").trim();
@@ -221,10 +228,14 @@ export function tituloEtapaProjetoPronto(
       ? encontrado[2]
       : semQuestionario;
 
+  /*
+    Remove tanto o padrão novo quanto todas as frases legadas já usadas.
+    Assim uma sessão antiga nunca gera título duplicado ao entrar no padrão novo.
+  */
   corpo =
     corpo
       .replace(
-        /^(?:Medidas\s+Projeto\s+Pronto|Gráficos\s+Projeto\s+Pronto|Graficos\s+Projeto\s+Pronto|Projeto\s+Pronto\s+Completo)\s+/i,
+        /^(?:Medidas\s+(?:do\s+)?Projeto\s+Pronto(?:\s+para)?|Gráficos\s+Projeto\s+Pronto|Graficos\s+Projeto\s+Pronto|Análises?\s+Gráficas(?:\s+do\s+Projeto\s+Pronto)?(?:\s+para)?|Analises?\s+Graficas(?:\s+do\s+Projeto\s+Pronto)?(?:\s+para)?|Projeto\s+Pronto\s+Completo|Projeto\s+Completo(?:\s+para)?)\s+/i,
         ""
       )
       .trim();

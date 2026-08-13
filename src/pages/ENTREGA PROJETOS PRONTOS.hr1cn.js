@@ -179,7 +179,7 @@ const MIN_PROCESSAMENTO_VISIVEL =
 
 
 const EMAIL_PROCESSAMENTO_MS =
-  7000;
+  5000;
 
 
 
@@ -351,21 +351,27 @@ async function mostrarSecao(id) {
   try { const e=$w(id); if(typeof e.expand==='function') await e.expand(); if(typeof e.show==='function') await e.show(); } catch (_) {}
 }
 async function prepararSecoesEntrega() {
-  try { const e=$w(SECOES_ENTREGA.principal); if(typeof e.show==='function') await e.show(); } catch (_) {}
   await esconderSecao(SECOES_ENTREGA.banners);
   await esconderSecao(SECOES_ENTREGA.final);
+
+  try {
+    const principal = $w(SECOES_ENTREGA.principal);
+    if (typeof principal.expand === "function") await principal.expand();
+    if (typeof principal.show === "function") await principal.show();
+  } catch (_) {}
 }
+
 async function liberarSecoesPosRepeater() {
   const mobile = wixWindowFrontend.formFactor === "Mobile";
 
-  await mostrarSecao(SECOES_ENTREGA.banners);
+  try {
+    const banners = $w(SECOES_ENTREGA.banners);
+    if (typeof banners.expand === "function") await banners.expand();
+    if (typeof banners.show === "function") await banners.show("fade");
+  } catch (_) {
+    await mostrarSecao(SECOES_ENTREGA.banners);
+  }
 
-  /*
-    A regra dos banners já existia, mas não estava sendo aplicada
-    depois que a entrega passou a ser montada pelo Repeater.
-    No mobile, banner de etapa paga some e recolhe somente o próprio
-    box. No desktop não mudamos absolutamente nada.
-  */
   if (
     mobile &&
     !centralSegundasViasAtiva &&
@@ -374,8 +380,15 @@ async function liberarSecoesPosRepeater() {
     await mostrarAvisosEntrega();
   }
 
-  await esperar(mobile ? 260 : 120);
-  await mostrarSecao(SECOES_ENTREGA.final);
+  await esperar(mobile ? 180 : 100);
+
+  try {
+    const final = $w(SECOES_ENTREGA.final);
+    if (typeof final.expand === "function") await final.expand();
+    if (typeof final.show === "function") await final.show("fade");
+  } catch (_) {
+    await mostrarSecao(SECOES_ENTREGA.final);
+  }
 }
 
 function dinheiro(
@@ -486,32 +499,22 @@ function blindarGaleriaPadrao() {
 // ======================================================
 
 async function mostrarProcessamento() {
-  if (processamentoVisualEncerrado) {
+  if (processamentoVisualEncerrado || processamentoVisivelDesde) {
     return;
   }
-
-  /*
-    PRIORIDADE ABSOLUTA DA ENTREGA:
-    a impressora precisa ser o primeiro elemento dinâmico a aparecer.
-
-    Antes o código esperava a galeria terminar de ocultar para só depois
-    expandir/mostrar o HTML. Em carregamentos lentos isso criava uma tela
-    branca desnecessária. Agora disparo a impressora primeiro e oculto a
-    galeria em paralelo. A galeria continua sem collapse para preservar o
-    espaço do layout enquanto o Make trabalha.
-  */
-  const tarefas = [];
 
   try {
     const processando = $w(IDS.processando);
 
     if (typeof processando.expand === "function") {
-      tarefas.push(processando.expand());
+      await processando.expand();
     }
 
     if (typeof processando.show === "function") {
-      tarefas.push(processando.show());
+      await processando.show("fade");
     }
+
+    processamentoVisivelDesde = Date.now();
   } catch (erro) {
     console.warn(
       "Falha ao iniciar o HTML de processamento:",
@@ -521,50 +524,32 @@ async function mostrarProcessamento() {
 
   try {
     const galeria = $w(IDS.galeria);
-
-    if (typeof galeria.hide === "function") {
-      tarefas.push(galeria.hide());
-    }
-  } catch (erro) {
-    console.warn(
-      "Falha ao ocultar a galeria durante o processamento:",
-      erro?.message || erro
-    );
-  }
-
-  await Promise.allSettled(tarefas);
-
-  /*
-    O relógio começa somente depois que o HTML terminou de expandir/aparecer.
-    Assim, quando a entrega já está pronta (ex.: link aberto pelo e-mail),
-    a impressora permanece realmente visível por pelo menos 5 segundos.
-  */
-  if (!processamentoVisivelDesde) {
-    processamentoVisivelDesde = Date.now();
-  }
+    if (typeof galeria.hide === "function") await galeria.hide();
+  } catch (_) {}
 }
 
 async function esconderProcessamento() {
   try {
     if (processamentoVisivelDesde) {
-      const tempoVisivel =
-        Date.now() - processamentoVisivelDesde;
-
-      const minimoVisivel =
-        processamentoEmailPendente
-          ? EMAIL_PROCESSAMENTO_MS
-          : MIN_PROCESSAMENTO_VISIVEL;
-
       const restante =
-        minimoVisivel - tempoVisivel;
+        MIN_PROCESSAMENTO_VISIVEL -
+        (Date.now() - processamentoVisivelDesde);
 
       if (restante > 0) {
         await esperar(restante);
       }
     }
 
-    await $w(IDS.processando).hide();
-    await $w(IDS.processando).collapse();
+    const processando = $w(IDS.processando);
+
+    if (typeof processando.hide === "function") {
+      await processando.hide("fade");
+    }
+
+    if (typeof processando.collapse === "function") {
+      await processando.collapse();
+    }
+
     processamentoVisivelDesde = 0;
     processamentoEmailPendente = false;
   } catch (erro) {
@@ -577,9 +562,14 @@ async function esconderProcessamento() {
 
 async function aguardarMinimoProcessamentoInicial() {
   if (!processamentoVisivelDesde) return;
-  const minimoVisivel = processamentoEmailPendente ? EMAIL_PROCESSAMENTO_MS : MIN_PROCESSAMENTO_VISIVEL;
-  const restante = minimoVisivel - (Date.now() - processamentoVisivelDesde);
-  if (restante > 0) await esperar(restante);
+
+  const restante =
+    MIN_PROCESSAMENTO_VISIVEL -
+    (Date.now() - processamentoVisivelDesde);
+
+  if (restante > 0) {
+    await esperar(restante);
+  }
 }
 
 function entregaProcessada(resultado) {
@@ -2798,7 +2788,10 @@ async function prepararRepeaterParaCarregamento() {
   try {
     const repetidor = $w(IDS.repetidor);
     repetidor.data = [];
-    if (typeof repetidor.show === "function") await repetidor.show();
+
+    if (typeof repetidor.hide === "function") {
+      await repetidor.hide();
+    }
   } catch (erro) {
     console.warn("Falha ao preparar repeater:", erro?.message || erro);
   }
@@ -2816,13 +2809,22 @@ async function mostrarDadosRepeater(itens) {
   const repetidor = $w(IDS.repetidor);
   const dados = Array.isArray(itens) ? itens : [];
   const mobile = wixWindowFrontend.formFactor === "Mobile";
-  await aguardarMinimoProcessamentoInicial();
+
   iniciarCicloRepeater(dados.length);
   repetidor.data = dados;
   await aguardarRepeaterPronto(5000);
-  await esperar(mobile ? 650 : 120);
+
+  await aguardarMinimoProcessamentoInicial();
   await esconderProcessamento();
-  await esperar(mobile ? 450 : 120);
+
+  try {
+    if (typeof repetidor.expand === "function") await repetidor.expand();
+    if (typeof repetidor.show === "function") await repetidor.show("fade");
+  } catch (_) {
+    try { await repetidor.show(); } catch (_) {}
+  }
+
+  await esperar(mobile ? 220 : 100);
   await liberarSecoesPosRepeater();
 }
 
@@ -3184,10 +3186,17 @@ $w.onReady(async function () {
   checkoutEmAndamento = false;
   redirecionarHomeAoDeslogar();
 
-  /*
-    Primeiro frame controlado: nada de título, botão, box ou imagem padrão
-    vazando antes da hora. A impressora é o único conteúdo dinâmico inicial.
-  */
+  try { $w(IDS.repetidor).hide(); } catch (_) {}
+  try { $w(SECOES_ENTREGA.banners).hide(); } catch (_) {}
+  try { $w(SECOES_ENTREGA.final).hide(); } catch (_) {}
+
+  const inicioProcessamento = mostrarProcessamento().catch((erro) => {
+    console.warn(
+      "Falha ao abrir processamento inicial:",
+      erro?.message || erro
+    );
+  });
+
   await prepararSecoesEntrega();
   await ocultarDadosAteCarregamento();
   blindarGaleriaPadrao();
@@ -3203,29 +3212,20 @@ $w.onReady(async function () {
     return;
   }
 
-  /* Eventos antigos ficam no arquivo por compatibilidade, mas não são ligados. */
   void ligarEventos;
+  await inicioProcessamento;
 
-  const inicio = mostrarProcessamento().catch((erro) => {
-    console.warn(
-      "Falha ao abrir processamento inicial:",
+  carregarEntrega().catch((erro) => {
+    console.error(
+      "Falha assíncrona ao carregar a entrega:",
       erro?.message || erro
     );
-  });
 
-  inicio.finally(() => {
-    carregarEntrega().catch((erro) => {
-      console.error(
-        "Falha assíncrona ao carregar a entrega:",
-        erro?.message || erro
-      );
-
-      mostrarDadosRepeater([
-        itemRepeaterMensagem(
-          "SEUS PROJETOS PRONTOS",
-          "Não foi possível carregar seus projetos agora. Atualize a página em instantes."
-        )
-      ]).catch(() => {});
-    });
+    mostrarDadosRepeater([
+      itemRepeaterMensagem(
+        "SEUS PROJETOS PRONTOS",
+        "Não foi possível carregar seus projetos agora. Atualize a página em instantes."
+      )
+    ]).catch(() => {});
   });
 });

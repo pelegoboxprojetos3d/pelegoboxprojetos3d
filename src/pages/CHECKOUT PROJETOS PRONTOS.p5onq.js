@@ -105,7 +105,13 @@ const IDS = {
     "#box2",
 
   avisoProjeto:
-    "#box3"
+    "#box3",
+
+  setaAnterior:
+    "#setaProjetoAnterior",
+
+  setaProximo:
+    "#setaProjetoProximo"
 };
 
 let projeto =
@@ -131,6 +137,18 @@ let bloqueioCliqueAte =
 
 let eventosLigados =
   false;
+
+let projetoAnteriorCache =
+  null;
+
+let projetoProximoCache =
+  null;
+
+let navegacaoProjetoEmAndamento =
+  false;
+
+let vizinhosToken =
+  0;
 
 let identificacao = {
   whatsapp: "",
@@ -664,6 +682,364 @@ async function buscarProjeto(
     );
 
     return null;
+  }
+}
+
+
+// ======================================================
+// NAVEGAÇÃO ENTRE PROJETOS
+// ======================================================
+
+function estadoSetaProjeto(
+  id,
+  disponivel
+) {
+  try {
+    const seta =
+      $w(id);
+
+    if (disponivel) {
+      seta.enable();
+    } else {
+      seta.disable();
+    }
+  } catch (_) {}
+}
+
+async function buscarProjetoVizinho(
+  direcao,
+  itemBase = projeto
+) {
+  const codigoAtual =
+    Number(
+      codigoPublico(
+        itemBase
+      )
+    );
+
+  if (
+    !Number.isSafeInteger(
+      codigoAtual
+    )
+  ) {
+    return null;
+  }
+
+  try {
+    let consulta =
+      wixData.query(
+        COLLECTION
+      );
+
+    if (
+      direcao < 0
+    ) {
+      consulta =
+        consulta
+          .lt(
+            "ordem_video",
+            codigoAtual
+          )
+          .descending(
+            "ordem_video"
+          );
+    } else {
+      consulta =
+        consulta
+          .gt(
+            "ordem_video",
+            codigoAtual
+          )
+          .ascending(
+            "ordem_video"
+          );
+    }
+
+    const resultado =
+      await consulta
+        .limit(1)
+        .find();
+
+    return resultado.items.length
+      ? resultado.items[0]
+      : null;
+
+  } catch (error) {
+    console.warn(
+      "Falha ao localizar projeto vizinho:",
+      error?.message ||
+      error
+    );
+
+    return null;
+  }
+}
+
+async function prepararProjetosVizinhos() {
+  if (!projeto) {
+    return;
+  }
+
+  const codigoBase =
+    codigoPublico(
+      projeto
+    );
+
+  const token =
+    ++vizinhosToken;
+
+  const [
+    anterior,
+    proximo
+  ] = await Promise.all([
+    buscarProjetoVizinho(
+      -1,
+      projeto
+    ),
+
+    buscarProjetoVizinho(
+      1,
+      projeto
+    )
+  ]);
+
+  if (
+    token !== vizinhosToken ||
+    codigoPublico(projeto) !==
+      codigoBase
+  ) {
+    return;
+  }
+
+  projetoAnteriorCache =
+    anterior;
+
+  projetoProximoCache =
+    proximo;
+
+  estadoSetaProjeto(
+    IDS.setaAnterior,
+    Boolean(anterior)
+  );
+
+  estadoSetaProjeto(
+    IDS.setaProximo,
+    Boolean(proximo)
+  );
+}
+
+function atualizarCodigoNaUrl(
+  codigo
+) {
+  try {
+    wixLocation
+      .queryParams
+      .add({
+        codigo:
+          String(codigo)
+      });
+  } catch (error) {
+    console.warn(
+      "Não foi possível atualizar o código na URL:",
+      error?.message ||
+      error
+    );
+  }
+}
+
+async function carregarAcessosDoProjetoAtual(
+  codigoEsperado
+) {
+  const codigo =
+    onlyDigits(
+      codigoEsperado
+    );
+
+  if (
+    !codigo ||
+    codigoPublico(projeto) !==
+      codigo
+  ) {
+    return;
+  }
+
+  const acessosLocais =
+    lerAcessosLocais(
+      codigo
+    );
+
+  acessos =
+    acessosLocais || {
+      medidas: false,
+      graficos: false,
+      projeto: false
+    };
+
+  downloads = {
+    medidas: "",
+    graficos: "",
+    projeto: ""
+  };
+
+  if (!identificado) {
+    bloquearSemIdentificacao();
+    return;
+  }
+
+  await mostrarValoresEAcessos();
+
+  if (
+    !identificacao.clienteId
+  ) {
+    return;
+  }
+
+  try {
+    const telefone =
+      normalizarTelefone(
+        identificacao
+      );
+
+    const resultado =
+      await comTimeout(
+        obterAcessosProjeto({
+          codigoProjeto:
+            codigo,
+
+          clienteId:
+            identificacao.clienteId,
+
+          email:
+            identificacao.email,
+
+          whatsapp:
+            onlyDigits(
+              telefone.whatsappE164
+            )
+        }),
+
+        7000,
+
+        "A consulta das compras do novo projeto não respondeu."
+      );
+
+    if (
+      codigoPublico(projeto) !==
+        codigo
+    ) {
+      return;
+    }
+
+    if (
+      resultado?.ok &&
+      resultado?.access
+    ) {
+      acessos = {
+        medidas:
+          resultado.access.medidas === true,
+
+        graficos:
+          resultado.access.graficos === true,
+
+        projeto:
+          resultado.access.projeto === true
+      };
+
+      capturarDownloads(
+        resultado
+      );
+
+      salvarAcessosLocais(
+        codigo,
+        acessos
+      );
+
+      await mostrarValoresEAcessos();
+    }
+
+  } catch (error) {
+    console.warn(
+      "Falha ao atualizar acessos do projeto selecionado:",
+      error?.message ||
+      error
+    );
+  }
+}
+
+async function trocarProjeto(
+  direcao
+) {
+  if (
+    navegacaoProjetoEmAndamento ||
+    !projeto
+  ) {
+    return;
+  }
+
+  navegacaoProjetoEmAndamento =
+    true;
+
+  estadoSetaProjeto(
+    IDS.setaAnterior,
+    false
+  );
+
+  estadoSetaProjeto(
+    IDS.setaProximo,
+    false
+  );
+
+  try {
+    let destino =
+      direcao < 0
+        ? projetoAnteriorCache
+        : projetoProximoCache;
+
+    if (!destino) {
+      destino =
+        await buscarProjetoVizinho(
+          direcao,
+          projeto
+        );
+    }
+
+    if (!destino) {
+      await prepararProjetosVizinhos();
+      return;
+    }
+
+    projeto =
+      destino;
+
+    projetoAnteriorCache =
+      null;
+
+    projetoProximoCache =
+      null;
+
+    const codigoNovo =
+      codigoPublico(
+        projeto
+      );
+
+    atualizarCodigoNaUrl(
+      codigoNovo
+    );
+
+    await mostrarProjetoCompleto();
+
+    await carregarAcessosDoProjetoAtual(
+      codigoNovo
+    );
+
+  } finally {
+    navegacaoProjetoEmAndamento =
+      false;
+
+    prepararProjetosVizinhos()
+      .catch(
+        console.error
+      );
   }
 }
 
@@ -1233,6 +1609,14 @@ function esconderConteudoPrincipal() {
   ).hide();
 
   $w(
+    IDS.setaAnterior
+  ).hide();
+
+  $w(
+    IDS.setaProximo
+  ).hide();
+
+  $w(
     IDS.medidas
   ).hide();
 
@@ -1282,6 +1666,14 @@ async function mostrarProjetoCompleto() {
     ).show(),
 
     $w(
+      IDS.setaAnterior
+    ).show(),
+
+    $w(
+      IDS.setaProximo
+    ).show(),
+
+    $w(
       IDS.medidas
     ).show(),
 
@@ -1295,6 +1687,11 @@ async function mostrarProjetoCompleto() {
   ]);
 
   bloquearSemIdentificacao();
+
+  prepararProjetosVizinhos()
+    .catch(
+      console.error
+    );
 }
 
 
@@ -1856,11 +2253,16 @@ async function hidratarClienteMembroSocial(memberEmail) {
       identificacao.clienteId
     ) {
       try {
+        const codigoConsulta =
+          codigoPublico(
+            projeto
+          );
+
         const resultado =
           await comTimeout(
             obterAcessosProjeto({
               codigoProjeto:
-                codigoPublico(projeto),
+                codigoConsulta,
               clienteId:
                 identificacao.clienteId,
               email:
@@ -1873,6 +2275,14 @@ async function hidratarClienteMembroSocial(memberEmail) {
             7000,
             "A consulta das compras não respondeu."
           );
+
+        if (
+          codigoPublico(projeto) !==
+            codigoConsulta
+        ) {
+          salvarIdentificacao();
+          return;
+        }
 
         if (
           resultado?.ok &&
@@ -2613,6 +3023,30 @@ function ligarEventos() {
     () => {
       abrirEtapa(
         "PROJETO_COMPLETO"
+      ).catch(
+        console.error
+      );
+    }
+  );
+
+  $w(
+    IDS.setaAnterior
+  ).onClick(
+    () => {
+      trocarProjeto(
+        -1
+      ).catch(
+        console.error
+      );
+    }
+  );
+
+  $w(
+    IDS.setaProximo
+  ).onClick(
+    () => {
+      trocarProjeto(
+        1
       ).catch(
         console.error
       );

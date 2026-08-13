@@ -210,6 +210,36 @@ trocar(
   'mostrarDadosRepeater'
 );
 
+// Se houver falha terminal, a mensagem também entra no Repeater oculto e depois aparece suavemente.
+trocar(
+  'async function encerrarProcessamentoPendente(',
+  'async function carregarDetalhesDaCentral(resumos) {',
+  `async function encerrarProcessamentoPendente(titulo, mensagem) {
+  try {
+    const repetidor = $w(IDS.repetidor);
+    const dados = [itemRepeaterMensagem(titulo, mensagem)];
+    iniciarCicloRepeater(dados.length);
+    repetidor.data = dados;
+    await aguardarRepeaterPronto(3000);
+
+    await esconderProcessamento();
+
+    if (typeof repetidor.expand === "function") await repetidor.expand();
+    if (typeof repetidor.show === "function") await repetidor.show("fade");
+  } catch (erro) {
+    console.warn(
+      "Falha ao mostrar mensagem de processamento pendente:",
+      erro?.message || erro
+    );
+
+    await esconderProcessamento();
+  }
+
+  processamentoVisualEncerrado = true;
+}`,
+  'encerrarProcessamentoPendente'
+);
+
 // Primeiro frame: repeater e áreas seguintes somem antes da consulta.
 const novoOnReady = `$w.onReady(async function () {
   checkoutEmAndamento = false;

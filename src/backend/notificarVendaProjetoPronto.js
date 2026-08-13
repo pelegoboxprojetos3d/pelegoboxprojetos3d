@@ -13,9 +13,13 @@ const safe = value => String(value ?? "").trim();
 const digits = value => safe(value).replace(/\D/g, "");
 
 function phone(value) {
-  let n = digits(value);
-  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) return `+${n}`;
-  if (n.length === 10 || n.length === 11) return `+55${n}`;
+  const original = safe(value);
+  let number = digits(original);
+  if (!number) return "";
+  if (original.startsWith("+") && number.length >= 7 && number.length <= 15) return `+${number}`;
+  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) return `+${number}`;
+  if (number.length === 10 || number.length === 11) return `+55${number}`;
+  if (number.length >= 7 && number.length <= 15) return `+${number}`;
   return "";
 }
 

@@ -36,9 +36,14 @@ function parseMoney(value) {
 }
 
 function normalizePhone(value) {
-  let number = digits(value);
-  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) number = number.slice(2);
-  return number.length === 10 || number.length === 11 ? `+55${number}` : "";
+  const original = safe(value);
+  let number = digits(original);
+  if (!number) return "";
+  if (original.startsWith("+") && number.length >= 7 && number.length <= 15) return `+${number}`;
+  if (number.startsWith("55") && (number.length === 12 || number.length === 13)) return `+${number}`;
+  if (number.length === 10 || number.length === 11) return `+55${number}`;
+  if (number.length >= 7 && number.length <= 15) return `+${number}`;
+  return "";
 }
 
 

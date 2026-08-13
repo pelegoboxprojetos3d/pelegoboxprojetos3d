@@ -156,7 +156,7 @@ function sessionIdentityVerified(value = ctx) {
 }
 
 function markSessionIdentityVerified(value = ctx) {
-  const n = phone(value?.whatsappE164 || value?.whatsapp);
+  const n = phone(value?.whatsappE164 || value?.whatsapp, value?.ddi || "55");
   if (!n || !identityComplete(value)) return;
 
   try {

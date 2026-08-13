@@ -34,9 +34,14 @@ function money(v) {
 }
 
 function phone(v) {
-  let n = digits(v);
-  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);
-  return n.length === 10 || n.length === 11 ? `+55${n}` : "";
+  const original = safe(v);
+  let n = digits(original);
+  if (!n) return "";
+  if (original.startsWith("+") && n.length >= 7 && n.length <= 15) return `+${n}`;
+  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) return `+${n}`;
+  if (n.length === 10 || n.length === 11) return `+55${n}`;
+  if (n.length >= 7 && n.length <= 15) return `+${n}`;
+  return "";
 }
 
 

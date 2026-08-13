@@ -30,9 +30,6 @@ import {
 // ======================================================
 
 const IDS = {
-  repetidor:
-    "#repetidopaginadeentrega",
-
   titulo:
     "#txtTitulo",
 
@@ -230,9 +227,6 @@ let projetosSegundaVia =
 
 let codigoSegundaViaAtual =
   "";
-
-const indiceGraficoPorProjeto =
-  new Map();
 
 
 // ======================================================
@@ -2244,84 +2238,22 @@ function ligarEventos() {
 
 
 // ======================================================
-// REPEATER — 1 ITEM = 1 PROJETO
+// CENTRAL DE SEGUNDAS VIAS
 // ======================================================
 
-function itemIdProjeto(dados, indice = 0) {
-  const codigo = digits(dados?.project?.codigoProjeto);
-  return codigo ? `projeto-${codigo}` : `projeto-${indice + 1}`;
+function descricaoAcessoCentral(item = {}) {
+  return firstValue(
+    item?.acessoTexto,
+    item?.access?.projeto === true
+      ? "Medidas, gráficos e projeto completo"
+      : item?.access?.graficos === true
+        ? "Medidas e gráficos"
+        : "Medidas"
+  );
 }
 
-function itemRepeaterProjeto(dados, indice = 0) {
-  return {
-    _id: itemIdProjeto(dados, indice),
-    tipo: "PROJETO",
-    dados
-  };
-}
-
-function itemRepeaterMensagem(titulo, descricao) {
-  return {
-    _id: "estado-central",
-    tipo: "MENSAGEM",
-    titulo: safe(titulo),
-    descricao: safe(descricao)
-  };
-}
-
-async function esconderItem($item, id, recolher = false) {
-  try {
-    const elemento = $item(id);
-    if (typeof elemento.hide === "function") {
-      await elemento.hide();
-    }
-    if (recolher && typeof elemento.collapse === "function") {
-      await elemento.collapse();
-    }
-  } catch (_) {}
-}
-
-async function mostrarItem($item, id) {
-  try {
-    const elemento = $item(id);
-    if (typeof elemento.expand === "function") {
-      await elemento.expand();
-    }
-    if (typeof elemento.show === "function") {
-      await elemento.show();
-    }
-  } catch (_) {}
-}
-
-function textoItem($item, id, valor) {
-  try {
-    $item(id).text = safe(valor);
-  } catch (_) {}
-}
-
-function pintarBoxItem($item, id, pago) {
-  try {
-    const box = $item(id);
-    box.style.backgroundColor = "#FFFFFF";
-    box.style.borderColor = pago ? CORES.compradoBorda : "#E0E0E0";
-    box.style.borderWidth = pago ? "2px" : "1px";
-  } catch (_) {}
-}
-
-async function renderizarMensagemRepeater($item, itemData) {
-  textoItem($item, IDS.titulo, itemData.titulo || "SEUS PROJETOS PRONTOS");
-  textoItem($item, IDS.descricao, itemData.descricao);
-
-  await mostrarItem($item, IDS.titulo);
-  await mostrarItem($item, IDS.descricao);
-
-  try {
-    $item(IDS.galeria).items = [];
-  } catch (_) {}
-
-  const esconder = [
-    IDS.galeria,
-    IDS.video,
+async function esconderEtapasNaCentral() {
+  const ids = [
     IDS.medidas,
     IDS.valorMedidas,
     IDS.graficos,
@@ -2337,466 +2269,38 @@ async function renderizarMensagemRepeater($item, itemData) {
   ];
 
   await Promise.allSettled(
-    esconder.map((id) => esconderItem($item, id, false))
-  );
-}
-
-async function renderizarGaleriaItem($item, dados) {
-  const projeto = dados?.project || {};
-  const acessos = dados?.access || {};
-  const imagens = imagensLiberadas(projeto, acessos);
-  const galeria = $item(IDS.galeria);
-
-  if (!imagens.length) {
-    galeria.items = [];
-    await esconderItem($item, IDS.galeria, false);
-    return;
-  }
-
-  galeria.items = imagens.map((imagem) => ({
-    type: "image",
-    src: imagem.src,
-    title: imagem.title,
-    description: ""
-  }));
-
-  await mostrarItem($item, IDS.galeria);
-}
-
-async function renderizarBotoesItem($item, dados) {
-  const acessos = dados?.access || {};
-  const etapas = dados?.stages || {};
-  const projeto = dados?.project || {};
-
-  const medidasPaga = acessos.medidas === true;
-  const graficosPaga = acessos.graficos === true;
-  const projetoPago = acessos.projeto === true;
-
-  const valorMedidas = valorEtapa(etapas.medidas, projeto.valorMedidas);
-  const valorGraficos = valorEtapa(etapas.graficos, projeto.valorGraficos);
-  const valorProjeto = valorEtapa(etapas.projeto, projeto.valorProjeto);
-
-  textoItem(
-    $item,
-    IDS.valorMedidas,
-    medidasPaga ? `PAGO — ${dinheiro(valorMedidas)}` : dinheiro(valorMedidas)
-  );
-  textoItem(
-    $item,
-    IDS.valorGraficos,
-    graficosPaga ? `PAGO — ${dinheiro(valorGraficos)}` : dinheiro(valorGraficos)
-  );
-  textoItem(
-    $item,
-    IDS.valorProjeto,
-    projetoPago ? `PAGO — ${dinheiro(valorProjeto)}` : dinheiro(valorProjeto)
-  );
-
-  pintarBoxItem($item, IDS.boxMedidas, medidasPaga);
-  pintarBoxItem($item, IDS.boxGraficos, graficosPaga);
-  pintarBoxItem($item, IDS.boxProjeto, projetoPago);
-
-  await Promise.allSettled([
-    mostrarItem($item, IDS.medidas),
-    mostrarItem($item, IDS.valorMedidas),
-    mostrarItem($item, IDS.graficos),
-    mostrarItem($item, IDS.valorGraficos),
-    mostrarItem($item, IDS.projeto),
-    mostrarItem($item, IDS.valorProjeto),
-    mostrarItem($item, IDS.boxMedidas),
-    mostrarItem($item, IDS.boxGraficos),
-    mostrarItem($item, IDS.boxProjeto),
-    mostrarItem($item, IDS.avisosEtapas),
-    mostrarItem($item, IDS.avisoImportante),
-    mostrarItem($item, "#box4")
-  ]);
-
-  if (medidasPaga) {
-    await definirComprado($item(IDS.medidas), "BAIXAR MEDIDAS");
-  } else {
-    await definirBloqueado($item(IDS.medidas), "BAIXAR MEDIDAS");
-  }
-
-  if (graficosPaga) {
-    await definirComprado($item(IDS.graficos), "BAIXAR GRÁFICOS");
-  } else if (medidasPaga) {
-    await definirDisponivel($item(IDS.graficos), "COMPRAR GRÁFICOS");
-  } else {
-    await definirBloqueado($item(IDS.graficos), "COMPRAR GRÁFICOS");
-  }
-
-  if (projetoPago) {
-    await definirComprado($item(IDS.projeto), "BAIXAR PROJETO COMPLETO");
-  } else if (graficosPaga) {
-    await definirDisponivel($item(IDS.projeto), "COMPRAR PROJETO COMPLETO");
-  } else {
-    await definirBloqueado($item(IDS.projeto), "COMPRAR PROJETO COMPLETO");
-  }
-}
-
-function nomeClienteDados(dados) {
-  return firstValue(
-    dados?.client?.nome,
-    dados?.project?.nomeCliente,
-    dados?.session?.nomeCliente,
-    "CLIENTE"
-  );
-}
-
-function nomeArquivoDownloadDados(dados, url, etapa, extensaoPadrao) {
-  const codigo = digits(dados?.project?.codigoProjeto) || "PROJETO";
-  const cliente = nomeSeguro(nomeClienteDados(dados)) || "CLIENTE";
-  const produto = nomeSeguro(etapa) || "ARQUIVO";
-  const extensao = extensaoArquivo(url, extensaoPadrao);
-  return `PP-${codigo}-${cliente}-${produto}.${extensao}`;
-}
-
-async function baixarArquivoItem($item, dados, url, etapa, extensaoPadrao) {
-  const arquivo = safe(url);
-  if (!arquivo || downloadEmAndamento) {
-    return;
-  }
-
-  downloadEmAndamento = true;
-
-  try {
-    const link = await gerarLinkDownloadImagem(
-      arquivo,
-      nomeArquivoDownloadDados(dados, arquivo, etapa, extensaoPadrao)
-    );
-
-    downloadEmAndamento = false;
-
-    if (!safe(link)) {
-      throw new Error("O Wix não devolveu o link de download.");
-    }
-
-    wixLocation.to(link);
-  } catch (erro) {
-    downloadEmAndamento = false;
-    console.error(
-      "Erro ao preparar download do item do repeater:",
-      erro?.message || erro
-    );
-    textoItem(
-      $item,
-      IDS.descricao,
-      "Não foi possível preparar o download agora. Tente novamente."
-    );
-  }
-}
-
-async function baixarMedidasItem($item, dados) {
-  if (dados?.access?.medidas !== true) {
-    return;
-  }
-
-  const arquivo = safe(dados?.project?.imagemMedidas);
-  if (!arquivo) {
-    textoItem($item, IDS.descricao, "A imagem de medidas ainda não está disponível.");
-    return;
-  }
-
-  await baixarArquivoItem($item, dados, arquivo, "MEDIDAS", "webp");
-}
-
-async function baixarGraficoItem($item, dados) {
-  if (dados?.access?.graficos !== true) {
-    return;
-  }
-
-  const graficos = Array.isArray(dados?.project?.imagensGraficos)
-    ? dados.project.imagensGraficos.filter(Boolean)
-    : [];
-
-  if (!graficos.length) {
-    textoItem($item, IDS.descricao, "Nenhuma imagem gráfica foi encontrada para download.");
-    return;
-  }
-
-  const codigo = digits(dados?.project?.codigoProjeto) || "PROJETO";
-  let indice = Number(indiceGraficoPorProjeto.get(codigo) || 0);
-  if (indice >= graficos.length) {
-    indice = 0;
-  }
-
-  indiceGraficoPorProjeto.set(codigo, (indice + 1) % graficos.length);
-
-  if (graficos.length > 1) {
-    textoItem(
-      $item,
-      IDS.descricao,
-      `Baixando gráfico ${indice + 1} de ${graficos.length}. Clique novamente para baixar o próximo.`
-    );
-  }
-
-  await baixarArquivoItem(
-    $item,
-    dados,
-    graficos[indice],
-    `GRAFICO-${indice + 1}`,
-    "webp"
-  );
-}
-
-async function atualizarPdfItem(dados) {
-  const codigoProjeto = digits(dados?.project?.codigoProjeto);
-  if (!codigoProjeto) {
-    return dados;
-  }
-
-  const checkoutId = safe(
-    wixLocation.query.checkout_id || wixLocation.query.checkoutId
-  );
-  const token = safe(wixLocation.query.token);
-
-  try {
-    if (dados?.segundaVia === true || centralSegundasViasAtiva) {
-      return await buscarSegundaViaProjetoPronto({ codigoProjeto });
-    }
-
-    if (checkoutId || token) {
-      return await buscarEntregaProjetoPronto({ checkoutId, token });
-    }
-  } catch (erro) {
-    console.warn(
-      "Falha ao atualizar PDF do projeto no repeater:",
-      erro?.message || erro
-    );
-  }
-
-  return dados;
-}
-
-async function baixarProjetoItem($item, dados) {
-  if (dados?.access?.projeto !== true) {
-    return;
-  }
-
-  let atual = dados;
-  let arquivo = safe(atual?.project?.pdfProjeto);
-
-  for (let tentativa = 1; tentativa <= 5 && !arquivo; tentativa += 1) {
-    textoItem($item, IDS.descricao, "Projeto completo pago. Localizando o PDF...");
-    atual = await atualizarPdfItem(atual);
-    arquivo = safe(atual?.project?.pdfProjeto);
-
-    if (!arquivo && tentativa < 5) {
-      await esperar(800);
-    }
-  }
-
-  if (!arquivo) {
-    textoItem(
-      $item,
-      IDS.descricao,
-      "O PDF do projeto completo ainda está sendo finalizado. Tente novamente em alguns segundos."
-    );
-    return;
-  }
-
-  wixLocation.to(linkDownloadDiretoOneDrive(arquivo));
-}
-
-async function abrirCheckoutItem($item, dados, tipo) {
-  if (checkoutEmAndamento || !dados?.project) {
-    return;
-  }
-
-  const projeto = dados.project;
-  const valor = tipo === "GRAFICOS"
-    ? Number(projeto.valorGraficos || 0)
-    : Number(projeto.valorProjeto || 0);
-
-  if (!(valor > 0)) {
-    textoItem(
-      $item,
-      IDS.descricao,
-      tipo === "GRAFICOS"
-        ? "O valor das análises gráficas ainda não foi cadastrado."
-        : "O valor do projeto completo ainda não foi cadastrado."
-    );
-    return;
-  }
-
-  const destino = montarUrlCheckout(tipo, projeto, valor);
-  if (!destino) {
-    textoItem($item, IDS.descricao, "Não foi possível preparar a próxima etapa.");
-    return;
-  }
-
-  checkoutEmAndamento = true;
-  textoItem($item, IDS.descricao, "Abrindo o pagamento...");
-  wixLocation.to(destino);
-}
-
-async function prepararVideoItem($item, dados) {
-  if (dados?.access?.medidas !== true) {
-    await esconderItem($item, IDS.video, true);
-    return;
-  }
-
-  let url = normalizarVideoUrl(dados?.project?.videoUrl);
-
-  if (!url) {
-    const itemProjeto = await buscarItemProjetoVideo(
-      dados?.project?.codigoProjeto
-    );
-    url = linkVideoDoItem(itemProjeto);
-  }
-
-  if (!url) {
-    await esconderItem($item, IDS.video, true);
-    return;
-  }
-
-  const botao = $item(IDS.video);
-  botao.label = "VÍDEO";
-  botao.link = url;
-  botao.target = "_blank";
-  await botao.enable();
-  await mostrarItem($item, IDS.video);
-}
-
-function ligarEventosItem($item, dados) {
-  try {
-    $item(IDS.medidas).onClick(async () => {
-      if (dados?.access?.medidas === true) {
-        await baixarMedidasItem($item, dados);
-      }
-    });
-  } catch (_) {}
-
-  try {
-    $item(IDS.graficos).onClick(async () => {
-      if (dados?.access?.graficos === true) {
-        await baixarGraficoItem($item, dados);
-        return;
-      }
-
-      if (dados?.access?.medidas === true) {
-        await abrirCheckoutItem($item, dados, "GRAFICOS");
-      }
-    });
-  } catch (_) {}
-
-  try {
-    $item(IDS.projeto).onClick(async () => {
-      if (dados?.access?.projeto === true) {
-        await baixarProjetoItem($item, dados);
-        return;
-      }
-
-      if (dados?.access?.graficos === true) {
-        await abrirCheckoutItem($item, dados, "PROJETO_COMPLETO");
-      }
-    });
-  } catch (_) {}
-}
-
-async function renderizarProjetoRepeater($item, dados) {
-  const projeto = dados?.project || {};
-  const acessos = dados?.access || {};
-
-  textoItem($item, IDS.titulo, montarTituloPagina(projeto));
-  textoItem($item, IDS.descricao, textoEntrega(acessos));
-
-  await mostrarItem($item, IDS.titulo);
-  await mostrarItem($item, IDS.descricao);
-
-  await renderizarGaleriaItem($item, dados);
-  await renderizarBotoesItem($item, dados);
-  ligarEventosItem($item, dados);
-
-  prepararVideoItem($item, dados).catch((erro) => {
-    console.warn(
-      "Falha ao preparar vídeo do item do repeater:",
-      erro?.message || erro
-    );
-  });
-}
-
-async function renderizarItemRepeater($item, itemData) {
-  if (itemData?.tipo === "MENSAGEM") {
-    await renderizarMensagemRepeater($item, itemData);
-    return;
-  }
-
-  if (itemData?.tipo !== "PROJETO" || !itemData?.dados) {
-    await renderizarMensagemRepeater(
-      $item,
-      itemRepeaterMensagem(
-        "SEUS PROJETOS PRONTOS",
-        "Nenhum Projeto Pronto comprado foi encontrado nesta conta."
-      )
-    );
-    return;
-  }
-
-  await renderizarProjetoRepeater($item, itemData.dados);
-}
-
-function configurarRepeater() {
-  const repetidor = $w(IDS.repetidor);
-
-  repetidor.onItemReady(($item, itemData) => {
-    renderizarItemRepeater($item, itemData).catch((erro) => {
-      console.error(
-        "Falha ao renderizar projeto no repeater:",
-        erro?.message || erro
-      );
-    });
-  });
-}
-
-async function mostrarDadosRepeater(itens) {
-  const repetidor = $w(IDS.repetidor);
-  repetidor.data = itens;
-
-  if (typeof repetidor.expand === "function") {
-    await repetidor.expand();
-  }
-  if (typeof repetidor.show === "function") {
-    await repetidor.show();
-  }
-}
-
-async function carregarDetalhesDaCentral(resumos) {
-  const completos = [];
-  const tamanhoLote = 5;
-
-  for (let inicioLote = 0; inicioLote < resumos.length; inicioLote += tamanhoLote) {
-    const lote = resumos.slice(inicioLote, inicioLote + tamanhoLote);
-
-    const resultados = await Promise.all(
-      lote.map(async (item) => {
-        try {
-          const codigoProjeto = digits(item?.codigoProjeto);
-          if (!codigoProjeto) {
-            return null;
-          }
-
-          const detalhe = await buscarSegundaViaProjetoPronto({ codigoProjeto });
-          return detalhe?.ok && detalhe?.approved ? detalhe : null;
-        } catch (erro) {
-          console.warn(
-            "Falha ao carregar um projeto da central:",
-            erro?.message || erro
-          );
-          return null;
+    ids.map(async (id) => {
+      try {
+        const elemento = $w(id);
+        if (typeof elemento.hide === "function") {
+          await elemento.hide();
         }
-      })
-    );
-
-    completos.push(...resultados.filter(Boolean));
-  }
-
-  return completos;
+        if (typeof elemento.collapse === "function") {
+          await elemento.collapse();
+        }
+      } catch (_) {}
+    })
+  );
 }
 
-// ======================================================
-// CENTRAL DE SEGUNDAS VIAS
-// ======================================================
+async function manterAreaCentralVazia() {
+  try {
+    const galeria = $w(IDS.galeria);
+
+    if (typeof galeria.expand === "function") {
+      await galeria.expand();
+    }
+
+    if (typeof galeria.hide === "function") {
+      await galeria.hide();
+    }
+  } catch (erro) {
+    console.warn(
+      "Não foi possível preservar a altura da central vazia:",
+      erro?.message || erro
+    );
+  }
+}
 
 async function carregarCentralSegundasVias() {
   centralSegundasViasAtiva = true;
@@ -2804,64 +2308,153 @@ async function carregarCentralSegundasVias() {
   entrega = null;
   projetosSegundaVia = [];
 
+  alterarDescricao(
+    "Localizando os projetos comprados na sua conta..."
+  );
+
   try {
-    const resultado = await listarProjetosProntosDoMembroAtual();
+    const resultado =
+      await listarProjetosProntosDoMembroAtual();
+
     await esconderProcessamento();
+    await esconderBotaoVideo();
+    await esconderEtapasNaCentral();
+
+    try {
+      $w(IDS.titulo).text =
+        "SEUS PROJETOS PRONTOS";
+      await $w(IDS.titulo).show();
+    } catch (_) {}
 
     if (!resultado?.ok) {
-      await mostrarDadosRepeater([
-        itemRepeaterMensagem(
-          "SEUS PROJETOS PRONTOS",
-          resultado?.error === "LOGIN_NECESSARIO"
-            ? "Entre na sua conta para consultar seus Projetos Prontos."
-            : "Não foi possível consultar seus projetos agora."
-        )
-      ]);
+      alterarDescricao(
+        resultado?.error === "LOGIN_NECESSARIO"
+          ? "Entre na sua conta para consultar seus Projetos Prontos."
+          : "Não foi possível consultar seus projetos agora."
+      );
+
+      await manterAreaCentralVazia();
+
       return;
     }
 
-    projetosSegundaVia = Array.isArray(resultado.items)
-      ? resultado.items
-      : [];
+    projetosSegundaVia =
+      Array.isArray(resultado.items)
+        ? resultado.items
+        : [];
 
     if (!projetosSegundaVia.length) {
-      await mostrarDadosRepeater([
-        itemRepeaterMensagem(
-          "SEUS PROJETOS PRONTOS",
-          "Nenhum Projeto Pronto comprado foi encontrado nesta conta."
-        )
-      ]);
+      alterarDescricao(
+        "Nenhum Projeto Pronto comprado foi encontrado nesta conta."
+      );
+
+      await manterAreaCentralVazia();
+
       return;
     }
 
-    const detalhes = await carregarDetalhesDaCentral(projetosSegundaVia);
-
-    if (!detalhes.length) {
-      await mostrarDadosRepeater([
-        itemRepeaterMensagem(
-          "SEUS PROJETOS PRONTOS",
-          "As compras foram encontradas, mas os projetos ainda não puderam ser carregados. Atualize a página em instantes."
-        )
-      ]);
-      return;
-    }
-
-    await mostrarDadosRepeater(
-      detalhes.map((dados, indice) => itemRepeaterProjeto(dados, indice))
+    alterarDescricao(
+      "Clique no projeto que deseja abrir novamente."
     );
+
+    projetosSegundaVia = projetosSegundaVia
+      .filter((item) => safe(item?.thumbnail));
+
+    if (!projetosSegundaVia.length) {
+      alterarDescricao(
+        "Seus projetos foram encontrados, mas as imagens ainda não estão disponíveis."
+      );
+      await manterAreaCentralVazia();
+      return;
+    }
+
+    const itensGaleria = projetosSegundaVia
+      .map((item) => ({
+        type: "image",
+        src: safe(item.thumbnail),
+        title:
+          "#" + digits(item.codigoProjeto) + " " + safe(item.titulo),
+        description:
+          descricaoAcessoCentral(item)
+      }));
+
+    $w(IDS.galeria).items =
+      itensGaleria;
+
+    try {
+      $w(IDS.galeria).clickAction = "none";
+    } catch (_) {}
+
+    await $w(IDS.galeria).expand();
+    await $w(IDS.galeria).show();
+
   } catch (erro) {
     console.error(
-      "Erro ao carregar central de Projetos Prontos:",
+      "Erro ao carregar central de segundas vias:",
       erro?.message || erro
     );
 
     await esconderProcessamento();
-    await mostrarDadosRepeater([
-      itemRepeaterMensagem(
-        "SEUS PROJETOS PRONTOS",
-        "Não foi possível consultar seus projetos agora. Tente novamente em instantes."
-      )
-    ]);
+    await manterAreaCentralVazia();
+    alterarDescricao(
+      "Não foi possível consultar seus projetos agora. Tente novamente em instantes."
+    );
+  }
+}
+
+async function abrirProjetoDaCentral(event) {
+  if (!centralSegundasViasAtiva) {
+    return;
+  }
+
+  const indice = Number(event?.itemIndex);
+  const item = projetosSegundaVia[indice];
+
+  if (!item?.codigoProjeto) {
+    return;
+  }
+
+  try {
+    await mostrarProcessamento();
+
+    alterarDescricao(
+      "Abrindo novamente o projeto #" + digits(item.codigoProjeto) + "..."
+    );
+
+    const resultado =
+      await buscarSegundaViaProjetoPronto({
+        codigoProjeto:
+          item.codigoProjeto
+      });
+
+    if (!resultado?.ok || !resultado?.approved) {
+      await esconderProcessamento();
+      alterarDescricao(
+        resultado?.error === "COMPRA_NAO_ENCONTRADA"
+          ? "Esta compra não foi encontrada para a conta atual."
+          : "Não foi possível abrir este projeto agora."
+      );
+      return;
+    }
+
+    centralSegundasViasAtiva = false;
+    codigoSegundaViaAtual =
+      digits(item.codigoProjeto);
+
+    await renderizarEntrega(
+      resultado
+    );
+
+  } catch (erro) {
+    console.error(
+      "Erro ao abrir segunda via:",
+      erro?.message || erro
+    );
+
+    await esconderProcessamento();
+    alterarDescricao(
+      "Não foi possível abrir este projeto agora. Tente novamente."
+    );
   }
 }
 
@@ -2869,23 +2462,74 @@ async function carregarCentralSegundasVias() {
 // RENDERIZAR ENTREGA
 // ======================================================
 
-async function renderizarEntrega(dados) {
-  entrega = dados;
-  checkoutEmAndamento = false;
-  indiceGraficoDownload = 0;
+async function renderizarEntrega(
+  dados
+) {
+  entrega =
+    dados;
 
-  const projeto = dados?.project || {};
+  checkoutEmAndamento =
+    false;
+
+  indiceGraficoDownload =
+    0;
+
+  const projeto =
+    dados.project;
+
+  $w(
+    IDS.titulo
+  ).text =
+    montarTituloPagina(
+      projeto
+    );
 
   salvarAcessosLocais(
     projeto?.codigoProjeto,
-    dados?.access || {}
+    dados.access
   );
 
+  /*
+    Primeiro carrega tudo que já funcionava.
+  */
+
+  await renderizarBotoes();
+
+  /*
+    A impressora está sobre a galeria. Primeiro retiramos a impressora
+    (respeitando o tempo mínimo de 3 s) e só depois revelamos a imagem.
+  */
   await esconderProcessamento();
 
-  await mostrarDadosRepeater([
-    itemRepeaterProjeto(dados, 0)
-  ]);
+  await mostrarGaleria();
+
+  /*
+    Só agora os textos e botões recebem conteúdo real e podem aparecer.
+    Assim os placeholders do Editor nunca ficam expostos durante a espera.
+  */
+  await mostrarDadosCarregados();
+
+  await mostrarAvisosEntrega();
+
+  /*
+    Somente depois procura o vídeo.
+
+    Nenhum erro de vídeo consegue impedir
+    o carregamento da entrega.
+  */
+
+  prepararBotaoVideo()
+    .catch(
+      (
+        erro
+      ) => {
+        console.error(
+          "Falha ao carregar o vídeo:",
+          erro?.message ||
+          erro
+        );
+      }
+    );
 }
 
 
@@ -2979,7 +2623,35 @@ async function carregarEntrega() {
       if (
         resultado.approved
       ) {
-        entrega = resultado;
+        /* Mostra titulo, valores e botoes assim que o pagamento aprova. */
+        if (!entrega) {
+          entrega = resultado;
+          checkoutEmAndamento = false;
+          indiceGraficoDownload = 0;
+
+          const projetoAprovado =
+            resultado.project || {};
+
+          $w(IDS.titulo).text =
+            montarTituloPagina(projetoAprovado);
+
+          salvarAcessosLocais(
+            projetoAprovado?.codigoProjeto,
+            resultado.access
+          );
+
+          await renderizarBotoes();
+          await mostrarDadosCarregados();
+          await mostrarAvisosEntrega();
+
+          /* Video independe do processamento do Make/OneDrive. */
+          prepararBotaoVideo().catch((erro) => {
+            console.warn(
+              "Falha ao preparar video durante a aprovacao:",
+              erro?.message || erro
+            );
+          });
+        }
 
         if (
           entregaProcessada(
@@ -3064,49 +2736,79 @@ async function carregarEntrega() {
 // ON READY
 // ======================================================
 
-$w.onReady(function () {
-  checkoutEmAndamento = false;
+$w.onReady(
+  function () {
+    checkoutEmAndamento =
+      false;
 
-  try {
-    configurarRepeater();
-  } catch (erro) {
-    console.error(
-      "Não foi possível configurar #repetidopaginadeentrega:",
-      erro?.message || erro
+    blindarGaleriaPadrao();
+
+    /*
+      PRIMEIRO A IMPRESSORA.
+      Nenhuma limpeza de placeholder, vídeo, botão ou consulta de coleção
+      entra na frente dela. O navegador recebe o comando de exibição logo
+      no começo do onReady; todo o restante continua assíncrono.
+    */
+    const impressoraPronta =
+      mostrarProcessamento()
+        .catch(
+          (erro) => {
+            console.error(
+              "Falha ao abrir a impressora da entrega:",
+              erro?.message || erro
+            );
+          }
+        );
+
+    ocultarDadosAteCarregamento()
+      .catch(
+        (erro) => {
+          console.warn(
+            "Falha ao ocultar placeholders da entrega:",
+            erro?.message || erro
+          );
+        }
+      );
+
+    esconderBotaoVideo()
+      .catch(
+        (erro) => {
+          console.warn(
+            "Falha ao esconder botão de vídeo no início:",
+            erro?.message || erro
+          );
+        }
+      );
+
+    ligarEventos();
+
+    Promise.allSettled([
+      $w(IDS.medidas).disable(),
+      $w(IDS.graficos).disable(),
+      $w(IDS.projeto).disable()
+    ]).catch(() => {});
+
+    /*
+      A consulta da compra só começa depois que a tentativa de exibir a
+      impressora terminou. Assim o primeiro trabalho pesado da página não
+      compete com o primeiro paint do processamento.
+    */
+    impressoraPronta.finally(
+      () => {
+        carregarEntrega()
+          .catch(
+            (erro) => {
+              console.error(
+                "Falha assíncrona ao carregar a entrega:",
+                erro?.message || erro
+              );
+
+              alterarDescricao(
+                "Pagamento recebido. A entrega ainda está sendo preparada. Atualize a página em alguns instantes."
+              );
+            }
+          );
+      }
     );
-    return;
   }
-
-  /* Eventos antigos ficam no arquivo por compatibilidade, mas não são ligados. */
-  void ligarEventos;
-
-  const checkoutId = safe(
-    wixLocation.query.checkout_id || wixLocation.query.checkoutId
-  );
-  const token = safe(wixLocation.query.token);
-
-  const inicio = (!checkoutId && !token)
-    ? Promise.resolve()
-    : mostrarProcessamento().catch((erro) => {
-      console.warn(
-        "Falha ao abrir processamento inicial:",
-        erro?.message || erro
-      );
-    });
-
-  inicio.finally(() => {
-    carregarEntrega().catch((erro) => {
-      console.error(
-        "Falha assíncrona ao carregar a entrega:",
-        erro?.message || erro
-      );
-
-      mostrarDadosRepeater([
-        itemRepeaterMensagem(
-          "SEUS PROJETOS PRONTOS",
-          "Não foi possível carregar seus projetos agora. Atualize a página em instantes."
-        )
-      ]).catch(() => {});
-    });
-  });
-});
+);

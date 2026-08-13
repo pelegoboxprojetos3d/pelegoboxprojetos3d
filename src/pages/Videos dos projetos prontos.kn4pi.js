@@ -314,12 +314,25 @@ function buildReadyCheckoutUrl(
   const code =
     projectCode(itemData);
 
-  return code
-    ? (
-      "/checkoutprojetosprontos" +
-      `?codigo=${encodeURIComponent(code)}`
-    )
-    : "";
+  const brand =
+    normalizeBrand(
+      wixLocation.query.marca
+    ) ||
+    normalizeBrand(itemData?.marca_1) ||
+    normalizeBrand(itemData?.marca_2) ||
+    normalizeBrand(itemData?.marca_3);
+
+  if (!code) {
+    return "";
+  }
+
+  return (
+    "/checkoutprojetosprontos" +
+    `?codigo=${encodeURIComponent(code)}` +
+    (brand
+      ? `&marca=${encodeURIComponent(brand)}`
+      : "")
+  );
 }
 
 async function applyBrandFilter() {

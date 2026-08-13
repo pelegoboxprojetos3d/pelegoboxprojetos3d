@@ -706,6 +706,73 @@ function estadoSetaProjeto(
   } catch (_) {}
 }
 
+function normalizarMarcaNavegacao(value) {
+  try {
+    return decodeURIComponent(
+      safe(value)
+    )
+      .replace(/\+/g, " ")
+      .trim();
+  } catch (_) {
+    return safe(value)
+      .replace(/\+/g, " ")
+      .trim();
+  }
+}
+
+function marcaNavegacaoProjeto(
+  itemBase = projeto
+) {
+  /*
+    A marca escolhida na página de vídeos manda na navegação.
+    Isso é importante para projetos cadastrados em mais de uma marca: ao entrar
+    por JBL, as setas continuam em JBL, em vez de trocar para marca_1.
+  */
+  return (
+    normalizarMarcaNavegacao(
+      wixLocation.query.marca
+    ) ||
+    normalizarMarcaNavegacao(
+      itemBase?.marca_1
+    ) ||
+    normalizarMarcaNavegacao(
+      itemBase?.marca_2
+    ) ||
+    normalizarMarcaNavegacao(
+      itemBase?.marca_3
+    )
+  );
+}
+
+function consultaProjetosDaMarca(
+  itemBase = projeto
+) {
+  const marca =
+    marcaNavegacaoProjeto(
+      itemBase
+    );
+
+  if (!marca) {
+    return wixData.query(
+      COLLECTION
+    );
+  }
+
+  return wixData
+    .query(COLLECTION)
+    .eq("marca_1", marca)
+    .or(
+      wixData
+        .query(COLLECTION)
+        .eq("marca_2", marca)
+    )
+    .or(
+      wixData
+        .query(COLLECTION)
+        .eq("marca_3", marca)
+    );
+}
+
 async function buscarProjetoVizinho(
   direcao,
   itemBase = projeto
@@ -727,8 +794,8 @@ async function buscarProjetoVizinho(
 
   try {
     let consulta =
-      wixData.query(
-        COLLECTION
+      consultaProjetosDaMarca(
+        itemBase
       );
 
     if (
@@ -769,7 +836,10 @@ async function buscarProjetoVizinho(
       volta para o primeiro. Ao ultrapassar o primeiro pela esquerda,
       volta para o último. Assim as duas setas nunca chegam a um beco sem saída.
     */
-    let consultaExtremo = wixData.query(COLLECTION);
+    let consultaExtremo =
+      consultaProjetosDaMarca(
+        itemBase
+      );
     consultaExtremo = direcao < 0
       ? consultaExtremo.descending("ordem_video")
       : consultaExtremo.ascending("ordem_video");
@@ -854,12 +924,24 @@ function atualizarCodigoNaUrl(
   codigo
 ) {
   try {
+    const params = {
+      codigo:
+        String(codigo)
+    };
+
+    const marca =
+      marcaNavegacaoProjeto(
+        projeto
+      );
+
+    if (marca) {
+      params.marca =
+        marca;
+    }
+
     wixLocation
       .queryParams
-      .add({
-        codigo:
-          String(codigo)
-      });
+      .add(params);
   } catch (error) {
     console.warn(
       "Não foi possível atualizar o código na URL:",

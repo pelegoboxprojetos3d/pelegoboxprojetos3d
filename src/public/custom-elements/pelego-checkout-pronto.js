@@ -845,7 +845,7 @@ function openCard(){
  applySavedCardMode(Boolean(S.savedCard&&S.savedCard.existe===true));
 
  /* Navegadores podem aplicar o cartão salvo alguns instantes após o formulário aparecer. */
- [120,350,800,1500].forEach(function(ms){setTimeout(updateVisual,ms)});
+ [120,350,800,1500].forEach(function(ms){setTimeout(function(){if(!S.useSavedCard)updateVisual()},ms)});
 
  mobileCardOrder();
  try{E.cardSelected.scrollIntoView({behavior:"smooth",block:"start"})}catch(_){}

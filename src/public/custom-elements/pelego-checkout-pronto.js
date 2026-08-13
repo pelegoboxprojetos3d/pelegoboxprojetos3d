@@ -1405,17 +1405,45 @@ class PelegoCheckoutPronto extends HTMLElement {
     if (data?.data && typeof data.data === "object" && !data.type) data = data.data;
     return data && typeof data === "object" ? data : {};
   }
-  _height(value) {
+  _height(value, mode = "") {
     const requested = Math.ceil(Number(value || 0));
     if (!Number.isFinite(requested) || requested <= 0) return;
     const height = Math.max(180, Math.min(2300, requested + 2));
     if (Math.abs(height - this._appliedHeight) <= 1) return;
+    /*
+      No modo CARD preservamos a posição da página durante o crescimento
+      do iframe. Isso impede o scroll anchoring do Chrome/Wix de empurrar
+      o checkout para baixo quando o formulário do cartão aparece.
+    */
+    const preserveScroll = String(mode || "").trim().toUpperCase() === "CARD";
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+
     this._appliedHeight = height;
     const css = `${height}px`;
+    this.style.overflowAnchor = "none";
     this.style.height = css;
     this.style.minHeight = css;
     this.style.maxHeight = css;
-    if (this._frame) this._frame.style.height = css;
+
+    if (this._frame) {
+      this._frame.style.overflowAnchor = "none";
+      this._frame.style.height = css;
+    }
+
+    if (preserveScroll) {
+      const restoreScroll = () => {
+        try { window.scrollTo(scrollX, scrollY); } catch (_) {}
+      };
+
+      restoreScroll();
+      requestAnimationFrame(() => {
+        restoreScroll();
+        requestAnimationFrame(restoreScroll);
+      });
+      setTimeout(restoreScroll, 80);
+      setTimeout(restoreScroll, 180);
+    }
     this.dispatchEvent(new CustomEvent("checkout-height-change", { detail: { height }, bubbles: true, composed: true }));
   }
   _onWindowMessage(event) {
@@ -1427,7 +1455,7 @@ class PelegoCheckoutPronto extends HTMLElement {
       this._frameReady = true;
       this._flush();
     }
-    if (type === "CHECKOUT_LAYOUT") { this._height(data.height); return; }
+    if (type === "CHECKOUT_LAYOUT") { this._height(data.height, data.mode); return; }
     this.dispatchEvent(new CustomEvent("checkout-message", { detail: data, bubbles: true, composed: true }));
   }
 }

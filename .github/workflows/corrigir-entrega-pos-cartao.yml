@@ -1,4 +1,4 @@
-name: Corrigir entrega pós-cartão
+name: Corrigir banners mobile da entrega
 
 on:
   workflow_dispatch:
@@ -13,20 +13,21 @@ jobs:
   corrigir:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Esperar automação principal e sincronizar main
+      - name: Sincronizar main
         shell: bash
         run: |
-          sleep 25
+          sleep 10
           git fetch origin main
           git reset --hard origin/main
 
-      - name: Aplicar correções da entrega
+      - name: Recolher banners somente no celular
         shell: bash
         run: |
           python - <<'PY'
@@ -34,64 +35,48 @@ jobs:
           import re
 
           page = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
-          backend = Path('src/backend/entregaProjetosProntos.jsw')
+          s = page.read_text(encoding='utf-8')
 
-          p = page.read_text(encoding='utf-8')
-          p2, n = re.subn(
-              r'(const\s+MIN_PROCESSAMENTO_VISIVEL\s*=\s*)3000(\s*;)',
-              r'\g<1>4000\2',
-              p,
-              count=1
+          novo = '''async function liberarSecoesPosRepeater() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
+  /*
+    MOBILE:
+    a seção dos três banners informativos fica fora do fluxo real do
+    Repeater no Wix. Quando a altura do HTML da impressora/repeater muda,
+    ela pode subir por cima do item e esconder COMPRAR PROJETO COMPLETO,
+    VÍDEO e a linha tracejada.
+
+    Por segurança, no celular essa seção é ocultada E recolhida por completo.
+    No desktop nada muda.
+  */
+  if (mobile) {
+    try {
+      const banners = $w(SECOES_ENTREGA.banners);
+      if (typeof banners.hide === "function") await banners.hide();
+      if (typeof banners.collapse === "function") await banners.collapse();
+    } catch (_) {}
+  } else {
+    await mostrarSecao(SECOES_ENTREGA.banners);
+  }
+
+  await esperar(mobile ? 180 : 120);
+  await mostrarSecao(SECOES_ENTREGA.final);
+}
+'''
+
+          padrao = re.compile(
+              r'async function liberarSecoesPosRepeater\(\) \{.*?\n\}\n\nfunction dinheiro\(',
+              re.S
           )
+
+          substituto = novo + '\nfunction dinheiro('
+          s2, n = padrao.subn(substituto, s, count=1)
           if n != 1:
-              raise SystemExit('Não encontrei MIN_PROCESSAMENTO_VISIVEL = 3000 na página de entrega')
-          page.write_text(p2.rstrip() + '\n', encoding='utf-8')
+              raise SystemExit('Não encontrei liberarSecoesPosRepeater para corrigir')
 
-          b = backend.read_text(encoding='utf-8')
-
-          marker = '''const DB_OPTS = {
-  suppressAuth: true
-};'''
-          if marker not in b:
-              raise SystemExit('DB_OPTS não encontrado no backend de entrega')
-          if 'const READ_OPTS' not in b:
-              b = b.replace(
-                  marker,
-                  marker + '''\n\nconst READ_OPTS = {\n  ...DB_OPTS,\n  consistentRead: true\n};''',
-                  1
-              )
-
-          b = b.replace('.find(DB_OPTS)', '.find(READ_OPTS)')
-
-          old_purchase = '''    firstMediaFromPurchases(
-      purchases,
-      "arquivoProjeto",
-      "pdfProjeto"
-    ) ||'''
-          new_purchase = '''    firstMediaFromPurchases(
-      purchases,
-      "arquivoProjeto",
-      "arquivo_projeto",
-      "pdfProjeto"
-    ) ||'''
-          if old_purchase not in b:
-              raise SystemExit('Bloco de PDF das compras não encontrado')
-          b = b.replace(old_purchase, new_purchase, 1)
-
-          old_project = '''    mediaSource(
-      project?.arquivoProjeto ||
-      project?.pdfProjeto
-    );'''
-          new_project = '''    mediaSource(
-      project?.arquivoProjeto ||
-      project?.arquivo_projeto ||
-      project?.pdfProjeto
-    );'''
-          if old_project not in b:
-              raise SystemExit('Bloco de PDF do projeto não encontrado')
-          b = b.replace(old_project, new_project, 1)
-
-          backend.write_text(b.rstrip() + '\n', encoding='utf-8')
+          page.write_text(s2.rstrip() + '\n', encoding='utf-8')
+          print('Correção mobile aplicada com sucesso.')
           PY
 
       - name: Configurar Node.js
@@ -110,16 +95,17 @@ jobs:
         shell: bash
         run: |
           rm -f .github/workflows/corrigir-entrega-pos-cartao.yml
+          rm -f .github/workflows/hotfix-entrega-mobile-sem-banners.yml
           git config user.name "PELEGO BOX Automação"
           git config user.email "pelegobox82@gmail.com"
           git add -A
-          git commit -m "Corrige entrega pós-cartão e mantém impressora por 4s"
+          git commit -m "Corrigir sobreposição dos banners no mobile da entrega"
           git push origin HEAD:main
 
-      - name: Aguardar sincronização GitHub para Wix
-        run: sleep 15
+      - name: Aguardar Wix receber o código
+        run: sleep 20
 
-      - name: Publicar versão salva no Wix
+      - name: Publicar no Wix
         env:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
           WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3

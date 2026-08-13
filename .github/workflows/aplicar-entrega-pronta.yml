@@ -1,0 +1,34 @@
+name: Aplicar entrega validada
+
+on:
+  push:
+    branches:
+      - repeater-entrega-imagem-v3-20260813
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Buscar versão validada
+        run: git fetch origin repeater-entrega-imagem-v3-20260813
+      - name: Copiar somente a página de entrega
+        run: git show origin/repeater-entrega-imagem-v3-20260813:'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js' > 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar página
+        run: npx eslint 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+      - name: Gravar na main
+        run: |
+          git config user.name 'PELEGO BOX Automação'
+          git config user.email 'pelegobox82@gmail.com'
+          git add 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+          git commit -m 'Usar repetidor com imagem navegável na entrega' || exit 0
+          git push origin HEAD:main

@@ -270,6 +270,34 @@ button{cursor:pointer}
 .successPanel h2{margin:0;color:#164e29;font-size:22px}
 .successPanel p{margin:8px auto 16px;max-width:560px;color:#666;font-size:12px}
 
+
+/* COMPACT_DESKTOP_20260813 */
+@media(min-width:681px){
+body{padding:4px 7px}
+.stepper{padding-top:5px;padding-bottom:5px;margin-bottom:5px}
+.step{min-height:36px}
+.stepNo{width:20px;height:20px}
+.content{padding-top:6px;padding-bottom:8px}
+.paymentHeader{margin-bottom:5px}
+.paymentTopGrid{gap:6px;margin-bottom:6px}
+.methodColumn{gap:4px}
+.cardModeGrid{gap:10px}
+.cardLeft,.cardRight{padding:8px}
+.cardLeft .paymentHeaderTitle{margin-bottom:6px}
+.cardLeft .paymentNotice{margin-top:6px}
+.paymentNotice{padding:8px 10px}
+.paymentNoticeTitle{margin-bottom:4px;line-height:1.2}
+.paymentNoticeList{line-height:1.28}
+.paymentNoticeList li+li{margin-top:1px}
+.visualCard{margin-bottom:7px}
+.cardForm{padding:7px 8px}
+.cardFields{gap:6px 8px}
+.label{margin-bottom:3px}
+.cardControl{height:36px;padding-top:0;padding-bottom:0;border-radius:10px}
+.cardSubmit{margin-top:7px}
+.alert{margin-top:6px;padding:7px 9px}
+}
+
 /* MOBILE */
 @media(max-width:680px){
   body{padding:3px}

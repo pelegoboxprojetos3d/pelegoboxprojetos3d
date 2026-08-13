@@ -5,6 +5,8 @@ const CHECKOUT_HTML = String.raw`<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Pelego Box - Checkout Projeto Pronto</title>
 <script defer src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@29.2.2/dist/css/intlTelInput.css">
+<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.2.2/dist/js/intlTelInput.min.js"></script>
 <style>
 :root{
   --green:#159447;--green-dark:#0f7c3a;--green-soft:#f3fff6;
@@ -73,9 +75,24 @@ button{cursor:pointer}
 .required{color:#d32f2f}
 .control{width:100%;height:48px;padding:0 13px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none}
 .control:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
-.phoneRow{display:grid;grid-template-columns:122px 1fr}
-.phonePrefix{height:48px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #d7d7d7;border-right:0;border-radius:12px 0 0 12px;background:#fafafa;font-size:13px;font-weight:700}.countrySelect{width:122px;padding:0 7px;cursor:pointer;outline:none;color:#171717;appearance:auto}.countrySelect:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
-.phoneRow .control{border-radius:0 12px 12px 0}
+.phoneRow{display:block;position:relative}
+.phonePrefix,.countrySelect{display:none!important}
+.phoneRow .control{border-radius:12px}
+.phoneRow .iti{width:100%}
+.phoneRow .iti__tel-input{width:100%;height:48px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none;padding-left:118px!important}
+.phoneRow .iti__tel-input:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
+.phoneRow .iti__selected-country{min-width:108px;padding:0 10px;border-right:1px solid #d7d7d7;background:#fafafa;border-radius:12px 0 0 12px}
+.phoneRow .iti__selected-country-primary{gap:8px;padding:0!important}
+.phoneRow .iti__flag{transform:scale(1.35);transform-origin:center;margin-right:5px}
+.phoneRow .iti__selected-dial-code{font-size:15px;font-weight:700;color:#171717}
+.phoneRow .iti__arrow{margin-left:4px;border-top-width:5px;border-left-width:4px;border-right-width:4px}
+.phoneRow .iti__country-container{z-index:30}
+.phoneRow .iti__dropdown-content{min-width:330px;max-width:min(92vw,430px);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);overflow:hidden}
+.phoneRow .iti__search-input{height:42px;font-size:14px;padding:0 12px}
+.phoneRow .iti__country{min-height:42px;padding:7px 12px;gap:10px;font-size:14px}
+.phoneRow .iti__country .iti__flag{transform:scale(1.25)}
+.phoneRow .iti__country-name{font-weight:600}
+.phoneRow .iti__dial-code{font-weight:700;color:#555}
 .hint{margin:5px 0 0;color:#777;font-size:9px}
 .emailNotice{padding:9px 11px;border-left:4px solid #1877f2;border-radius:9px;background:#eef5ff;color:#2d405b;font-size:10px;line-height:1.4}
 .alert{display:none;margin-top:9px;padding:9px 10px;border-radius:9px;font-size:10px;line-height:1.4}
@@ -230,31 +247,7 @@ button{cursor:pointer}
           <div>
             <label class="label">WhatsApp com DDD <span class="required">*</span></label>
             <div class="phoneRow">
-              <select id="countrySelect" class="phonePrefix countrySelect" aria-label="País e código do WhatsApp"><option value="55|br">🇧🇷 +55</option>
-<option value="1|us">🇺🇸 +1</option>
-<option value="351|pt">🇵🇹 +351</option>
-<option value="54|ar">🇦🇷 +54</option>
-<option value="595|py">🇵🇾 +595</option>
-<option value="598|uy">🇺🇾 +598</option>
-<option value="56|cl">🇨🇱 +56</option>
-<option value="591|bo">🇧🇴 +591</option>
-<option value="51|pe">🇵🇪 +51</option>
-<option value="57|co">🇨🇴 +57</option>
-<option value="593|ec">🇪🇨 +593</option>
-<option value="58|ve">🇻🇪 +58</option>
-<option value="52|mx">🇲🇽 +52</option>
-<option value="34|es">🇪🇸 +34</option>
-<option value="44|gb">🇬🇧 +44</option>
-<option value="33|fr">🇫🇷 +33</option>
-<option value="49|de">🇩🇪 +49</option>
-<option value="39|it">🇮🇹 +39</option>
-<option value="41|ch">🇨🇭 +41</option>
-<option value="31|nl">🇳🇱 +31</option>
-<option value="32|be">🇧🇪 +32</option>
-<option value="353|ie">🇮🇪 +353</option>
-<option value="81|jp">🇯🇵 +81</option>
-<option value="61|au">🇦🇺 +61</option>
-<option value="64|nz">🇳🇿 +64</option></select>
+              <input type="hidden" id="countrySelect" value="55|br">
               <input id="phoneInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="47988168971">
             </div>
             <p class="hint">Informe somente DDD e número.</p>
@@ -262,31 +255,7 @@ button{cursor:pointer}
           <div>
             <label class="label">Confirme seu WhatsApp <span class="required">*</span></label>
             <div class="phoneRow">
-              <select id="countryConfirmSelect" class="phonePrefix countrySelect" aria-label="País e código da confirmação do WhatsApp"><option value="55|br">🇧🇷 +55</option>
-<option value="1|us">🇺🇸 +1</option>
-<option value="351|pt">🇵🇹 +351</option>
-<option value="54|ar">🇦🇷 +54</option>
-<option value="595|py">🇵🇾 +595</option>
-<option value="598|uy">🇺🇾 +598</option>
-<option value="56|cl">🇨🇱 +56</option>
-<option value="591|bo">🇧🇴 +591</option>
-<option value="51|pe">🇵🇪 +51</option>
-<option value="57|co">🇨🇴 +57</option>
-<option value="593|ec">🇪🇨 +593</option>
-<option value="58|ve">🇻🇪 +58</option>
-<option value="52|mx">🇲🇽 +52</option>
-<option value="34|es">🇪🇸 +34</option>
-<option value="44|gb">🇬🇧 +44</option>
-<option value="33|fr">🇫🇷 +33</option>
-<option value="49|de">🇩🇪 +49</option>
-<option value="39|it">🇮🇹 +39</option>
-<option value="41|ch">🇨🇭 +41</option>
-<option value="31|nl">🇳🇱 +31</option>
-<option value="32|be">🇧🇪 +32</option>
-<option value="353|ie">🇮🇪 +353</option>
-<option value="81|jp">🇯🇵 +81</option>
-<option value="61|au">🇦🇺 +61</option>
-<option value="64|nz">🇳🇿 +64</option></select>
+              <input type="hidden" id="countryConfirmSelect" value="55|br">
               <input id="phoneConfirmInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="Digite novamente">
             </div>
             <p id="phoneConfirmHint" class="hint">Digite novamente o mesmo WhatsApp.</p>
@@ -481,6 +450,50 @@ var E={
  visualBrand:$("visualBrand"),visualNumber:$("visualNumber"),visualName:$("visualName"),visualExpiry:$("visualExpiry")
 };
 
+var itiPhone=null,itiPhoneConfirm=null,countrySyncBusy=false;
+function itiData(instance){
+ if(!instance)return{ddi:"55",country:"br"};
+ var d={};
+ try{d=typeof instance.getSelectedCountry==="function"?instance.getSelectedCountry():instance.getSelectedCountryData()}catch(_){}
+ return{ddi:digits(d&&d.dialCode||"55")||"55",country:safe(d&&d.iso2||"br").toLowerCase()}
+}
+function setItiCountry(instance,iso2){
+ if(!instance||!iso2)return;
+ try{
+  if(typeof instance.setSelectedCountry==="function")instance.setSelectedCountry(iso2);
+  else if(typeof instance.setCountry==="function")instance.setCountry(iso2)
+ }catch(_){}
+}
+function writeCountryState(hidden,info){if(hidden)hidden.value=(info.ddi||"55")+"|"+(info.country||"br")}
+function syncPhoneCountry(source,target,sourceHidden,targetHidden,clearConfirmation){
+ if(countrySyncBusy)return;
+ countrySyncBusy=true;
+ try{
+  var info=itiData(source);
+  writeCountryState(sourceHidden,info);
+  writeCountryState(targetHidden,info);
+  setItiCountry(target,info.country);
+  if(clearConfirmation&&E.phoneConfirm)E.phoneConfirm.value="";
+ }finally{countrySyncBusy=false}
+ syncIdentityButton();
+}
+function initInternationalPhonePickers(){
+ if(!window.intlTelInput||!E.phone||!E.phoneConfirm)return;
+ var opts={
+  initialCountry:"br",
+  separateDialCode:true,
+  countrySearch:true,
+  countryOrder:["br","us","pt","ar","py","uy"]
+ };
+ itiPhone=window.intlTelInput(E.phone,opts);
+ itiPhoneConfirm=window.intlTelInput(E.phoneConfirm,opts);
+ writeCountryState(E.country,itiData(itiPhone));
+ writeCountryState(E.countryConfirm,itiData(itiPhoneConfirm));
+ E.phone.addEventListener("countrychange",function(){syncPhoneCountry(itiPhone,itiPhoneConfirm,E.country,E.countryConfirm,true)});
+ E.phoneConfirm.addEventListener("countrychange",function(){syncPhoneCountry(itiPhoneConfirm,itiPhone,E.countryConfirm,E.country,false)});
+}
+initInternationalPhonePickers();
+
 function safe(v){return String(v==null?"":v).trim()}
 function digits(v){return safe(v).replace(/\D/g,"")}
 function email(v){return safe(v).toLowerCase()}
@@ -600,7 +613,7 @@ function hydrate(ctx){
  E.price.textContent=money(S.ctx.valor||S.ctx.price);
  var src=safe(S.ctx.imagem||S.ctx.img);
  if(src){E.img.src=src;E.img.classList.remove("hidden");E.fallback.classList.add("hidden")}else{E.img.classList.add("hidden");E.fallback.classList.remove("hidden")}
- var wantedDdi=digits(S.ctx.ddi||"55")||"55";[E.country,E.countryConfirm].forEach(function(sel){if(!sel)return;var opt=Array.prototype.find.call(sel.options,function(o){return safe(o.value).split("|")[0]===wantedDdi});if(opt)sel.value=opt.value});var ci=countryInfo(E.country),p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp,ci.ddi);if(p)E.phone.value=formatPhone(p,ci.ddi);if(E.phoneConfirm)E.phoneConfirm.value="";
+ var wantedDdi=digits(S.ctx.ddi||"55")||"55",wantedCountry=safe(S.ctx.country||"br").toLowerCase();if(E.country)E.country.value=wantedDdi+"|"+wantedCountry;if(E.countryConfirm)E.countryConfirm.value=wantedDdi+"|"+wantedCountry;if(itiPhone)setItiCountry(itiPhone,wantedCountry);if(itiPhoneConfirm)setItiCountry(itiPhoneConfirm,wantedCountry);var ci=countryInfo(E.country),p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp,ci.ddi);if(p)E.phone.value=formatPhone(p,ci.ddi);if(E.phoneConfirm)E.phoneConfirm.value="";
  if(S.ctx.nome)E.name.value=safe(S.ctx.nome);
  if(S.ctx.cpfCnpj)E.cpf.value=formatCpf(S.ctx.cpfCnpj);
  if(S.ctx.email){E.email.value=email(S.ctx.email);E.email2.value=email(S.ctx.email)}
@@ -1075,3 +1088,5 @@ class PelegoCheckoutPronto extends HTMLElement {
 if (!customElements.get("pelego-checkout-pronto")) {
   customElements.define("pelego-checkout-pronto", PelegoCheckoutPronto);
 }
+
+/* COUNTRY_SELECTORS_SYNCED_V2 */

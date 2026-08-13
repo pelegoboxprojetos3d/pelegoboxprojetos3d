@@ -1,11 +1,9 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
-import { normalizarTituloProduto } from "backend/projetosProntosNormalizacao";
 
 const SESSIONS = "SessoesProjetosProntos2";
 const HISTORICO_COMPRAS = "HistoricoComprasProjetosProntos";
-const PROJECTS = "Videosprojetos";
 const DB = { suppressAuth: true };
 const SITE_BASE = "https://www.pelegobox.com.br";
 const MAKE_SALE_SECRET = "MAKE_VENDA_PROJETOS_PRONTOS_WEBHOOK";
@@ -30,38 +28,12 @@ function type(value) {
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";
 }
 
-async function tituloProjetoParaEmail(session) {
-  const codigo = digits(session?.codigoProjeto);
-  let item = null;
-
-  if (codigo) {
-    const numeric = Number(codigo);
-    if (Number.isSafeInteger(numeric)) {
-      try {
-        const result = await wixData.query(PROJECTS).eq("ordem_video", numeric).limit(1).find({ ...DB, consistentRead: true });
-        item = result.items?.[0] || null;
-      } catch (_) {}
-    }
-
-    if (!item) {
-      try {
-        const result = await wixData.query(PROJECTS).eq("ordem_video", codigo).limit(1).find({ ...DB, consistentRead: true });
-        item = result.items?.[0] || null;
-      } catch (_) {}
-    }
-
-    if (!item) {
-      try {
-        const result = await wixData.query(PROJECTS).startsWith("titulo_video", `#${codigo}`).limit(1).find({ ...DB, consistentRead: true });
-        item = result.items?.[0] || null;
-      } catch (_) {}
-    }
-  }
-
-  const tituloColecao = normalizarTituloProduto(item?.titulo_video);
-  if (tituloColecao) return tituloColecao;
-
-  return normalizarTituloProduto(session?.produto) || safe(session?.produto) || "Projeto Pronto";
+function tituloProjetoParaEmail(session) {
+  /*
+    REGRA FINAL: o e-mail usa exatamente o mesmo título comercial já salvo
+    na sessão do checkout. Não consulta Videosprojetos e não reconstrói a frase.
+  */
+  return safe(session?.produto) || "Projeto Pronto";
 }
 
 async function reservarEnvioEmail(checkoutId) {
@@ -236,7 +208,7 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
   }
 
   const amount = Number(session.valor || 0);
-  const tituloEmailCorreto = await tituloProjetoParaEmail(session);
+  const tituloEmailCorreto = tituloProjetoParaEmail(session);
   const payload = {
     event: "venda_aprovada_PROJETOS_PRONTOS",
     origem: "PELEGO_BOX_PROJETOS_PRONTOS",
@@ -276,7 +248,7 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     ...payload,
     // O cenário do Make ainda usa o campo legado "produto" no assunto e no HTML.
     // Para não mexer no checkout nem na ValidaPay, somente o payload do e-mail
-    // sobrescreve esse campo com o título canônico vindo de Videosprojetos.
+    // sobrescreve esse campo com o título exato já usado no checkout.
     produto: tituloEmailCorreto,
     tituloProjeto: tituloEmailCorreto,
     tituloEmail: tituloEmailCorreto,

@@ -157,11 +157,11 @@ async function reenviarNotificacaoValidaPay(chargeId) {
   const id = safe(chargeId);
   if (!id) return { sent: false, error: "charge_id_missing" };
 
-  const waits = [900, 1400, 2100];
+  const waits = [0, 900, 2200];
   let last = { sent: false, error: "notification_resend_failed" };
 
   for (let attempt = 0; attempt < waits.length; attempt += 1) {
-    await sleep(waits[attempt]);
+    if (waits[attempt]) await sleep(waits[attempt]);
 
     try {
       const response = await requestValidaPay(
@@ -170,7 +170,8 @@ async function reenviarNotificacaoValidaPay(chargeId) {
         { chargeId: id }
       );
 
-      if (response.ok) {
+      const providerConfirmed = response.ok && response.data?.success === true;
+      if (providerConfirmed) {
         return {
           sent: true,
           statusCode: response.statusCode,
@@ -183,7 +184,7 @@ async function reenviarNotificacaoValidaPay(chargeId) {
       last = {
         sent: false,
         statusCode: response.statusCode,
-        error: response.error || "notification_resend_failed",
+        error: response.ok && response.data?.success !== true ? "notification_not_confirmed" : (response.error || "notification_resend_failed"),
         attempt: attempt + 1
       };
     } catch (error) {

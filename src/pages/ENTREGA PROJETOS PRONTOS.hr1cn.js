@@ -454,7 +454,7 @@ async function mostrarProcessamento() {
   /*
     O relógio começa somente depois que o HTML terminou de expandir/aparecer.
     Assim, quando a entrega já está pronta (ex.: link aberto pelo e-mail),
-    a impressora permanece realmente visível por pelo menos 3 segundos.
+    a impressora permanece realmente visível por pelo menos 5 segundos.
   */
   if (!processamentoVisivelDesde) {
     processamentoVisivelDesde = Date.now();

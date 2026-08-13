@@ -193,16 +193,16 @@ function patchInvoice(file) {
   let changed = false;
 
   const oldIf = '      if (response.ok) {\n        return {\n          sent: true,';
-  const newIf = '      const providerConfirmed = response.ok && response.data?.success !== false;\n      if (providerConfirmed) {\n        return {\n          sent: true,';
+  const newIf = '      const providerConfirmed = response.ok && response.data?.success === true;\n      if (providerConfirmed) {\n        return {\n          sent: true,';
 
-  if (!code.includes('const providerConfirmed = response.ok && response.data?.success !== false;')) {
+  if (!code.includes('const providerConfirmed = response.ok && response.data?.success === true;')) {
     if (!code.includes(oldIf)) throw new Error(`${file}: bloco de confirmação da fatura não encontrado.`);
     code = code.replace(oldIf, newIf);
     changed = true;
   }
 
   const oldError = '        error: response.error || "notification_resend_failed",';
-  const newError = '        error: response.ok && response.data?.success === false ? "notification_not_confirmed" : (response.error || "notification_resend_failed"),';
+  const newError = '        error: response.ok && response.data?.success !== true ? "notification_not_confirmed" : (response.error || "notification_resend_failed"),';
   if (!code.includes('notification_not_confirmed')) {
     if (!code.includes(oldError)) throw new Error(`${file}: erro do reenvio não encontrado.`);
     code = code.replace(oldError, newError);

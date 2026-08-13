@@ -309,7 +309,7 @@ async function reusablePriceId({ codigoProjeto, tipoProduto, produto, valor }) {
     const found = (result.items || []).find(item =>
       safe(item?.validaPayPriceId) &&
       safe(item?.validaPayPriceLabel) === tituloPreco &&
-      normalizarTituloProduto(item?.tituloCheckout || item?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() &&
+      normalizarTituloProduto(item?.produto || item?.tituloCheckout).toLowerCase() === normalizarTituloProduto(produto).toLowerCase() &&
       Math.abs(Number(item?.valor || 0) - Number(valor || 0)) <= 0.01
     );
 
@@ -327,7 +327,7 @@ async function ensurePriceId({ checkoutId, codigoProjeto, tipoProduto, produto, 
   if (
     safe(current?.validaPayPriceId) &&
     safe(current?.validaPayPriceLabel) === tituloPreco &&
-    normalizarTituloProduto(current?.tituloCheckout || current?.produto).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()
+    normalizarTituloProduto(current?.produto || current?.tituloCheckout).toLowerCase() === normalizarTituloProduto(produto).toLowerCase()
   ) {
     return safe(current.validaPayPriceId);
   }
@@ -470,14 +470,14 @@ async function notifyApproved(checkoutId, chargeId, charge) {
     email: safe(session.email).toLowerCase(),
     whatsapp: normalizePhone(session.whatsapp),
     cpfCnpj: digits(session.cpfCnpj),
-    produto: decodeTitle(session.tituloCheckout || session.produto),
+    produto: decodeTitle(session.produto || session.tituloCheckout),
     tipoProduto: normalizeType(session.tipoProduto),
     codigoProjeto: safe(session.codigoProjeto),
     img: safe(session.img),
     valor: amount,
     valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + decodeTitle(session.tituloCheckout || session.produto),
-    tituloEmail: decodeTitle(session.tituloCheckout || session.produto),
+    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + decodeTitle(session.produto || session.tituloCheckout),
+    tituloEmail: decodeTitle(session.produto || session.tituloCheckout),
     botaoTexto: normalizeType(session.tipoProduto) === "GRAFICOS"
       ? "BAIXAR GRÁFICOS"
       : normalizeType(session.tipoProduto) === "PROJETO_COMPLETO"
@@ -605,7 +605,7 @@ export async function criarCobrancaPixTransparente(input = {}) {
       checkoutId,
       codigoProjeto,
       tipoProduto,
-      produto: tituloCheckout || produto,
+      produto,
       valor
     });
 

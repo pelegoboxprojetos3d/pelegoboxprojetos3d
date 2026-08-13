@@ -89,3 +89,5 @@ function configurarRepeater() {
           git add 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
           git commit -m 'Ocultar repeater ate a entrega estar pronta' || exit 0
           git push origin HEAD
+
+# trigger 2

@@ -1,0 +1,73 @@
+name: Corrigir build central Projetos Prontos
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-build-central-projetos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-build-central-projetos
+  cancel-in-progress: true
+
+jobs:
+  corrigir-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Remover chamada legada quebrada
+        run: node scripts/corrigir-build-central-projetos-2026-08-13.cjs
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        run: |
+          if git diff --quiet; then
+            echo "Nada para gravar."
+            exit 0
+          fi
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          git commit -m "Remover chamada legada abrirProjetoDaCentral"
+          git push
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 45
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file" || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

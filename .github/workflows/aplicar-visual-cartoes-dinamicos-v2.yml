@@ -1,0 +1,63 @@
+name: Aplicar visual cartões dinâmicos v2
+
+on:
+  push:
+    branches:
+      - visual-cartoes-dinamicos-v2-20260812
+    paths:
+      - .github/workflows/aplicar-visual-cartoes-dinamicos-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da versão atual
+        uses: actions/checkout@v4
+        with:
+          ref: visual-cartoes-dinamicos-v2-20260812
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Buscar patch visual já validado
+        run: |
+          git fetch origin visual-cartoes-dinamicos-20260812:refs/remotes/origin/visual-cartoes-dinamicos-20260812
+          git show origin/visual-cartoes-dinamicos-20260812:scripts/aplicar-visual-cartoes-dinamicos-2026-08-12.cjs > /tmp/visual-cards.cjs
+
+      - name: Aplicar somente a camada visual
+        run: node /tmp/visual-cards.cjs
+
+      - name: Preservar visual também no cartão tokenizado salvo
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const file='src/public/custom-elements/pelego-checkout-pronto.js';
+          let s=fs.readFileSync(file,'utf8');
+          const old='E.visualBrand.textContent=safe(c.cardBrand)||"CARTÃO";E.visualNumber.textContent="•••• •••• •••• "+last;E.visualName.textContent=safe(c.cardHolderName).toUpperCase()||"SEU NOME";E.visualExpiry.textContent=(m||"MM")+"/"+(y||"AA");';
+          const neu=`var savedLabel=safe(c.cardBrand).toUpperCase(),savedInfo={key:"default",label:safe(c.cardBrand)||"CARTÃO",variants:1};\n   if(savedLabel.indexOf("VISA")>=0)savedInfo={key:"visa",label:"VISA",variants:4};\n   else if(savedLabel.indexOf("MASTER")>=0)savedInfo={key:"mastercard",label:"MASTERCARD",variants:3};\n   else if(savedLabel.indexOf("ELO")>=0)savedInfo={key:"elo",label:"elo",variants:3};\n   else if(savedLabel.indexOf("AMEX")>=0||savedLabel.indexOf("AMERICAN")>=0)savedInfo={key:"amex",label:"AMERICAN EXPRESS",variants:2};\n   else if(savedLabel.indexOf("HIPER")>=0)savedInfo={key:"hipercard",label:"Hipercard",variants:1};\n   else if(savedLabel.indexOf("DINERS")>=0)savedInfo={key:"diners",label:"DINERS CLUB",variants:2};\n   else if(savedLabel.indexOf("DISCOVER")>=0)savedInfo={key:"discover",label:"DISCOVER",variants:2};\n   else if(savedLabel.indexOf("JCB")>=0)savedInfo={key:"jcb",label:"JCB",variants:1};\n   else if(savedLabel.indexOf("UNION")>=0)savedInfo={key:"unionpay",label:"UNIONPAY",variants:2};\n   var savedVisual=E.visualNumber.closest(".visualCard");if(savedVisual){savedVisual.dataset.brand=savedInfo.key;savedVisual.dataset.variant=cardVariant(last,savedInfo)}\n   E.visualBrand.textContent=savedInfo.label;E.visualNumber.textContent="•••• •••• •••• "+last;E.visualName.textContent=safe(c.cardHolderName).toUpperCase()||"SEU NOME";E.visualExpiry.textContent=(m||"MM")+"/"+(y||"AA");`;
+          const count=s.split(old).length-1;
+          if(count!==1)throw new Error('Trecho do cartão salvo não encontrado exatamente uma vez: '+count);
+          s=s.replace(old,neu);
+          fs.writeFileSync(file,s,'utf8');
+          NODE
+
+      - name: Instalar dependências sem pós-instalação Wix
+        run: npm ci --ignore-scripts
+
+      - name: Validar checkout
+        run: npx eslint src/public/custom-elements/pelego-checkout-pronto.js
+
+      - name: Commitar somente o checkout
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/public/custom-elements/pelego-checkout-pronto.js
+          git commit -m "Visual: cartão dinâmico por bandeira e cor"
+          git push origin HEAD:visual-cartoes-dinamicos-v2-20260812

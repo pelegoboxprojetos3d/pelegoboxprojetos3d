@@ -29,7 +29,7 @@ jobs:
       - name: Instalar dependencias
         run: npm ci --ignore-scripts
 
-      - name: Aplicar transicao suave de 5 segundos com fallback
+      - name: Aplicar transicao suave de 5 segundos com fallback final
         run: node scripts/transicao-entrega-5s-suave-20260813.cjs
 
       - name: Validar

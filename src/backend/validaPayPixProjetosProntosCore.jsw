@@ -170,7 +170,8 @@ async function reenviarNotificacaoValidaPay(chargeId) {
         { chargeId: id }
       );
 
-      if (response.ok) {
+      const providerConfirmed = response.ok && response.data?.success !== false;
+      if (providerConfirmed) {
         return {
           sent: true,
           statusCode: response.statusCode,
@@ -183,7 +184,7 @@ async function reenviarNotificacaoValidaPay(chargeId) {
       last = {
         sent: false,
         statusCode: response.statusCode,
-        error: response.error || "notification_resend_failed",
+        error: response.ok && response.data?.success === false ? "notification_not_confirmed" : (response.error || "notification_resend_failed"),
         attempt: attempt + 1
       };
     } catch (error) {
@@ -209,7 +210,7 @@ async function garantirFaturaValidaPay(checkoutId, chargeId, knownSession = null
     session?.faturaValidaPayUltimaTentativaEm || 0
   ).getTime();
 
-  if (ultimaTentativa && Date.now() - ultimaTentativa < 30000) {
+  if (ultimaTentativa && Date.now() - ultimaTentativa < 8000) {
     return { sent: false, skipped: true, reason: "cooldown" };
   }
 

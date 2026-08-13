@@ -753,7 +753,7 @@ async function pollCardDelivery(n=1) {
       */
       stopCardPoll();
       post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
-      abrirEntregaComFallback(650);
+      abrirEntregaComFallback(1900);
       return;
     }
   } catch(_) {}
@@ -780,7 +780,7 @@ async function pollPix(n=1) {
     if(r?.approved===true || ["approved","paid"].includes(safe(r?.status).toLowerCase())) {
       stopPoll(); busy=false;
       post({type:"PIX_APPROVED",ok:true,checkoutId,chargeId,deliveryUrl:deliveryUrl()});
-      abrirEntregaComFallback(850);
+      abrirEntregaComFallback(1900);
       return;
     }
   } catch(_) {}
@@ -845,7 +845,7 @@ async function createCard(data={}) {
         cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
         error:"Pagamento aprovado. Abrindo sua entrega..."
       });
-      abrirEntregaComFallback(650);
+      abrirEntregaComFallback(1900);
       return;
     }
 

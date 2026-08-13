@@ -62,7 +62,7 @@ const ACTIVE_PIX_SESSION_KEY =
   "pp_checkout_pix_ativo";
 
 const MANUTENCAO_ATIVA =
-  true;
+  false;
 
 const CHAVE_MANUTENCAO =
   "pele2026";

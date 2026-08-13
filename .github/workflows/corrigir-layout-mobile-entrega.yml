@@ -1,0 +1,183 @@
+name: Corrigir Layout Mobile Entrega
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-layout-mobile-entrega.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wix-corrigir-layout-mobile-entrega
+  cancel-in-progress: true
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Corrigir reflow mobile da entrega
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+          let s = fs.readFileSync(file, 'utf8');
+
+          function replaceBetween(start, end, replacement, label) {
+            const i = s.indexOf(start);
+            const j = s.indexOf(end, i + start.length);
+            if (i < 0 || j < 0) throw new Error(`${label}: trecho não encontrado`);
+            s = s.slice(0, i) + replacement + '\n\n' + s.slice(j);
+          }
+
+          if (!s.includes('async function aguardarMinimoProcessamentoInicial()')) {
+            const marker = 'function entregaProcessada(resultado) {';
+            const idx = s.indexOf(marker);
+            if (idx < 0) throw new Error('Marcador entregaProcessada não encontrado');
+
+            const helper = `async function aguardarMinimoProcessamentoInicial() {
+  if (!processamentoVisivelDesde) return;
+
+  const minimoVisivel = processamentoEmailPendente
+    ? EMAIL_PROCESSAMENTO_MS
+    : MIN_PROCESSAMENTO_VISIVEL;
+
+  const restante = minimoVisivel - (Date.now() - processamentoVisivelDesde);
+  if (restante > 0) {
+    await esperar(restante);
+  }
+}`;
+
+            s = s.slice(0, idx) + helper + '\n\n' + s.slice(idx);
+          }
+
+          replaceBetween(
+            'async function prepararRepeaterParaCarregamento() {',
+            'function configurarRepeater() {',
+            `async function prepararRepeaterParaCarregamento() {
+  /*
+    MOBILE: o Repeater precisa permanecer ativo no layout para o Wix calcular
+    corretamente a altura de dois ou mais projetos. Limpamos os dados, mas não
+    escondemos nem colapsamos o componente. Com data vazia não há conteúdo cru.
+  */
+  try {
+    const repetidor = $w(IDS.repetidor);
+    repetidor.data = [];
+
+    if (typeof repetidor.show === "function") {
+      await repetidor.show();
+    }
+  } catch (erro) {
+    console.warn(
+      "Não foi possível preparar o estado inicial do repeater:",
+      erro?.message || erro
+    );
+  }
+}`,
+            'prepararRepeaterParaCarregamento'
+          );
+
+          replaceBetween(
+            'async function mostrarDadosRepeater(itens) {',
+            'async function carregarDetalhesDaCentral(resumos) {',
+            `async function mostrarDadosRepeater(itens) {
+  const repetidor = $w(IDS.repetidor);
+  const dados = Array.isArray(itens) ? itens : [];
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
+  /*
+    REGRA DA ABERTURA:
+    1. a impressora fica sozinha por pelo menos 5 s;
+    2. se o Make demorar mais, continuamos esperando a imagem real;
+    3. só então os dados entram no Repeater, que já está ativo no layout;
+    4. no mobile esperamos o reflow real de todos os itens;
+    5. a impressora sai;
+    6. somente depois liberamos as seções inferiores.
+
+    Não alteramos altura, largura ou tamanho de nenhuma seção do Editor.
+  */
+  await aguardarMinimoProcessamentoInicial();
+
+  iniciarCicloRepeater(dados.length);
+  repetidor.data = dados;
+  await aguardarRepeaterPronto(5000);
+
+  /*
+    O Safari/Chrome mobile do Wix pode precisar de mais de um frame para
+    recalcular a altura total do Repeater quando existem vários projetos.
+    Esse intervalo ocorre com a impressora ainda visível, portanto não há salto.
+  */
+  await esperar(mobile ? 650 : 120);
+
+  await esconderProcessamento();
+
+  /*
+    Depois que o HTML da impressora recolhe, damos ao mobile mais um pequeno
+    ciclo de layout antes de abrir banners. Isso impede a seção inferior de
+    subir sobre o último projeto, o botão 3 e a faixa pontilhada.
+  */
+  await esperar(mobile ? 450 : 120);
+  await liberarSecoesPosRepeater();
+}`,
+            'mostrarDadosRepeater'
+          );
+
+          replaceBetween(
+            'async function liberarSecoesPosRepeater() {',
+            'function dinheiro(',
+            `async function liberarSecoesPosRepeater() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
+  await mostrarSecao(SECOES_ENTREGA.banners);
+  await esperar(mobile ? 260 : 120);
+  await mostrarSecao(SECOES_ENTREGA.final);
+}`,
+            'liberarSecoesPosRepeater'
+          );
+
+          fs.writeFileSync(file, s, 'utf8');
+          console.log('Correção de reflow mobile aplicada sem alterar tamanhos do Editor.');
+          NODE
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        run: |
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if ! git diff --cached --quiet; then
+            git commit -m "Corrigir sobreposição do repeater no mobile"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          status=$(curl --silent --output /tmp/wix --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')
+          cat /tmp/wix || true
+          test "$status" -ge 200 -a "$status" -lt 300

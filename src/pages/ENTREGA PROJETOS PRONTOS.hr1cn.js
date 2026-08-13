@@ -373,19 +373,21 @@ async function ocultarDadosAteCarregamento() {
 
 async function mostrarDadosCarregados() {
   await Promise.allSettled(
-    IDS_DADOS_REAIS_ENTREGA.map((id) => {
+    IDS_DADOS_REAIS_ENTREGA.map(async (id) => {
       try {
         const elemento = $w(id);
-        return typeof elemento.show === "function"
-          ? elemento.show()
-          : Promise.resolve();
-      } catch (_) {
-        return Promise.resolve();
-      }
+
+        if (typeof elemento.expand === "function") {
+          await elemento.expand();
+        }
+
+        if (typeof elemento.show === "function") {
+          await elemento.show();
+        }
+      } catch (_) {}
     })
   );
 }
-
 
 function blindarGaleriaPadrao() {
   /* Nunca permitir que a mídia de demonstração do Editor apareça. */
@@ -2281,6 +2283,25 @@ async function esconderEtapasNaCentral() {
   );
 }
 
+async function manterAreaCentralVazia() {
+  try {
+    const galeria = $w(IDS.galeria);
+
+    if (typeof galeria.expand === "function") {
+      await galeria.expand();
+    }
+
+    if (typeof galeria.hide === "function") {
+      await galeria.hide();
+    }
+  } catch (erro) {
+    console.warn(
+      "Não foi possível preservar a altura da central vazia:",
+      erro?.message || erro
+    );
+  }
+}
+
 async function carregarCentralSegundasVias() {
   centralSegundasViasAtiva = true;
   codigoSegundaViaAtual = "";
@@ -2312,10 +2333,7 @@ async function carregarCentralSegundasVias() {
           : "Não foi possível consultar seus projetos agora."
       );
 
-      try {
-        await $w(IDS.galeria).hide();
-        await $w(IDS.galeria).collapse();
-      } catch (_) {}
+      await manterAreaCentralVazia();
 
       return;
     }
@@ -2330,10 +2348,7 @@ async function carregarCentralSegundasVias() {
         "Nenhum Projeto Pronto comprado foi encontrado nesta conta."
       );
 
-      try {
-        await $w(IDS.galeria).hide();
-        await $w(IDS.galeria).collapse();
-      } catch (_) {}
+      await manterAreaCentralVazia();
 
       return;
     }
@@ -2342,8 +2357,18 @@ async function carregarCentralSegundasVias() {
       "Clique no projeto que deseja abrir novamente."
     );
 
+    projetosSegundaVia = projetosSegundaVia
+      .filter((item) => safe(item?.thumbnail));
+
+    if (!projetosSegundaVia.length) {
+      alterarDescricao(
+        "Seus projetos foram encontrados, mas as imagens ainda não estão disponíveis."
+      );
+      await manterAreaCentralVazia();
+      return;
+    }
+
     const itensGaleria = projetosSegundaVia
-      .filter((item) => safe(item?.thumbnail))
       .map((item) => ({
         type: "image",
         src: safe(item.thumbnail),
@@ -2370,6 +2395,7 @@ async function carregarCentralSegundasVias() {
     );
 
     await esconderProcessamento();
+    await manterAreaCentralVazia();
     alterarDescricao(
       "Não foi possível consultar seus projetos agora. Tente novamente em instantes."
     );

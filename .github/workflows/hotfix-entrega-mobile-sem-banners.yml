@@ -1,0 +1,113 @@
+name: Hotfix Entrega Mobile Sem Banners
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/hotfix-entrega-mobile-sem-banners.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hotfix-entrega-mobile-sem-banners
+  cancel-in-progress: true
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Corrigir sobreposição dos banners no mobile
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+          let s = fs.readFileSync(file, 'utf8');
+
+          const antigo = `async function liberarSecoesPosRepeater() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
+  await mostrarSecao(SECOES_ENTREGA.banners);
+
+  /*
+    A regra dos banners já existia, mas não estava sendo aplicada
+    depois que a entrega passou a ser montada pelo Repeater.
+    No mobile, banner de etapa paga some e recolhe somente o próprio
+    box. No desktop não mudamos absolutamente nada.
+  */
+  if (
+    mobile &&
+    !centralSegundasViasAtiva &&
+    entrega?.access
+  ) {
+    await mostrarAvisosEntrega();
+  }
+
+  await esperar(mobile ? 260 : 120);
+  await mostrarSecao(SECOES_ENTREGA.final);
+}`;
+
+          const novo = `async function liberarSecoesPosRepeater() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+
+  /*
+    HOTFIX MOBILE DEFINITIVO:
+    os três banners informativos ficam fora do fluxo do Repeater no Wix.
+    No celular, quando a altura da impressora/repeater é recalculada, essa
+    seção pode subir para dentro do item e encobrir COMPRAR PROJETO COMPLETO,
+    VÍDEO e a linha tracejada. Portanto, no mobile a seção é recolhida por
+    completo. No desktop ela continua exatamente como estava.
+  */
+  if (mobile) {
+    try {
+      const banners = $w(SECOES_ENTREGA.banners);
+      if (typeof banners.hide === "function") await banners.hide();
+      if (typeof banners.collapse === "function") await banners.collapse();
+    } catch (_) {}
+  } else {
+    await mostrarSecao(SECOES_ENTREGA.banners);
+  }
+
+  await esperar(mobile ? 180 : 120);
+  await mostrarSecao(SECOES_ENTREGA.final);
+}`;
+
+          if (!s.includes(antigo)) {
+            throw new Error('Trecho liberarSecoesPosRepeater esperado não encontrado. Abortando sem alterar o código.');
+          }
+
+          s = s.replace(antigo, novo);
+          fs.writeFileSync(file, s, 'utf8');
+          console.log('Hotfix aplicado: banners recolhidos somente no mobile; desktop preservado.');
+          NODE
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção e remover hotfix temporário
+        run: |
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          git rm --ignore-unmatch ".github/workflows/hotfix-entrega-mobile-sem-banners.yml"
+          if ! git diff --cached --quiet; then
+            git commit -m "Recolher banners da entrega somente no mobile"
+            git push origin HEAD:main
+          fi

@@ -42,9 +42,6 @@ jobs:
       - name: Adicionar seletor de país no WhatsApp
         run: node scripts/adicionar-seletor-pais-whatsapp-2026-08-12.cjs
 
-      - name: Reabrir login social após 3 segundos
-        run: node scripts/reabrir-login-social-3s-2026-08-12.cjs
-
       - name: Blindar reabertura do login social
         run: node scripts/corrigir-login-social-reabertura-robusta-2026-08-12.cjs
 

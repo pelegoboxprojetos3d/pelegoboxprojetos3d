@@ -92,6 +92,12 @@ const IDS = {
     "#txtValor6"
 };
 
+const SECOES_ENTREGA = {
+  principal: '#imagensdoprodutobotao1e2',
+  banners: '#textodobotaobaixaranalisegrafica',
+  final: '#section2'
+};
+
 const CORES = {
   compradoFundo:
     "#159447",
@@ -247,6 +253,20 @@ const indiceGraficoPorProjeto =
 const indiceImagemPorProjeto =
   new Map();
 
+let cicloRepeater = null;
+function iniciarCicloRepeater(total) {
+  let resolver; const pronto=new Promise(r=>{resolver=r;});
+  cicloRepeater={total:Math.max(0,Number(total)||0),prontos:0,resolver,pronto};
+  if(!cicloRepeater.total) resolver();
+}
+function marcarItemRepeaterPronto() {
+  if(!cicloRepeater)return; cicloRepeater.prontos+=1;
+  if(cicloRepeater.prontos>=cicloRepeater.total)cicloRepeater.resolver();
+}
+async function aguardarRepeaterPronto(ms=5000) {
+  if(!cicloRepeater)return; await Promise.race([cicloRepeater.pronto,esperar(ms)]);
+}
+
 
 // ======================================================
 // HELPERS
@@ -312,6 +332,23 @@ function esperar(
   );
 }
 
+
+async function esconderSecao(id) {
+  try { const e=$w(id); if(typeof e.hide==='function') await e.hide(); if(typeof e.collapse==='function') await e.collapse(); } catch (_) {}
+}
+async function mostrarSecao(id) {
+  try { const e=$w(id); if(typeof e.expand==='function') await e.expand(); if(typeof e.show==='function') await e.show(); } catch (_) {}
+}
+async function prepararSecoesEntrega() {
+  try { const e=$w(SECOES_ENTREGA.principal); if(typeof e.show==='function') await e.show(); } catch (_) {}
+  await esconderSecao(SECOES_ENTREGA.banners);
+  await esconderSecao(SECOES_ENTREGA.final);
+}
+async function liberarSecoesPosRepeater() {
+  await mostrarSecao(SECOES_ENTREGA.banners);
+  await esperar(120);
+  await mostrarSecao(SECOES_ENTREGA.final);
+}
 
 function dinheiro(
   valor
@@ -2735,10 +2772,6 @@ async function prepararRepeaterParaCarregamento() {
     if (typeof repetidor.hide === "function") {
       await repetidor.hide();
     }
-
-    if (typeof repetidor.collapse === "function") {
-      await repetidor.collapse();
-    }
   } catch (erro) {
     console.warn(
       "Não foi possível preparar o estado inicial do repeater:",
@@ -2748,50 +2781,23 @@ async function prepararRepeaterParaCarregamento() {
 }
 
 function configurarRepeater() {
-  const repetidor = $w(IDS.repetidor);
-
-  try {
-    const galeriaLegada = $w(IDS.galeria);
-    if (typeof galeriaLegada.hide === "function") galeriaLegada.hide();
-    if (typeof galeriaLegada.collapse === "function") galeriaLegada.collapse();
-  } catch (_) {}
-
-  repetidor.onItemReady(($item, itemData) => {
-    renderizarItemRepeater($item, itemData).catch((erro) => {
-      console.error(
-        "Falha ao renderizar projeto no repeater:",
-        erro?.message || erro
-      );
-    });
+  const repetidor=$w(IDS.repetidor);
+  try { const g=$w(IDS.galeria); if(typeof g.hide==='function')g.hide(); if(typeof g.collapse==='function')g.collapse(); } catch (_) {}
+  repetidor.onItemReady(($item,itemData)=>{
+    renderizarItemRepeater($item,itemData).catch((erro)=>console.error('Falha ao renderizar projeto no repeater:',erro?.message||erro)).finally(()=>marcarItemRepeaterPronto());
   });
 }
 
 async function mostrarDadosRepeater(itens) {
-  const repetidor = $w(IDS.repetidor);
-
-  /*
-    ORQUESTRAÇÃO DA ENTREGA:
-    1. os dados entram no Repeater ainda escondido;
-    2. onItemReady tem um instante para montar imagem, título e botões;
-    3. a impressora cumpre o tempo mínimo real;
-    4. só então o conteúdo pronto aparece de uma vez.
-  */
-  repetidor.data = itens;
-
-  /*
-    Dá um pequeno intervalo para onItemReady montar título, imagem e botões
-    enquanto o Repeater ainda está oculto. A impressora continua respeitando
-    seu mínimo de 5 segundos em esconderProcessamento().
-  */
-  await esperar(300);
+  const repetidor=$w(IDS.repetidor);
+  const dados=Array.isArray(itens)?itens:[];
+  iniciarCicloRepeater(dados.length);
+  repetidor.data=dados;
+  await aguardarRepeaterPronto(5000);
   await esconderProcessamento();
-
-  if (typeof repetidor.expand === "function") {
-    await repetidor.expand();
-  }
-  if (typeof repetidor.show === "function") {
-    await repetidor.show();
-  }
+  if(typeof repetidor.show==='function')await repetidor.show();
+  await esperar(100);
+  await liberarSecoesPosRepeater();
 }
 
 async function carregarDetalhesDaCentral(resumos) {
@@ -3126,6 +3132,7 @@ $w.onReady(async function () {
     Primeiro frame controlado: nada de título, botão, box ou imagem padrão
     vazando antes da hora. A impressora é o único conteúdo dinâmico inicial.
   */
+  await prepararSecoesEntrega();
   await ocultarDadosAteCarregamento();
   blindarGaleriaPadrao();
   await prepararRepeaterParaCarregamento();

@@ -1,0 +1,22 @@
+name: Publicar Correcao Layout Mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publicar-correcao-layout-mobile.yml"
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publicar site no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          status=$(curl --silent --output /tmp/wix --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')
+          cat /tmp/wix || true
+          test "$status" -ge 200 -a "$status" -lt 300

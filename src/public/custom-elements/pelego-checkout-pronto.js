@@ -68,6 +68,7 @@ button{cursor:pointer}
 .panelHeader p{margin:7px auto 0;max-width:680px;font-size:10px;line-height:1.4;color:#666}
 .formGrid{display:grid;grid-template-columns:1fr 1fr;gap:11px 12px}
 .fieldFull{grid-column:1/-1}
+.emailField{margin-bottom:10px}
 .label{display:block;margin-bottom:5px;color:#171717;font-size:12px;font-weight:700}
 .required{color:#d32f2f}
 .control{width:100%;height:48px;padding:0 13px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none}
@@ -251,7 +252,7 @@ button{cursor:pointer}
             <input id="cpfInput" class="control" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00">
             <p class="hint">Informe o CPF do responsável pela compra.</p>
           </div>
-          <div class="fieldFull">
+          <div class="fieldFull emailField">
             <label class="label">E-mail da sua conta</label>
             <input id="emailInput" class="control" type="email" autocomplete="email" maxlength="254" readonly aria-readonly="true">
             <input id="emailConfirmInput" type="hidden">
@@ -536,7 +537,9 @@ function stageDisplayTitle(value,type,projectCode){
  var found=cut.match(/^\s*#?\s*(\d+)\s+(.*)$/);
  var code=found?found[1]:digits(projectCode);
  var body=found?found[2]:cut;
- body=body.replace(/^(?:Medidas\s+Projeto\s+Pronto|Gráficos\s+Projeto\s+Pronto|Graficos\s+Projeto\s+Pronto|Projeto\s+Pronto\s+Completo)\s+/i,"").trim();
+ var stagePrefix=/^(?:(?:Medidas(?:\s+do)?\s+Projeto\s+Pronto(?:\s+para)?)|(?:Análises\s+Gráficas\s+do\s+Projeto\s+Pronto(?:\s+para)?)|(?:Analises\s+Graficas\s+do\s+Projeto\s+Pronto(?:\s+para)?)|(?:Gráficos(?:\s+do)?\s+Projeto\s+Pronto(?:\s+para)?)|(?:Graficos(?:\s+do)?\s+Projeto\s+Pronto(?:\s+para)?)|(?:Projeto\s+Completo(?:\s+para)?)|(?:Projeto\s+Pronto\s+Completo))\s+/i;
+ var previous="";
+ while(body&&body!==previous){previous=body;body=body.replace(stagePrefix,"").trim()}
  var normalized=safe(type).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[\s-]+/g,"_");
  var prefix=normalized==="GRAFICOS"?"Gráficos Projeto Pronto":normalized==="PROJETO_COMPLETO"?"Projeto Pronto Completo":"Medidas Projeto Pronto";
  return [code?"#"+code:"",prefix,body,q].filter(Boolean).join(" ").replace(/\s+/g," ").trim();
@@ -804,7 +807,14 @@ E.cardDocument.addEventListener("input",function(){this.value=digits(this.value)
 
 window.addEventListener("message",function(event){
  var d=incoming(event.data),type=safe(d.type||d.tipo||d.action).toUpperCase();if(!type)return;
- if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$("checkoutBoot"),main=$("checkoutMain");if(boot)boot.classList.add("hidden");if(main)main.style.display="block";document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
+ if(type==="PROJECT_META"){
+ if(d.titulo){S.ctx.titulo=safe(d.titulo);E.title.textContent=stageDisplayTitle(S.ctx.titulo,S.ctx.tipoProduto||d.tipoProduto,S.ctx.codigoProjeto||d.codigoProjeto)}
+ var projectImage=safe(d.imagem);
+ if(projectImage){S.ctx.imagem=projectImage;S.ctx.img=projectImage;E.img.src=projectImage;E.img.classList.remove("hidden");E.fallback.classList.add("hidden")}
+ layoutMode(CURRENT_LAYOUT_MODE);
+ return
+}
+if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$("checkoutBoot"),main=$("checkoutMain");if(boot)boot.classList.add("hidden");if(main)main.style.display="block";document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
  if(["CUSTOMER_READY","DATA_SAVED","PAYMENT_READY","SHOW_PAYMENT"].indexOf(type)>=0){
    if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.");return}
    if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);showPayment();return

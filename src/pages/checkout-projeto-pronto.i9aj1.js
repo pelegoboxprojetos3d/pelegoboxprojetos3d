@@ -290,10 +290,11 @@ function contextFromUrl() {
   const verifiedSession=sessionIdentityVerified(source);
   const number=phone(source.whatsappE164 || source.whatsapp);
   const product=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");
+  const displayTitle=safe(q.tituloBase || q.tituloProjeto || product);
   return {
     codigoProjeto:project,
     produto:product,
-    titulo:product,
+    titulo:displayTitle,
     productId:safe(q.productId),
     img:safe(q.imagem || q.img),
     imagem:safe(q.imagem || q.img),
@@ -353,8 +354,12 @@ async function completarContextoPelaColecao() {
   const imagemReal = mediaSource(item.thumbnail);
 
   if (tituloReal) {
+    /*
+      Videosprojetos.titulo_video é a fonte da verdade do título visual.
+      Não sobrescrevemos ctx.produto, pois ele identifica a etapa comercial.
+    */
     ctx.titulo = tituloReal;
-    ctx.produto = tituloReal;
+    if (!safe(ctx.produto)) ctx.produto = tituloReal;
   }
 
   if (imagemReal) {
@@ -854,8 +859,23 @@ $w.onReady(function(){
 
   completarContextoPelaColecao()
     .then(() => {
-      /* Se o iframe ainda não ficou pronto, atualiza o INIT pendente. */
-      if (!checkoutUiReady) sendInit(true);
+      /*
+        Se o iframe ainda não ficou pronto, atualizamos o INIT pendente.
+        Se já estiver visível, atualizamos apenas título/imagem sem resetar
+        identificação ou forma de pagamento.
+      */
+      if (!checkoutUiReady) {
+        sendInit(true);
+        return;
+      }
+
+      post({
+        type:"PROJECT_META",
+        titulo:ctx.titulo,
+        imagem:ctx.imagem || ctx.img,
+        codigoProjeto:ctx.codigoProjeto,
+        tipoProduto:ctx.tipoProduto
+      });
     })
     .catch(error => {
       console.warn("Complemento do projeto em segundo plano falhou:", error?.message || error);

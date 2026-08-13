@@ -2381,6 +2381,16 @@ function montarUrlCheckout(
       tipoProduto
     );
 
+  /*
+    Título-base canônico vem diretamente de Videosprojetos.titulo_video.
+    O checkout usa esse valor apenas para montar a apresentação visual e
+    mantém "titulo" como descrição comercial da etapa.
+  */
+  const tituloBase =
+    tituloProjeto(
+      projeto
+    );
+
   const imagem =
     mediaUrl(
       projeto?.thumbnail
@@ -2414,6 +2424,7 @@ function montarUrlCheckout(
     checkoutId,
     codigoProjeto,
     titulo,
+    tituloBase,
 
     productId:
       safe(

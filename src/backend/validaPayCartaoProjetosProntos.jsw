@@ -1,8 +1,69 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import { currentMember as currentMemberBackend } from "wix-members-backend";
+import { tokenize } from "@validapay/tokenize";
+import { buscarMetodoPagamentoPrivadoPorEmail, salvarMetodoPagamentoAprovado } from "backend/metodosPagamentoProjetosProntos";
 import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
 import { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";
+
+async function identidadeMembroAtualCartao() {
+  const membro = await currentMemberBackend.getMember();
+  const emails = Array.isArray(membro?.contactDetails?.emails) ? membro.contactDetails.emails : [];
+  const memberId = safe(membro?._id);
+  const email = safe(membro?.loginEmail || emails[0] || membro?.contactDetails?.email).toLowerCase();
+  return { memberId, email };
+}
+
+async function tokenizarNovoCartao({ number, cvv, month, year, holder, nome, cpfCnpj, email }) {
+  const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+  const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+  if (!clientId || !clientSecret) throw new Error("Credenciais ValidaPay não configuradas para tokenização.");
+
+  const result = await tokenize({
+    clientId,
+    clientSecret,
+    card: {
+      number,
+      cardHolderName: holder,
+      cvv,
+      expiration: `${month}/${year}`
+    },
+    customer: {
+      name: nome,
+      document: cpfCnpj,
+      email
+    }
+  });
+
+  if (!safe(result?.paymentMethodId)) throw new Error("A ValidaPay não retornou o token seguro do cartão.");
+  return result;
+}
+
+async function persistirMetodoPagamentoAprovado(session, chargeId) {
+  const paymentMethodId = safe(session?.pendingPaymentMethodId);
+  const email = safe(session?.email).toLowerCase();
+  if (!paymentMethodId || !email) return null;
+  try {
+    return await salvarMetodoPagamentoAprovado({
+      email,
+      memberId: safe(session?.memberId),
+      clienteId: safe(session?.clienteId),
+      paymentMethodId,
+      validaPayCustomerId: safe(session?.pendingValidaPayCustomerId),
+      cardBrand: safe(session?.pendingCardBrand),
+      cardLastFour: safe(session?.pendingCardLastFour),
+      cardExpirationMonth: safe(session?.pendingCardExpirationMonth),
+      cardExpirationYear: safe(session?.pendingCardExpirationYear),
+      cardHolderName: safe(session?.pendingCardHolderName),
+      cardDocument: safe(session?.pendingCardDocument || session?.cpfCnpj),
+      ultimoPagamentoId: safe(chargeId)
+    });
+  } catch (error) {
+    console.warn("Falha ao salvar método de pagamento tokenizado:", error?.message || error);
+    return null;
+  }
+}
 
 // CARTÃO TRANSPARENTE VALIDAPAY
 // - Não grava PAN completo nem CVV.
@@ -481,6 +542,7 @@ async function triggerMake({ session, purchase, paymentId }) {
 async function finalizeApprovedCard({ checkoutId, chargeId }) {
   let session = await findSession(checkoutId);
   if (!session) throw new Error("Sessão do cartão não encontrada após aprovação.");
+  await persistirMetodoPagamentoAprovado(session, chargeId);
   const codigoProjeto=digits(session.codigoProjeto),clienteId=safe(session.clienteId),tipoProduto=productType(session.tipoProduto);
   const chaveCompra=`${clienteId}_${codigoProjeto}`;
   const existente=await findPurchase(chaveCompra);
@@ -529,6 +591,7 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
 
 export async function criarCobrancaCartaoTransparente(input = {}) {
   const card = input.card || {};
+  const useSavedPaymentMethod = input.useSavedPaymentMethod === true;
   const number = digits(card.number);
   const cvv = digits(card.cvv);
   const month = digits(card.month).padStart(2, "0").slice(-2);
@@ -545,7 +608,12 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     const valor = money(input.valor ?? ctx.valor ?? ctx.price);
     const clienteId = safe(input.clienteId || ctx.clienteId);
     const nome = safe(input.nome || input.nomeCliente || ctx.nome || ctx.nomeCliente);
-    const email = safe(input.email || ctx.email).toLowerCase();
+    const emailInformado = safe(input.email || ctx.email).toLowerCase();
+    const identidadeMembro = await identidadeMembroAtualCartao();
+    if (!identidadeMembro.memberId || !identidadeMembro.email) return { ok:false, error:"Faça login novamente para pagar com cartão." };
+    if (emailInformado && emailInformado !== identidadeMembro.email) return { ok:false, error:"O e-mail do checkout não corresponde ao login atual." };
+    const email = identidadeMembro.email;
+    const memberId = identidadeMembro.memberId;
     const cpfCnpj = digits(input.cpfCnpj || ctx.cpfCnpj);
     const whatsapp = phone(input.whatsappE164 || input.whatsapp || ctx.whatsappE164 || ctx.whatsapp);
     const cardDocument = digits(input.cardDocument || cpfCnpj);
@@ -555,10 +623,12 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     if (!clienteId || nome.length < 3 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email) || !whatsapp || ![11, 14].includes(cpfCnpj.length)) {
       return { ok: false, error: "Dados do comprador incompletos." };
     }
-    if (!luhn(number)) return { ok: false, error: "Número do cartão inválido." };
-    if (!/^(0[1-9]|1[0-2])$/.test(month) || !/^20\d{2}$/.test(year)) return { ok: false, error: "Validade do cartão inválida." };
-    if (!/^\d{3,4}$/.test(cvv)) return { ok: false, error: "CVV inválido." };
-    if (holder.length < 3) return { ok: false, error: "Nome impresso no cartão inválido." };
+    if (!useSavedPaymentMethod) {
+      if (!luhn(number)) return { ok: false, error: "Número do cartão inválido." };
+      if (!/^(0[1-9]|1[0-2])$/.test(month) || !/^20\d{2}$/.test(year)) return { ok: false, error: "Validade do cartão inválida." };
+      if (!/^\d{3,4}$/.test(cvv)) return { ok: false, error: "CVV inválido." };
+      if (holder.length < 3) return { ok: false, error: "Nome impresso no cartão inválido." };
+    }
     if (![11, 14].includes(cardDocument.length)) return { ok: false, error: "CPF/CNPJ do portador inválido." };
 
     /*
@@ -638,6 +708,29 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       cardAttempt += 1;
     }
 
+    let tokenInfo;
+    if (useSavedPaymentMethod) {
+      const savedMethod = await buscarMetodoPagamentoPrivadoPorEmail(email);
+      if (!savedMethod?.paymentMethodId || savedMethod.ativo === false) {
+        return { ok:false, error:"Seu cartão salvo não está mais disponível. Informe um novo cartão." };
+      }
+      tokenInfo = {
+        paymentMethodId: safe(savedMethod.paymentMethodId),
+        customerId: safe(savedMethod.validaPayCustomerId),
+        cardBrand: safe(savedMethod.cardBrand),
+        cardLastFour: safe(savedMethod.cardLastFour),
+        cardExpirationMonth: safe(savedMethod.cardExpirationMonth),
+        cardExpirationYear: safe(savedMethod.cardExpirationYear),
+        cardHolderName: safe(savedMethod.cardHolderName),
+        cardDocument: safe(savedMethod.cardDocument || cardDocument)
+      };
+    } else {
+      tokenInfo = await tokenizarNovoCartao({ number, cvv, month, year, holder, nome, cpfCnpj: cardDocument, email });
+    }
+
+    const paymentMethodId = safe(tokenInfo?.paymentMethodId);
+    if (!paymentMethodId) return { ok:false, error:"Não foi possível preparar o cartão com segurança." };
+
     await saveSession(checkoutId, {
       status: "pending",
       paymentMethod: "CARD",
@@ -654,6 +747,15 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       returnUrl: safe(input.returnUrl || ctx.returnUrl),
       compraRegistrada: false,
       cardAttempt,
+      memberId,
+      pendingPaymentMethodId: paymentMethodId,
+      pendingValidaPayCustomerId: safe(tokenInfo?.customerId),
+      pendingCardBrand: safe(tokenInfo?.cardBrand) || brand(number),
+      pendingCardLastFour: safe(tokenInfo?.cardLastFour) || number.slice(-4),
+      pendingCardExpirationMonth: safe(tokenInfo?.cardExpirationMonth) || month,
+      pendingCardExpirationYear: safe(tokenInfo?.cardExpirationYear) || year,
+      pendingCardHolderName: safe(tokenInfo?.cardHolderName) || holder,
+      pendingCardDocument: digits(tokenInfo?.cardDocument || cardDocument),
       updatedAtDate: new Date()
     });
 
@@ -670,12 +772,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
         documentNumber: cpfCnpj,
         phone: whatsapp
       },
-      card: {
-        number,
-        cvv,
-        name: holder,
-        expiration: `${month}/${year}`
-      },
+      paymentMethodId,
       installments,
       passFeesToCustomer: false,
       freeInstallments: 1,
@@ -763,8 +860,8 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       checkoutId,
       chargeId: id,
       status: status || (approved ? "approved" : "pending"),
-      cardBrand: safe(response.data?.cardBrand) || brand(number),
-      cardLastFour: number.slice(-4),
+      cardBrand: safe(tokenInfo?.cardBrand) || safe(response.data?.cardBrand) || brand(number),
+      cardLastFour: safe(tokenInfo?.cardLastFour) || number.slice(-4),
       installments,
       amount: valor,
       productLinked: Boolean(priceId),

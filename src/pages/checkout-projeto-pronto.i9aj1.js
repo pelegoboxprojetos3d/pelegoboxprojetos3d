@@ -2,6 +2,7 @@ import wixLocation from "wix-location";
 import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
 import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual } from "backend/clientes.web";
+import { buscarMetodoPagamentoDoMembroAtual } from "backend/metodosPagamentoProjetosProntos.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
@@ -35,6 +36,7 @@ let pollTimer = null;
 let polling = false;
 let cardPollTimer = null;
 let cardPolling = false;
+let savedCardPayload = null;
 
 const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
@@ -829,6 +831,7 @@ async function createCard(data={}) {
     const r=await waitTimeout(criarCobrancaCartaoTransparente({
       ...basePayload(data),
       card:data.card||{},
+      useSavedPaymentMethod:data.useSavedPaymentMethod===true,
       installments:Number(data.installments||1),
       cardDocument:digits(data.cardDocument || ctx.cpfCnpj)
     }),25000,"A operadora demorou para responder. Aguarde antes de tentar novamente.");
@@ -861,6 +864,21 @@ async function createCard(data={}) {
   } finally { cardRequestBusy=false; }
 }
 
+async function carregarMetodoPagamentoSalvo() {
+  try {
+    const result = await waitTimeout(buscarMetodoPagamentoDoMembroAtual(), 5000, "");
+    savedCardPayload = {
+      type: "SAVED_CARD",
+      existe: result?.metodo?.existe === true,
+      ...(result?.metodo || {})
+    };
+    if (checkoutUiReady) post(savedCardPayload);
+  } catch (_) {
+    savedCardPayload = { type:"SAVED_CARD", existe:false };
+    if (checkoutUiReady) post(savedCardPayload);
+  }
+}
+
 function back() {
   stopPoll();
   stopCardPoll();
@@ -880,7 +898,7 @@ $w.onReady(function(){
     if(data?.data && typeof data.data==="object" && !data.type) data=data.data;
     data=data && typeof data==="object" ? data : {};
     const type=safe(data.type || data.tipo || data.action).toUpperCase();
-    if(type==="READY"){checkoutUiReady=true;sendInit();return;}
+    if(type==="READY"){checkoutUiReady=true;sendInit();if(savedCardPayload)post(savedCardPayload);return;}
     if(type==="SAVE_CUSTOMER" || type==="CREATE_CUSTOMER"){saveCustomer(data).catch(console.error);return;}
     if(type==="CREATE_PIX" || type==="SUBMIT_PRO"){createPix(data).catch(console.error);return;}
     if(type==="CREATE_CARD"){createCard(data).catch(console.error);return;}
@@ -895,6 +913,7 @@ $w.onReady(function(){
   */
   contextReady=true;
   sendInit(true);
+  carregarMetodoPagamentoSalvo().catch(console.error);
 
   completarContextoPelaColecao()
     .then(() => {

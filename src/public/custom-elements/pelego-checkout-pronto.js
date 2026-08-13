@@ -168,6 +168,12 @@ button{cursor:pointer}
 .visualNumber{font-size:16px;letter-spacing:1.6px;font-weight:600}
 .visualLabel{display:block;margin-bottom:2px;font-size:6px;opacity:.7}
 .visualValue{font-size:9px;font-weight:700;text-transform:uppercase}
+.savedCardBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:10px 12px;border:1px solid #b9e5c5;border-radius:11px;background:#effcf3;color:#174d29}
+.savedCardInfo{min-width:0;display:flex;flex-direction:column;gap:3px}
+.savedCardTitle{font-size:11px;font-weight:800;text-transform:uppercase}
+.savedCardMeta{font-size:12px;font-weight:700}
+.savedCardAction{flex:0 0 auto;border:0;background:transparent;color:var(--green-dark);font-size:10px;font-weight:800;text-decoration:underline;cursor:pointer}
+.cardForm.useSavedCard .cardSensitiveField{display:none!important}
 .cardForm{padding:10px;border:1px solid #e2e2e2;border-radius:12px;background:#fff}
 .cardFields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
 .cardFull{grid-column:1/-1}
@@ -393,6 +399,10 @@ button{cursor:pointer}
             </section>
 
             <section class="cardRight" id="cardRight">
+              <div id="savedCardBanner" class="savedCardBanner hidden">
+                <div class="savedCardInfo"><span class="savedCardTitle">Cartão salvo</span><span id="savedCardMeta" class="savedCardMeta"></span></div>
+                <button id="savedCardAction" class="savedCardAction" type="button">Trocar cartão</button>
+              </div>
               <div class="visualCard">
                 <div class="visualCardTop"><span class="cardChip"></span><span id="visualBrand" class="cardBrand">CARTÃO</span></div>
                 <div id="visualNumber" class="visualNumber">•••• •••• •••• ••••</div>
@@ -403,12 +413,12 @@ button{cursor:pointer}
               </div>
               <form id="cardForm" class="cardForm" autocomplete="on" name="payment-card-form">
                 <div class="cardFields">
-                  <div class="cardFull"><label class="label">Número do cartão</label><input id="cardNumber" name="cc-number" class="control cardControl" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" placeholder="0000 0000 0000 0000"></div>
-                  <div><label class="label">Mês</label><input id="cardMonth" name="cc-exp-month" class="control cardControl" type="text" inputmode="numeric" autocomplete="cc-exp-month" maxlength="2" placeholder="MM"></div>
-                  <div><label class="label">Ano</label><input id="cardYear" name="cc-exp-year" class="control cardControl" type="text" inputmode="numeric" autocomplete="cc-exp-year" maxlength="4" placeholder="AA"></div>
-                  <div><label class="label">CVV</label><input id="cardCvv" name="cc-csc" class="control cardControl" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="4" placeholder="•••"></div>
-                  <div class="cardWide"><label class="label">Nome impresso no cartão</label><input id="cardName" name="cc-name" class="control cardControl" type="text" autocomplete="cc-name" placeholder="Ex: João Silva"></div>
-                  <div><label class="label">CPF/CNPJ</label><input id="cardDocument" name="card-document" class="control cardControl" type="text" inputmode="numeric" autocomplete="off" maxlength="18" placeholder="Somente números"></div>
+                  <div class="cardFull cardSensitiveField"><label class="label">Número do cartão</label><input id="cardNumber" name="cc-number" class="control cardControl" type="text" inputmode="numeric" autocomplete="cc-number" maxlength="23" placeholder="0000 0000 0000 0000"></div>
+                  <div class="cardSensitiveField"><label class="label">Mês</label><input id="cardMonth" name="cc-exp-month" class="control cardControl" type="text" inputmode="numeric" autocomplete="cc-exp-month" maxlength="2" placeholder="MM"></div>
+                  <div class="cardSensitiveField"><label class="label">Ano</label><input id="cardYear" name="cc-exp-year" class="control cardControl" type="text" inputmode="numeric" autocomplete="cc-exp-year" maxlength="4" placeholder="AA"></div>
+                  <div class="cardSensitiveField"><label class="label">CVV</label><input id="cardCvv" name="cc-csc" class="control cardControl" type="password" inputmode="numeric" autocomplete="cc-csc" maxlength="4" placeholder="•••"></div>
+                  <div class="cardWide cardSensitiveField"><label class="label">Nome impresso no cartão</label><input id="cardName" name="cc-name" class="control cardControl" type="text" autocomplete="cc-name" placeholder="Ex: João Silva"></div>
+                  <div class="cardSensitiveField"><label class="label">CPF/CNPJ</label><input id="cardDocument" name="card-document" class="control cardControl" type="text" inputmode="numeric" autocomplete="off" maxlength="18" placeholder="Somente números"></div>
                   <div class="cardFull"><label class="label">Parcelas</label><select id="installments" class="control cardControl"></select></div>
                 </div>
                 <div id="cardAlert" class="alert"></div>
@@ -437,12 +447,12 @@ button{cursor:pointer}
 (function(){
 "use strict";
 
-var S={ctx:{},checkoutId:"",saving:false,paymentReady:false,pixCode:"",tetris:null,cardBusy:false};
+var S={ctx:{},checkoutId:"",saving:false,paymentReady:false,pixCode:"",tetris:null,cardBusy:false,savedCard:null,useSavedCard:false};
 
 function $(id){return document.getElementById(id)}
 var E={
  step1:$("step1"),step2:$("step2"),step3:$("step3"),img:$("productImage"),fallback:$("productFallback"),title:$("productTitle"),price:$("productPrice"),
- identity:$("identityPanel"),payment:$("paymentPanel"),normal:$("paymentNormal"),cardMode:$("paymentCardMode"),success:$("successPanel"),already:$("alreadyPanel"),
+ identity:$("identityPanel"),payment:$("paymentPanel"),normal:$("paymentNormal"),cardMode:$("paymentCardMode"),success:$("successPanel"),already:$("alreadyPanel"),savedCardBanner:$("savedCardBanner"),savedCardMeta:$("savedCardMeta"),savedCardAction:$("savedCardAction"),
  country:$("countrySelect"),countryConfirm:$("countryConfirmSelect"),phone:$("phoneInput"),phoneConfirm:$("phoneConfirmInput"),phoneConfirmHint:$("phoneConfirmHint"),name:$("nameInput"),cpf:$("cpfInput"),email:$("emailInput"),email2:$("emailConfirmInput"),identityAlert:$("identityAlert"),identityBtn:$("identityButton"),
  topGrid:$("paymentTopGrid"),left:$("leftColumn"),center:$("centerColumn"),notice:$("paymentNotice"),google:$("googleMethod"),pixAuto:$("pixAutoMethod"),apple:$("appleMethod"),paypal:$("paypalMethod"),deferred:$("mobileDeferred"),
  pix:$("pixMethod"),card:$("cardMethod"),pixFromCard:$("pixFromCard"),pixArea:$("pixArea"),qr:$("qrRender"),tetrisWrap:$("tetrisWrap"),tetrisCanvas:$("tetrisCanvas"),pixCode:$("pixCode"),copy:$("copyPixButton"),pixStatus:$("pixStatus"),pixStatusText:$("pixStatusText"),
@@ -806,6 +816,23 @@ function mobileCardOrder(){
    else list.appendChild(E.cardPaymentNotice);
  }
 }
+function applySavedCardMode(useSaved){
+ S.useSavedCard=Boolean(useSaved&&S.savedCard&&S.savedCard.existe===true);
+ if(S.useSavedCard){
+   E.cardForm.classList.add("useSavedCard");E.savedCardBanner.classList.remove("hidden");E.savedCardAction.textContent="Trocar cartão";
+   var c=S.savedCard,last=digits(c.cardLastFour).slice(-4),m=digits(c.cardExpirationMonth).padStart(2,"0").slice(-2),y=digits(c.cardExpirationYear).slice(-2);
+   E.savedCardMeta.textContent=(safe(c.cardBrand)||"CARTÃO")+" •••• "+last+"  |  "+m+"/"+y;
+   E.visualBrand.textContent=safe(c.cardBrand)||"CARTÃO";E.visualNumber.textContent="•••• •••• •••• "+last;E.visualName.textContent=safe(c.cardHolderName).toUpperCase()||"SEU NOME";E.visualExpiry.textContent=(m||"MM")+"/"+(y||"AA");
+   if(!digits(E.cardDocument.value)&&digits(c.cardDocument))E.cardDocument.value=digits(c.cardDocument);
+   E.cardSubmit.textContent="Pagar com cartão salvo";
+ }else{
+   E.cardForm.classList.remove("useSavedCard");
+   if(S.savedCard&&S.savedCard.existe===true){E.savedCardBanner.classList.remove("hidden");E.savedCardAction.textContent="Usar cartão salvo"}else E.savedCardBanner.classList.add("hidden");
+   E.cardSubmit.textContent=S.savedCard&&S.savedCard.existe===true?"Pagar com novo cartão":"Pagar com cartão";updateVisual();
+ }
+ layoutMode("CARD");
+}
+
 function openCard(){
  selectPaymentMethod("CARD");
  restoreDesktopOrder();
@@ -814,8 +841,8 @@ function openCard(){
  if(!safe(E.cardName.value)&&safe(E.name.value||S.ctx.nome))E.cardName.value=safe(E.name.value||S.ctx.nome);
  if(!digits(E.cardDocument.value)&&cpf(E.cpf.value||S.ctx.cpfCnpj))E.cardDocument.value=cpf(E.cpf.value||S.ctx.cpfCnpj);
 
- E.normal.classList.add("hidden");E.cardMode.classList.remove("hidden");setAlert(E.cardAlert,"","");updateVisual();
- layoutMode("CARD");
+ E.normal.classList.add("hidden");E.cardMode.classList.remove("hidden");setAlert(E.cardAlert,"","");
+ applySavedCardMode(Boolean(S.savedCard&&S.savedCard.existe===true));
 
  /* Navegadores podem aplicar o cartão salvo alguns instantes após o formulário aparecer. */
  [120,350,800,1500].forEach(function(ms){setTimeout(updateVisual,ms)});
@@ -830,6 +857,10 @@ function fillInstallments(){E.installments.innerHTML="";var amount=Number(S.ctx.
 function luhn(v){var n=digits(v),sum=0,alt=false;if(n.length<13||n.length>19)return false;for(var i=n.length-1;i>=0;i--){var d=Number(n[i]);if(alt){d*=2;if(d>9)d-=9}sum+=d;alt=!alt}return sum%10===0}
 function submitCard(ev){
  ev.preventDefault();if(S.cardBusy)return;
+ if(S.useSavedCard&&S.savedCard&&S.savedCard.existe===true){
+   S.cardBusy=true;E.cardSubmit.disabled=true;setAlert(E.cardAlert,"info","Processando seu cartão salvo...");
+   var saved=basePayment();saved.type="CREATE_CARD";saved.useSavedPaymentMethod=true;saved.cardDocument=digits(S.savedCard.cardDocument||E.cardDocument.value||S.ctx.cpfCnpj);saved.installments=Number(E.installments.value||1);post(saved);return;
+ }
  var number=digits(E.cardNumber.value),month=digits(E.cardMonth.value).padStart(2,"0").slice(-2),year=digits(E.cardYear.value),cvv=digits(E.cardCvv.value),name=safe(E.cardName.value).replace(/\s+/g," "),doc=digits(E.cardDocument.value);
  if(!luhn(number)){setAlert(E.cardAlert,"error","Número do cartão inválido.");return}
  if(!/^(0[1-9]|1[0-2])$/.test(month)){setAlert(E.cardAlert,"error","Mês inválido.");return}
@@ -887,6 +918,7 @@ syncIdentityButton();
 E.pix.addEventListener("click",openPix);E.pixFromCard.addEventListener("click",openPix);E.card.addEventListener("click",openCard);E.copy.addEventListener("click",copyPix);
 $("identityBack").onclick=$("paymentBack").onclick=$("alreadyBack").onclick=function(){post({type:"BACK"})};
 E.cardForm.addEventListener("submit",submitCard);
+E.savedCardAction.addEventListener("click",function(){if(!S.savedCard)return;applySavedCardMode(!S.useSavedCard);});
 E.cardNumber.addEventListener("input",function(){this.value=formatCard(this.value);updateVisual()});
 E.cardMonth.addEventListener("input",function(){this.value=digits(this.value).slice(0,2);updateVisual();if(this.value.length===2)E.cardYear.focus()});
 E.cardYear.addEventListener("input",function(){this.value=digits(this.value).slice(0,4);updateVisual();if(this.value.length===2||this.value.length===4)E.cardCvv.focus()});
@@ -907,6 +939,7 @@ window.addEventListener("message",function(event){
  layoutMode(CURRENT_LAYOUT_MODE);
  return
 }
+if(type==="SAVED_CARD"){S.savedCard=d.existe===true?{...d,existe:true}:null;if(!E.cardMode.classList.contains("hidden"))applySavedCardMode(Boolean(S.savedCard));return}
 if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$("checkoutBoot"),main=$("checkoutMain");if(boot)boot.classList.add("hidden");if(main)main.style.display="block";document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
  if(["CUSTOMER_READY","DATA_SAVED","PAYMENT_READY","SHOW_PAYMENT"].indexOf(type)>=0){
    if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.");return}
@@ -931,7 +964,7 @@ if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$(
  }
  if(type==="PIX_APPROVED"){showSuccess();return}
  if(type==="CARD_LOADING"){S.cardBusy=true;E.cardSubmit.disabled=true;setAlert(E.cardAlert,"info",safe(d.message)||"Processando cartão com segurança...");return}
- if(type==="CARD_RESULT"){if(d.approved===true||d.accepted===true){setAlert(E.cardAlert,"success",d.approved===true?"Pagamento aprovado.":(d.paymentApproved===true?"Pagamento aprovado. Preparando sua entrega...":"Pagamento recebido. Aguardando confirmação..."));E.cardCvv.value="";if(d.approved===true)showSuccess()}else{resetCard();setAlert(E.cardAlert,"error",safe(d.error)||"Não foi possível processar o cartão.")}return}
+ if(type==="CARD_RESULT"){if(d.approved===true||d.accepted===true){setAlert(E.cardAlert,"success",d.approved===true?"Pagamento aprovado.":(d.paymentApproved===true?"Pagamento aprovado. Preparando sua entrega...":"Pagamento recebido. Aguardando confirmação..."));E.cardCvv.value="";if(d.approved===true)showSuccess()}else{resetCard();if(S.useSavedCard&&safe(d.error).toLowerCase().includes("salvo"))applySavedCardMode(false);setAlert(E.cardAlert,"error",safe(d.error)||"Não foi possível processar o cartão.")}return}
 });
 
 if(typeof ResizeObserver!=="undefined"){

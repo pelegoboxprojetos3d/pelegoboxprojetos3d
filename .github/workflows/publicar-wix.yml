@@ -39,9 +39,6 @@ jobs:
       - name: Ajustar exemplo do WhatsApp
         run: node scripts/ajustar-placeholder-whatsapp-2026-08-12.cjs
 
-      - name: Adicionar seletor de país no WhatsApp
-        run: node scripts/adicionar-seletor-pais-whatsapp-2026-08-12.cjs
-
       - name: Melhorar seletor internacional de WhatsApp
         run: node scripts/melhorar-seletor-pais-whatsapp-2026-08-12.cjs
 

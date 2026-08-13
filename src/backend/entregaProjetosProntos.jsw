@@ -169,7 +169,9 @@ function sessionWhatsapp(item) {
   return firstValue(
     item?.whatsappE164,
     item?.whatsapp,
-    item?.whatsApp
+    item?.whatsApp,
+    item?.Whatsapp,
+    item?.WhatsApp
   );
 }
 
@@ -183,32 +185,74 @@ function sessionToken(item) {
 function purchaseWhatsapp(item) {
   return firstValue(
     item?.whatsapp,
-    item?.whatsApp
+    item?.whatsApp,
+    item?.Whatsapp,
+    item?.WhatsApp,
+    item?.["WhatsApp na compra"]
+  );
+}
+
+function purchaseEmail(item) {
+  return normalizeEmail(
+    firstValue(
+      item?.email,
+      item?.Email,
+      item?.["E-mail"],
+      item?.emailCliente,
+      item?.["E-mail da compra"]
+    )
   );
 }
 
 function purchaseClientId(item) {
   return firstValue(
     item?.clienteId,
+    item?.clienteID,
+    item?.["Cliente ID"],
+    item?.["ID do cliente"],
     referenceId(item?.cliente)
   );
 }
 
 function approvedPurchase(item) {
   const payment =
-    safe(item?.pagamento)
-      .toLowerCase();
+    safe(
+      firstValue(
+        item?.pagamento,
+        item?.Pagamento,
+        item?.formaPagamento
+      )
+    ).toLowerCase();
 
   const status =
-    safe(item?.statusCompra)
-      .toLowerCase();
+    safe(
+      firstValue(
+        item?.statusCompra,
+        item?.StatusCompra,
+        item?.["Status Compra"],
+        item?.["Status da compra"]
+      )
+    ).toLowerCase();
 
-  return (
-    payment === "approved" ||
-    status === "approved" ||
-    status === "aprovada" ||
-    status === "liberada"
-  );
+  return [
+    "approved",
+    "aprovada",
+    "aprovado",
+    "liberada",
+    "liberado",
+    "pago",
+    "paga",
+    "paid"
+  ].includes(payment) || [
+    "approved",
+    "aprovada",
+    "aprovado",
+    "liberada",
+    "liberado",
+    "pago",
+    "paga",
+    "paid"
+  ].includes(status);
 }
 
 function purchaseMatchesPayment(
@@ -229,36 +273,29 @@ function purchaseMatchesIdentity(
   purchase,
   identity
 ) {
-  const clientId =
-    safe(identity?.clienteId);
+  const clientId = safe(identity?.clienteId);
+  const clientRef = safe(identity?.cliente?._id);
+  const email = normalizeEmail(identity?.email);
+  const whatsapp = normalizeWhatsapp(identity?.whatsapp);
 
-  const email =
-    normalizeEmail(
-      identity?.email
-    );
-
-  const whatsapp =
-    normalizeWhatsapp(
-      identity?.whatsapp
-    );
-
-  const itemClientId =
-    purchaseClientId(purchase);
-
-  const itemEmail =
-    normalizeEmail(
-      purchase?.email
-    );
-
-  const itemWhatsapp =
-    normalizeWhatsapp(
-      purchaseWhatsapp(purchase)
-    );
+  const itemClientId = purchaseClientId(purchase);
+  const itemEmail = purchaseEmail(purchase);
+  const itemWhatsapp = normalizeWhatsapp(
+    purchaseWhatsapp(purchase)
+  );
 
   if (
     clientId &&
     itemClientId &&
     clientId === itemClientId
+  ) {
+    return true;
+  }
+
+  if (
+    clientRef &&
+    itemClientId &&
+    clientRef === itemClientId
   ) {
     return true;
   }
@@ -490,24 +527,15 @@ async function findProject(session) {
 async function queryPurchasesByProject(
   codigoProjeto
 ) {
-  const code =
-    normalizeProjectCode(
-      codigoProjeto
-    );
+  const code = normalizeProjectCode(codigoProjeto);
 
   if (!code) {
     return [];
   }
 
-  const found =
-    new Map();
-
-  const attempts = [
-    code
-  ];
-
-  const numericCode =
-    Number(code);
+  const found = new Map();
+  const attempts = [code];
+  const numericCode = Number(code);
 
   if (Number.isSafeInteger(numericCode)) {
     attempts.push(numericCode);
@@ -517,21 +545,13 @@ async function queryPurchasesByProject(
     try {
       const result = await wixData
         .query(PURCHASES_COLLECTION)
-        .eq(
-          "codigoProjeto",
-          value
-        )
+        .eq("codigoProjeto", value)
         .limit(1000)
         .find(READ_OPTS);
 
-      for (
-        const item of
-        result.items || []
-      ) {
-        found.set(
-          safe(item._id),
-          item
-        );
+      for (const item of result.items || []) {
+        const id = safe(item?._id);
+        if (id) found.set(id, item);
       }
     } catch (error) {
       console.warn(
@@ -542,9 +562,48 @@ async function queryPurchasesByProject(
     }
   }
 
-  return [
-    ...found.values()
-  ];
+  if (!found.size) {
+    try {
+      let result = await wixData
+        .query(PURCHASES_COLLECTION)
+        .limit(1000)
+        .find(READ_OPTS);
+
+      while (result) {
+        for (const item of result.items || []) {
+          const itemCode = normalizeProjectCode(
+            firstValue(
+              item?.codigoProjeto,
+              item?.codigo_projeto,
+              item?.codigo,
+              item?.["Código do projeto"]
+            )
+          );
+
+          if (itemCode === code) {
+            const id = safe(item?._id);
+            if (id) found.set(id, item);
+          }
+        }
+
+        if (
+          typeof result.hasNext !== "function" ||
+          !result.hasNext()
+        ) {
+          break;
+        }
+
+        result = await result.next();
+      }
+    } catch (error) {
+      console.warn(
+        "Varredura de compatibilidade das compras falhou:",
+        error?.message || error
+      );
+    }
+  }
+
+  return [...found.values()];
 }
 
 function newestFirst(items = []) {
@@ -606,31 +665,37 @@ function clientPayload(item) {
   }
 
   return {
-    _id:
-      safe(item?._id),
+    _id: safe(item?._id),
 
-    clienteId:
+    clienteId: firstValue(
+      item?.clienteId,
+      item?.clienteID,
+      item?.["Cliente ID"],
+      item?._id
+    ),
+
+    nome: firstValue(
+      item?.nome,
+      item?.nomeCliente,
+      item?.Nomecliente,
+      item?.title,
+      item?.Title
+    ),
+
+    email: normalizeEmail(
       firstValue(
-        item?.clienteId,
-        item?._id
-      ),
-
-    nome:
-      firstValue(
-        item?.nome,
-        item?.title
-      ),
-
-    email:
-      normalizeEmail(
-        item?.email
-      ),
-
-    whatsapp:
-      firstValue(
-        item?.whatsapp,
-        item?.whatsApp
+        item?.email,
+        item?.Email,
+        item?.["E-mail"]
       )
+    ),
+
+    whatsapp: firstValue(
+      item?.whatsapp,
+      item?.whatsApp,
+      item?.Whatsapp,
+      item?.WhatsApp
+    )
   };
 }
 
@@ -1604,6 +1669,24 @@ async function identidadeMembroAtual() {
     )
   );
 
+  const phonesContato =
+    Array.isArray(membro?.contactDetails?.phones)
+      ? membro.contactDetails.phones
+      : [];
+
+  const telefones = phonesContato
+    .map((item) =>
+      typeof item === "string"
+        ? item
+        : firstValue(
+          item?.phone,
+          item?.value,
+          item?.number
+        )
+    )
+    .map(normalizeWhatsapp)
+    .filter(Boolean);
+
   const nomeMembro = firstValue(
     membro?.profile?.nickname,
     [
@@ -1612,14 +1695,131 @@ async function identidadeMembroAtual() {
     ].filter(Boolean).join(" ")
   );
 
-  let cliente = null;
+  const phoneVariants = new Set();
+
+  for (const phone of telefones) {
+    if (!phone) continue;
+    phoneVariants.add(phone);
+    phoneVariants.add(`+${phone}`);
+
+    if (phone.startsWith("55") && phone.length >= 12) {
+      phoneVariants.add(phone.slice(2));
+    } else if (phone.length === 10 || phone.length === 11) {
+      phoneVariants.add(`55${phone}`);
+      phoneVariants.add(`+55${phone}`);
+    }
+  }
+
+  const clientes = new Map();
 
   if (email) {
-    cliente = await findOne(
-      CLIENTS_COLLECTION,
-      "email",
-      email
+    for (const field of ["email", "Email"]) {
+      try {
+        const result = await wixData
+          .query(CLIENTS_COLLECTION)
+          .eq(field, email)
+          .limit(20)
+          .find(READ_OPTS);
+
+        for (const item of result.items || []) {
+          const id = safe(item?._id);
+          if (id) clientes.set(id, item);
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (!clientes.size && phoneVariants.size) {
+    for (const field of ["whatsapp", "whatsApp"]) {
+      for (const value of phoneVariants) {
+        try {
+          const result = await wixData
+            .query(CLIENTS_COLLECTION)
+            .eq(field, value)
+            .limit(20)
+            .find(READ_OPTS);
+
+          for (const item of result.items || []) {
+            const id = safe(item?._id);
+            if (id) clientes.set(id, item);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  let cliente = newestFirst(
+    [...clientes.values()]
+  )[0] || null;
+
+  const sessoes = new Map();
+
+  if (email) {
+    for (const field of ["email", "Email"]) {
+      try {
+        const result = await wixData
+          .query(SESSIONS_COLLECTION)
+          .eq(field, email)
+          .limit(50)
+          .find(READ_OPTS);
+
+        for (const item of result.items || []) {
+          const id = safe(item?._id);
+          if (id) sessoes.set(id, item);
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (!sessoes.size && phoneVariants.size) {
+    for (const field of ["whatsapp", "whatsApp", "whatsappE164"]) {
+      for (const value of phoneVariants) {
+        try {
+          const result = await wixData
+            .query(SESSIONS_COLLECTION)
+            .eq(field, value)
+            .limit(50)
+            .find(READ_OPTS);
+
+          for (const item of result.items || []) {
+            const id = safe(item?._id);
+            if (id) sessoes.set(id, item);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  const sessao = newestFirst(
+    [...sessoes.values()]
+  )[0] || null;
+
+  if (!cliente && sessao) {
+    const sessionClientId = firstValue(
+      sessao?.clienteId,
+      sessao?.["Cliente ID"]
     );
+
+    if (sessionClientId) {
+      cliente =
+        await findOne(
+          CLIENTS_COLLECTION,
+          "clienteId",
+          sessionClientId
+        );
+
+      if (!cliente) {
+        try {
+          cliente = await wixData.get(
+            CLIENTS_COLLECTION,
+            sessionClientId,
+            READ_OPTS
+          );
+        } catch (_) {
+          cliente = null;
+        }
+      }
+    }
   }
 
   const payloadCliente = clientPayload(cliente);
@@ -1629,20 +1829,26 @@ async function identidadeMembroAtual() {
     cliente,
     clienteId: firstValue(
       payloadCliente.clienteId,
+      sessao?.clienteId,
+      sessao?.["Cliente ID"],
       cliente?._id
     ),
     nome: firstValue(
       payloadCliente.nome,
+      sessao?.nomeCliente,
+      sessao?.nome,
       nomeMembro
     ),
     email: firstValue(
       payloadCliente.email,
+      normalizeEmail(sessao?.email),
+      normalizeEmail(sessao?.Email),
       email
     ),
     whatsapp: firstValue(
       payloadCliente.whatsapp,
-      cliente?.whatsapp,
-      cliente?.whatsApp
+      sessionWhatsapp(sessao),
+      telefones[0]
     )
   };
 }
@@ -1661,15 +1867,27 @@ async function queryPurchasesByIdentity(identity = {}) {
   if (clientRef) attempts.push(["cliente", clientRef]);
   if (email) attempts.push(["email", email]);
 
+  const phoneValues = new Set();
   if (whatsapp) {
-    attempts.push(["whatsapp", whatsapp]);
-    attempts.push(["whatsApp", whatsapp]);
+    phoneValues.add(whatsapp);
+    phoneValues.add(`+${whatsapp}`);
+
+    if (whatsapp.startsWith("55") && whatsapp.length >= 12) {
+      phoneValues.add(whatsapp.slice(2));
+    } else if (whatsapp.length === 10 || whatsapp.length === 11) {
+      phoneValues.add(`55${whatsapp}`);
+      phoneValues.add(`+55${whatsapp}`);
+    }
 
     const whatsappNumber = Number(whatsapp);
     if (Number.isSafeInteger(whatsappNumber)) {
-      attempts.push(["whatsapp", whatsappNumber]);
-      attempts.push(["whatsApp", whatsappNumber]);
+      phoneValues.add(whatsappNumber);
     }
+  }
+
+  for (const value of phoneValues) {
+    attempts.push(["whatsapp", value]);
+    attempts.push(["whatsApp", value]);
   }
 
   for (const [field, value] of attempts) {
@@ -1692,9 +1910,46 @@ async function queryPurchasesByIdentity(identity = {}) {
     }
   }
 
-  return [...found.values()].filter((purchase) =>
+  let matched = [...found.values()].filter((purchase) =>
     purchaseMatchesIdentity(purchase, identity)
   );
+
+  if (!matched.length) {
+    try {
+      const fallback = new Map();
+      let result = await wixData
+        .query(PURCHASES_COLLECTION)
+        .limit(1000)
+        .find(READ_OPTS);
+
+      while (result) {
+        for (const item of result.items || []) {
+          if (purchaseMatchesIdentity(item, identity)) {
+            const id = safe(item?._id);
+            if (id) fallback.set(id, item);
+          }
+        }
+
+        if (
+          typeof result.hasNext !== "function" ||
+          !result.hasNext()
+        ) {
+          break;
+        }
+
+        result = await result.next();
+      }
+
+      matched = [...fallback.values()];
+    } catch (error) {
+      console.warn(
+        "Varredura de compatibilidade das compras do membro falhou:",
+        error?.message || error
+      );
+    }
+  }
+
+  return matched;
 }
 
 function acessoDescricao(access = {}) {
@@ -1727,7 +1982,12 @@ export async function listarProjetosProntosDoMembroAtual() {
 
   for (const purchase of purchases) {
     const codigoProjeto = normalizeProjectCode(
-      purchase?.codigoProjeto
+      firstValue(
+        purchase?.codigoProjeto,
+        purchase?.codigo_projeto,
+        purchase?.codigo,
+        purchase?.["Código do projeto"]
+      )
     );
 
     if (!codigoProjeto) continue;

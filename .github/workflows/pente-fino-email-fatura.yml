@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/pente-fino-email-fatura.yml"
       - "scripts/pente-fino-email-fatura-2026-08-13.cjs"
+      - "scripts/corrigir-produto-payload-email-2026-08-13.cjs"
   workflow_dispatch:
 
 permissions:
@@ -36,6 +37,9 @@ jobs:
 
       - name: Corrigir e-mail e fatura
         run: node scripts/pente-fino-email-fatura-2026-08-13.cjs
+
+      - name: Corrigir campo produto usado pelo Make
+        run: node scripts/corrigir-produto-payload-email-2026-08-13.cjs
 
       - name: Validar código
         run: npm run lint

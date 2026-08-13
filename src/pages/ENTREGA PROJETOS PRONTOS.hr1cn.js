@@ -2232,20 +2232,6 @@ function ligarEventos() {
     "projeto"
   );
 
-  try {
-    $w(IDS.galeria).onItemClicked(
-      (event) => {
-        abrirProjetoDaCentral(event)
-          .catch(console.error);
-      }
-    );
-  } catch (erro) {
-    console.warn(
-      "Não foi possível ligar a seleção da central de projetos:",
-      erro?.message || erro
-    );
-  }
-
   /*
     O botão do vídeo não usa onClick.
 

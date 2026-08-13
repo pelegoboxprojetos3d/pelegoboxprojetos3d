@@ -82,7 +82,6 @@ jobs:
           )
           pix.write_text(s, encoding='utf-8')
 
-          # Guardas: regra oficial precisa estar presente nos três pontos.
           checks = [
               ('notify', notify.read_text(encoding='utf-8'), 'return safe(session?.tituloCheckout) || safe(session?.produto)'),
               ('card', card.read_text(encoding='utf-8'), 'produto: tituloCheckout || produto'),
@@ -100,6 +99,7 @@ jobs:
           npm run lint
       - name: Gravar fontes corrigidas
         run: |
+          set -e
           git config user.name "PELEGO BOX Hotfix"
           git config user.email "pelegobox82@gmail.com"
           git add \
@@ -108,4 +108,5 @@ jobs:
             "src/backend/validaPayPixProjetosProntosCore.jsw"
           git diff --cached --quiet && exit 0
           git commit -m "Corrigir: título único no e-mail e ValidaPay"
+          git pull --rebase origin main
           git push origin HEAD:main

@@ -2714,6 +2714,31 @@ async function renderizarItemRepeater($item, itemData) {
   await renderizarProjetoRepeater($item, itemData.dados);
 }
 
+async function prepararRepeaterParaCarregamento() {
+  /*
+    O Editor mantém um item-modelo do Repeater visível antes de os dados reais
+    chegarem. Na abertura por e-mail/F5 isso expunha título, valores, botões e
+    setas crus. O Repeater fica vazio, oculto e recolhido até receber dados.
+  */
+  try {
+    const repetidor = $w(IDS.repetidor);
+    repetidor.data = [];
+
+    if (typeof repetidor.hide === "function") {
+      await repetidor.hide();
+    }
+
+    if (typeof repetidor.collapse === "function") {
+      await repetidor.collapse();
+    }
+  } catch (erro) {
+    console.warn(
+      "Não foi possível preparar o estado inicial do repeater:",
+      erro?.message || erro
+    );
+  }
+}
+
 function configurarRepeater() {
   const repetidor = $w(IDS.repetidor);
 
@@ -3048,8 +3073,10 @@ async function carregarEntrega() {
 // ON READY
 // ======================================================
 
-$w.onReady(function () {
+$w.onReady(async function () {
   checkoutEmAndamento = false;
+
+  await prepararRepeaterParaCarregamento();
 
   try {
     configurarRepeater();

@@ -1,0 +1,20 @@
+from pathlib import Path
+
+PAGE = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
+text = PAGE.read_text(encoding='utf-8')
+
+text = text.replace('  galeria:\n    "#proGallery1",\n\n  processando:\n    "#htmlProcessandoEntrega",', '  galeria:\n    "#proGallery1",\n\n  imagemEntrega:\n    "#imagemProjetoEntrega",\n\n  setaImagemAnterior:\n    "#setaImagemAnteriorEntrega",\n\n  setaImagemProxima:\n    "#setaImagemProximaEntrega",\n\n  processando:\n    "#htmlProcessandoEntrega",', 1)
+text = text.replace('const indiceGraficoPorProjeto =\n  new Map();', 'const indiceGraficoPorProjeto =\n  new Map();\n\nconst indiceImagemPorProjeto =\n  new Map();', 1)
+text = text.replace('    IDS.galeria,\n    IDS.video,', '    IDS.imagemEntrega,\n    IDS.setaImagemAnterior,\n    IDS.setaImagemProxima,\n    IDS.video,', 1)
+
+start = text.index('async function renderizarGaleriaItem($item, dados) {')
+end = text.index('async function renderizarBotoesItem($item, dados) {', start)
+replacement = '''function chaveImagemItem(dados) {\n  return digits(dados?.project?.codigoProjeto) || safe(dados?.project?._id) || "projeto";\n}\n\nasync function aplicarImagemAtualItem($item, dados, deslocamento = 0, reiniciar = false) {\n  const projeto = dados?.project || {};\n  const acessos = dados?.access || {};\n  const imagens = imagensLiberadas(projeto, acessos);\n\n  if (!imagens.length) {\n    await Promise.allSettled([\n      esconderItem($item, IDS.imagemEntrega, false),\n      esconderItem($item, IDS.setaImagemAnterior, false),\n      esconderItem($item, IDS.setaImagemProxima, false)\n    ]);\n    return;\n  }\n\n  const chave = chaveImagemItem(dados);\n  let indice = reiniciar ? 0 : Number(indiceImagemPorProjeto.get(chave) || 0);\n  if (!Number.isFinite(indice) || indice < 0 || indice >= imagens.length) indice = 0;\n  if (deslocamento) indice = (indice + deslocamento + imagens.length) % imagens.length;\n  indiceImagemPorProjeto.set(chave, indice);\n\n  const imagemAtual = imagens[indice];\n  const imagem = $item(IDS.imagemEntrega);\n  imagem.src = imagemAtual.src;\n  try { imagem.alt = imagemAtual.title || `Projeto #${digits(projeto.codigoProjeto)}`; } catch (_) {}\n  await mostrarItem($item, IDS.imagemEntrega);\n\n  if (imagens.length > 1) {\n    await Promise.allSettled([\n      mostrarItem($item, IDS.setaImagemAnterior),\n      mostrarItem($item, IDS.setaImagemProxima)\n    ]);\n  } else {\n    await Promise.allSettled([\n      esconderItem($item, IDS.setaImagemAnterior, false),\n      esconderItem($item, IDS.setaImagemProxima, false)\n    ]);\n  }\n}\n\nfunction ligarNavegacaoImagensItem($item, dados) {\n  try { $item(IDS.setaImagemAnterior).onClick(async () => { await aplicarImagemAtualItem($item, dados, -1, false); }); } catch (_) {}\n  try { $item(IDS.setaImagemProxima).onClick(async () => { await aplicarImagemAtualItem($item, dados, 1, false); }); } catch (_) {}\n}\n\nasync function renderizarImagemItem($item, dados) {\n  await aplicarImagemAtualItem($item, dados, 0, true);\n  ligarNavegacaoImagensItem($item, dados);\n}\n\n'''
+text = text[:start] + replacement + text[end:]
+text = text.replace('  await renderizarGaleriaItem($item, dados);', '  await renderizarImagemItem($item, dados);', 1)
+text = text.replace('function configurarRepeater() {\n  const repetidor = $w(IDS.repetidor);\n\n  repetidor.onItemReady(($item, itemData) => {', 'function configurarRepeater() {\n  const repetidor = $w(IDS.repetidor);\n\n  try {\n    const galeriaLegada = $w(IDS.galeria);\n    if (typeof galeriaLegada.hide === "function") galeriaLegada.hide();\n    if (typeof galeriaLegada.collapse === "function") galeriaLegada.collapse();\n  } catch (_) {}\n\n  repetidor.onItemReady(($item, itemData) => {', 1)
+
+assert '#imagemProjetoEntrega' in text
+assert '#setaImagemAnteriorEntrega' in text
+assert '#setaImagemProximaEntrega' in text
+PAGE.write_text(text, encoding='utf-8')

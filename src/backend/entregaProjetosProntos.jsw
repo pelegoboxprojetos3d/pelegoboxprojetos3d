@@ -1639,7 +1639,7 @@ async function identidadeMembroAtual() {
   let membro = null;
 
   try {
-    membro = await currentMember.getMember();
+    membro = await currentMember.getMember({ fieldsets: ["FULL"] });
   } catch (_) {
     return null;
   }
@@ -1839,11 +1839,12 @@ async function identidadeMembroAtual() {
       sessao?.nome,
       nomeMembro
     ),
+    loginEmail: email,
     email: firstValue(
+      email,
       payloadCliente.email,
       normalizeEmail(sessao?.email),
-      normalizeEmail(sessao?.Email),
-      email
+      normalizeEmail(sessao?.Email)
     ),
     whatsapp: firstValue(
       payloadCliente.whatsapp,
@@ -1854,69 +1855,39 @@ async function identidadeMembroAtual() {
 }
 
 async function queryPurchasesByIdentity(identity = {}) {
+  const loginEmail = normalizeEmail(
+    identity?.loginEmail || identity?.email
+  );
+
+  if (!loginEmail) {
+    return [];
+  }
+
   const found = new Map();
 
-  const clientId = safe(identity?.clienteId);
-  const clientRef = safe(identity?.cliente?._id);
-  const email = normalizeEmail(identity?.email);
-  const whatsapp = normalizeWhatsapp(identity?.whatsapp);
-
-  const attempts = [];
-
-  if (clientId) attempts.push(["clienteId", clientId]);
-  if (clientRef) attempts.push(["cliente", clientRef]);
-  if (email) attempts.push(["email", email]);
-
-  const phoneValues = new Set();
-  if (whatsapp) {
-    phoneValues.add(whatsapp);
-    phoneValues.add(`+${whatsapp}`);
-
-    if (whatsapp.startsWith("55") && whatsapp.length >= 12) {
-      phoneValues.add(whatsapp.slice(2));
-    } else if (whatsapp.length === 10 || whatsapp.length === 11) {
-      phoneValues.add(`55${whatsapp}`);
-      phoneValues.add(`+55${whatsapp}`);
-    }
-
-    const whatsappNumber = Number(whatsapp);
-    if (Number.isSafeInteger(whatsappNumber)) {
-      phoneValues.add(whatsappNumber);
-    }
-  }
-
-  for (const value of phoneValues) {
-    attempts.push(["whatsapp", value]);
-    attempts.push(["whatsApp", value]);
-  }
-
-  for (const [field, value] of attempts) {
+  for (const field of ["email", "Email"]) {
     try {
       const result = await wixData
         .query(PURCHASES_COLLECTION)
-        .eq(field, value)
+        .eq(field, loginEmail)
         .limit(1000)
         .find(READ_OPTS);
 
       for (const item of result.items || []) {
+        if (purchaseEmail(item) !== loginEmail) continue;
         const id = safe(item?._id);
         if (id) found.set(id, item);
       }
     } catch (error) {
       console.warn(
-        `Busca de compras do membro por ${field} falhou:`,
+        `Busca de compras do membro por e-mail em ${field} falhou:`,
         error?.message || error
       );
     }
   }
 
-  let matched = [...found.values()].filter((purchase) =>
-    purchaseMatchesIdentity(purchase, identity)
-  );
-
-  if (!matched.length) {
+  if (!found.size) {
     try {
-      const fallback = new Map();
       let result = await wixData
         .query(PURCHASES_COLLECTION)
         .limit(1000)
@@ -1924,9 +1895,9 @@ async function queryPurchasesByIdentity(identity = {}) {
 
       while (result) {
         for (const item of result.items || []) {
-          if (purchaseMatchesIdentity(item, identity)) {
+          if (purchaseEmail(item) === loginEmail) {
             const id = safe(item?._id);
-            if (id) fallback.set(id, item);
+            if (id) found.set(id, item);
           }
         }
 
@@ -1939,17 +1910,15 @@ async function queryPurchasesByIdentity(identity = {}) {
 
         result = await result.next();
       }
-
-      matched = [...fallback.values()];
     } catch (error) {
       console.warn(
-        "Varredura de compatibilidade das compras do membro falhou:",
+        "Varredura por e-mail das compras do membro falhou:",
         error?.message || error
       );
     }
   }
 
-  return matched;
+  return [...found.values()];
 }
 
 function acessoDescricao(access = {}) {
@@ -2070,10 +2039,17 @@ export async function buscarSegundaViaProjetoPronto(input = {}) {
     codigoProjeto
   );
 
+  const loginEmail = normalizeEmail(
+    identity?.loginEmail || identity?.email
+  );
+
   const purchases = allPurchases
     .filter(approvedPurchase)
     .filter((purchase) =>
-      purchaseMatchesIdentity(purchase, identity)
+      Boolean(
+        loginEmail &&
+        purchaseEmail(purchase) === loginEmail
+      )
     );
 
   if (!purchases.length) {
@@ -2095,15 +2071,24 @@ export async function buscarSegundaViaProjetoPronto(input = {}) {
   }
 
   const access = calculateAccess(purchases);
+  const compraMaisRecente = newestFirst(purchases)[0] || {};
+
   const client = {
     ...clientPayload(identity.cliente),
     clienteId: firstValue(
+      purchaseClientId(compraMaisRecente),
       identity.clienteId,
       identity.cliente?._id
     ),
-    nome: identity.nome,
-    email: identity.email,
-    whatsapp: identity.whatsapp
+    nome: firstValue(
+      compraMaisRecente?.nomeCliente,
+      identity.nome
+    ),
+    email: loginEmail,
+    whatsapp: firstValue(
+      purchaseWhatsapp(compraMaisRecente),
+      identity.whatsapp
+    )
   };
 
   const tipoProduto = access.projeto

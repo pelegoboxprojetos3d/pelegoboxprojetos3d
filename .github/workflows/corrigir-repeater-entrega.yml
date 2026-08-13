@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/corrigir-repeater-entrega.yml"
       - "scripts/corrigir-repeater-entrega-2026-08-13.cjs"
+      - "scripts/orquestrar-secoes-entrega-2026-08-13.cjs"
   workflow_dispatch:
 
 permissions:
@@ -34,8 +35,11 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Corrigir repeater da entrega
+      - name: Garantir repeater da entrega
         run: node scripts/corrigir-repeater-entrega-2026-08-13.cjs
+
+      - name: Orquestrar seções da entrega
+        run: node scripts/orquestrar-secoes-entrega-2026-08-13.cjs
 
       - name: Validar código
         run: npm run lint
@@ -49,7 +53,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Nenhuma alteração pendente."
           else
-            git commit -m "Corrigir carregamento do repeater na entrega"
+            git commit -m "Orquestrar seções e repeater da entrega"
             git push origin HEAD:main
           fi
 

@@ -97,13 +97,6 @@ if (!code.includes("CARTAO_TOKENIZACAO_COM_FALLBACK_V1")) {
   );
 
   replaceOnce(
-`      paymentMethodId,
-      installments,`,
-`      installments,`,
-    "Remover token obrigatório do payload"
-  );
-
-  replaceOnce(
 `    chargePayload.items = [{ priceId, quantity: 1 }];`,
 `    if (paymentMethodId) {
       chargePayload.paymentMethodId = paymentMethodId;
@@ -119,6 +112,13 @@ if (!code.includes("CARTAO_TOKENIZACAO_COM_FALLBACK_V1")) {
     chargePayload.items = [{ priceId, quantity: 1 }];`,
     "Escolher token ou cartão direto"
   );
+}
+
+const tokenObrigatorioNoPayload = `      paymentMethodId,\n      installments,\n      passFeesToCustomer: false,`;
+const payloadSemTokenObrigatorio = `      installments,\n      passFeesToCustomer: false,`;
+if (code.includes(tokenObrigatorioNoPayload)) {
+  code = code.replace(tokenObrigatorioNoPayload, payloadSemTokenObrigatorio);
+  changed = true;
 }
 
 if (changed) {

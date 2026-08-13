@@ -380,28 +380,13 @@ const IDS_DADOS_REAIS_ENTREGA = [
 ];
 
 async function ocultarDadosAteCarregamento() {
-  try {
-    $w(IDS.titulo).text = "";
-    $w(IDS.valorMedidas).text = "";
-    $w(IDS.valorGraficos).text = "";
-    $w(IDS.valorProjeto).text = "";
-  } catch (_) {}
-
-  await Promise.allSettled(
-    IDS_DADOS_REAIS_ENTREGA.map(async (id) => {
-      try {
-        const elemento = $w(id);
-
-        if (typeof elemento.hide === "function") {
-          await elemento.hide();
-        }
-
-        if (typeof elemento.collapse === "function") {
-          await elemento.collapse();
-        }
-      } catch (_) {}
-    })
-  );
+  /*
+    O conteúdo real vive dentro do Repeater.
+    Não esconder/recolher filhos por $w aqui: isso altera o item-modelo e pode
+    impedir que imagem, título e botões voltem corretamente, sobretudo no mobile.
+    O Repeater inteiro é escondido por prepararRepeaterParaCarregamento().
+  */
+  return Promise.resolve();
 }
 
 async function mostrarDadosCarregados() {
@@ -2389,19 +2374,14 @@ async function renderizarBotoesItem($item, dados) {
   pintarBoxItem($item, IDS.boxGraficos, graficosPaga);
   pintarBoxItem($item, IDS.boxProjeto, projetoPago);
 
+  /* Primeiro prepara e mostra somente os controles principais do projeto. */
   await Promise.allSettled([
     mostrarItem($item, IDS.medidas),
     mostrarItem($item, IDS.valorMedidas),
     mostrarItem($item, IDS.graficos),
     mostrarItem($item, IDS.valorGraficos),
     mostrarItem($item, IDS.projeto),
-    mostrarItem($item, IDS.valorProjeto),
-    mostrarItem($item, IDS.boxMedidas),
-    mostrarItem($item, IDS.boxGraficos),
-    mostrarItem($item, IDS.boxProjeto),
-    mostrarItem($item, IDS.avisosEtapas),
-    mostrarItem($item, IDS.avisoImportante),
-    mostrarItem($item, "#box4")
+    mostrarItem($item, IDS.valorProjeto)
   ]);
 
   if (medidasPaga) {
@@ -2425,6 +2405,19 @@ async function renderizarBotoesItem($item, dados) {
   } else {
     await definirBloqueado($item(IDS.projeto), "COMPRAR PROJETO COMPLETO");
   }
+
+  /*
+    Os banners entram por último. Assim nunca aparecem antes da imagem,
+    do título e dos botões principais durante a transição da impressora.
+  */
+  await Promise.allSettled([
+    mostrarItem($item, IDS.boxMedidas),
+    mostrarItem($item, IDS.boxGraficos),
+    mostrarItem($item, IDS.boxProjeto),
+    mostrarItem($item, IDS.avisosEtapas),
+    mostrarItem($item, IDS.avisoImportante),
+    mostrarItem($item, "#box4")
+  ]);
 }
 
 function nomeClienteDados(dados) {
@@ -2784,7 +2777,13 @@ async function mostrarDadosRepeater(itens) {
     4. só então o conteúdo pronto aparece de uma vez.
   */
   repetidor.data = itens;
-  await esperar(120);
+
+  /*
+    Dá um pequeno intervalo para onItemReady montar título, imagem e botões
+    enquanto o Repeater ainda está oculto. A impressora continua respeitando
+    seu mínimo de 5 segundos em esconderProcessamento().
+  */
+  await esperar(300);
   await esconderProcessamento();
 
   if (typeof repetidor.expand === "function") {

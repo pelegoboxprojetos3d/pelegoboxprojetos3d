@@ -20,7 +20,7 @@ const MAKE_PROCESS_SECRET =
   "MAKE_WEBHOOK_PROJETOS_PRONTOS";
 
 const PROCESS_RETRY_MS =
-  15000;
+  180000;
 
 /*
   Nome visível: Clientes

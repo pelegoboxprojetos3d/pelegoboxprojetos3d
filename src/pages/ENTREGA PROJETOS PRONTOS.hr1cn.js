@@ -2799,6 +2799,24 @@ async function mostrarDadosRepeater(itens) {
   await liberarSecoesPosRepeater();
 }
 
+async function encerrarProcessamentoPendente(titulo, mensagem) {
+  try {
+    const repetidor = $w(IDS.repetidor);
+    const dados = [itemRepeaterMensagem(titulo, mensagem)];
+    iniciarCicloRepeater(dados.length);
+    repetidor.data = dados;
+    await aguardarRepeaterPronto(3000);
+  } catch (erro) {
+    console.warn(
+      "Falha ao mostrar mensagem de processamento pendente:",
+      erro?.message || erro
+    );
+  }
+
+  await esconderProcessamento();
+  processamentoVisualEncerrado = true;
+}
+
 async function carregarDetalhesDaCentral(resumos) {
   const completos = [];
   const tamanhoLote = 5;
@@ -3013,6 +3031,10 @@ async function carregarEntrega() {
         );
 
         await esconderBotaoVideo();
+        await encerrarProcessamentoPendente(
+          "PAGAMENTO CONFIRMADO",
+          "Seu pagamento foi confirmado, mas o arquivo ainda não terminou de ser preparado. Atualize esta página em alguns instantes."
+        );
 
         return;
       }
@@ -3079,6 +3101,10 @@ async function carregarEntrega() {
         );
 
         await esconderBotaoVideo();
+        await encerrarProcessamentoPendente(
+          "PAGAMENTO CONFIRMADO",
+          "Seu pagamento foi confirmado, mas o arquivo ainda não terminou de ser preparado. Atualize esta página em alguns instantes."
+        );
 
         return;
       }
@@ -3098,6 +3124,10 @@ async function carregarEntrega() {
   );
 
   await esconderBotaoVideo();
+  await encerrarProcessamentoPendente(
+    "PAGAMENTO CONFIRMADO",
+    "Seu pagamento foi confirmado, mas o arquivo ainda está sendo finalizado. Atualize esta página em alguns instantes."
+  );
 }
 
 

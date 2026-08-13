@@ -51,6 +51,9 @@ jobs:
       - name: Corrigir título pela coleção Videosprojetos
         run: node scripts/corrigir-titulo-videosprojetos-checkout-2026-08-12.cjs
 
+      - name: Preparar clientes para DDI internacional
+        run: node scripts/preparar-clientes-ddi-internacional-2026-08-12.cjs
+
       - name: Aplicar suporte de DDI ao cadastro social
         run: node scripts/suporte-ddi-clientes-social-2026-08-12.cjs
 

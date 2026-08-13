@@ -1,0 +1,71 @@
+name: Liberar Projetos Prontos
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/liberar-projetos-prontos.yml"
+      - "scripts/desativar-manutencao-projetos-prontos-2026-08-12.cjs"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wix-liberar-projetos-prontos
+  cancel-in-progress: true
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Desativar manutenção
+        run: node scripts/desativar-manutencao-projetos-prontos-2026-08-12.cjs
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar liberação
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
+          if git diff --cached --quiet; then
+            echo "Página já estava liberada."
+          else
+            git commit -m "Liberar acesso público a Projetos Prontos"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/wix.json --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" --data '{}')"
+          cat /tmp/wix.json || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

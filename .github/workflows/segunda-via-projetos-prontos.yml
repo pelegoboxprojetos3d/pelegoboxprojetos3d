@@ -1,0 +1,44 @@
+name: Segunda via projetos prontos
+
+on:
+  push:
+    branches:
+      - segunda-via-projetos-prontos-20260813
+    paths:
+      - .github/workflows/segunda-via-projetos-prontos.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: segunda-via-projetos-prontos-20260813
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Aplicar central de segunda via
+        run: node .github/scripts/segunda-via-projetos-prontos.js
+
+      - name: Instalar dependências sem pós-instalação Wix
+        run: npm ci --ignore-scripts
+
+      - name: Validar backend e página
+        run: npx eslint "src/backend/entregaProjetosProntos.jsw" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+
+      - name: Commitar somente implementação
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "src/backend/entregaProjetosProntos.jsw" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          git commit -m "Adicionar central de segundas vias dos projetos prontos"
+          git push origin HEAD:segunda-via-projetos-prontos-20260813

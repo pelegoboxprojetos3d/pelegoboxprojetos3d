@@ -58,3 +58,5 @@ jobs:
           git add 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
           git commit -m 'Manter galeria legada fechada no repeater' || exit 0
           git push origin HEAD
+
+# trigger 2

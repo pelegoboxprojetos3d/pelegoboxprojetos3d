@@ -1,0 +1,76 @@
+name: Pente fino e-mail e fatura
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/pente-fino-email-fatura.yml"
+      - "scripts/pente-fino-email-fatura-2026-08-13.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wix-pente-fino-email-fatura
+  cancel-in-progress: true
+
+jobs:
+  corrigir-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Corrigir e-mail e fatura
+        run: node scripts/pente-fino-email-fatura-2026-08-13.cjs
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correções
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add \
+            src/backend/notificarVendaProjetoPronto.js \
+            src/backend/validaPayCartaoProjetosProntos.jsw \
+            src/backend/validaPayPixProjetosProntosCore.jsw
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração pendente."
+          else
+            git commit -m "Corrigir fatura, título e duplicidade de e-mail"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub → Wix
+        run: sleep 75
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" --data '{}')"
+          cat "$response_file" || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

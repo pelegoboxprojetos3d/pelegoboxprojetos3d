@@ -70,6 +70,9 @@ const CHAVE_MANUTENCAO =
 const PAGINA_MANUTENCAO =
   "/projetos-prontos-manutencao";
 
+const SLUG_LOGIN_SOCIAL =
+  "checkoutprojetosprontos";
+
 const IDS = {
   titulo:
     "#txtTitulo",
@@ -165,6 +168,15 @@ function safe(value) {
   return String(
     value ?? ""
   ).trim();
+}
+
+function paginaLoginSocialAtiva() {
+  return (
+    safe(
+      wixLocation.path?.[0]
+    ).toLowerCase() ===
+    SLUG_LOGIN_SOCIAL
+  );
 }
 
 function firstValue(
@@ -1622,6 +1634,7 @@ function agendarPopupWhatsapp(
   cancelarPopupAgendado();
 
   if (
+    !paginaLoginSocialAtiva() ||
     identificado ||
     popupAberto ||
     !projeto
@@ -1658,7 +1671,10 @@ function agendarRetornoLoginSocial(
 ) {
   cancelarPopupAgendado();
 
-  if (identificado) {
+  if (
+    !paginaLoginSocialAtiva() ||
+    identificado
+  ) {
     return;
   }
 
@@ -1666,7 +1682,11 @@ function agendarRetornoLoginSocial(
     () => {
       popupAgendado = null;
 
-      if (identificado || popupAberto) {
+      if (
+        !paginaLoginSocialAtiva() ||
+        identificado ||
+        popupAberto
+      ) {
         return;
       }
 
@@ -2250,6 +2270,7 @@ async function identificarCliente(
 
 async function abrirPopupWhatsapp() {
   if (
+    !paginaLoginSocialAtiva() ||
     popupAberto ||
     !projeto
   ) {
@@ -2621,6 +2642,11 @@ function cadastroProntoParaPagamento(data = identificacao) {
 }
 
 async function iniciarPagina() {
+  if (!paginaLoginSocialAtiva()) {
+    cancelarPopupAgendado();
+    return;
+  }
+
   /*
     Toda vez que a página aparece novamente,
     o bloqueio de clique começa zerado.
@@ -2683,6 +2709,11 @@ function iniciarPaginaComTratamento() {
 }
 
 async function solicitarLoginSocial() {
+  if (!paginaLoginSocialAtiva()) {
+    cancelarPopupAgendado();
+    return;
+  }
+
   try {
     await authentication.promptLogin({
       mode: "login",
@@ -2690,6 +2721,11 @@ async function solicitarLoginSocial() {
     });
   } catch (_) {
     // Cancelar o modal não muda de página.
+  }
+
+  if (!paginaLoginSocialAtiva()) {
+    cancelarPopupAgendado();
+    return;
   }
 
   let membro = null;
@@ -2708,6 +2744,11 @@ async function solicitarLoginSocial() {
 }
 
 function iniciarComLoginSocial() {
+  if (!paginaLoginSocialAtiva()) {
+    cancelarPopupAgendado();
+    return;
+  }
+
   currentMember
     .getMember()
     .then(
@@ -2734,6 +2775,11 @@ function iniciarComLoginSocial() {
 
 $w.onReady(
   function () {
+    if (!paginaLoginSocialAtiva()) {
+      cancelarPopupAgendado();
+      return;
+    }
+
     if (
       aplicarBloqueioManutencao()
     ) {

@@ -231,7 +231,7 @@ button{cursor:pointer}
             <label class="label">WhatsApp com DDD <span class="required">*</span></label>
             <div class="phoneRow">
               <div class="phonePrefix">🇧🇷 +55</div>
-              <input id="phoneInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="Ex: (11) 99888-7766">
+              <input id="phoneInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="47988168971">
             </div>
             <p class="hint">Informe somente DDD e número.</p>
           </div>

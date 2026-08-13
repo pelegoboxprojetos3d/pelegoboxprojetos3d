@@ -1,0 +1,45 @@
+name: Refatorar entrega por repeater
+
+on:
+  push:
+    branches:
+      - repeater-entrega-por-projeto-20260813
+    paths:
+      - .github/scripts/refatorar-repeater-entrega.py
+      - .github/workflows/refatorar-repeater-entrega.yml
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          ref: repeater-entrega-por-projeto-20260813
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Aplicar refatoração
+        run: python .github/scripts/refatorar-repeater-entrega.py
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Validar página
+        run: npx eslint 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+
+      - name: Gravar implementação
+        run: |
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js'
+          git diff --cached --quiet && exit 0
+          git commit -m 'Usar repeater para uma entrega por projeto'
+          git push origin HEAD:repeater-entrega-por-projeto-20260813

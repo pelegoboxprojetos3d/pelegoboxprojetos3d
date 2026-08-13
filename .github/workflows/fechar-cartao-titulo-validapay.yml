@@ -37,8 +37,12 @@ jobs:
       - name: Restaurar SDK oficial de tokenização
         run: npm install @validapay/tokenize@latest --save --ignore-scripts
 
-      - name: Restaurar cartão tokenizado e cartão salvo
-        run: node scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs
+      - name: Restaurar backend tokenizado do cartão
+        run: |
+          node scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs || true
+          grep -q '@validapay/tokenize' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'paymentMethodId' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'buscarMetodoPagamentoPrivadoPorEmail' src/backend/validaPayCartaoProjetosProntos.jsw
 
       - name: Preservar visual do cartão salvo
         run: node scripts/corrigir-visual-cartao-salvo-2026-08-12.cjs

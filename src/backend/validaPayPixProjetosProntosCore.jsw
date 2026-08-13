@@ -470,14 +470,14 @@ async function notifyApproved(checkoutId, chargeId, charge) {
     email: safe(session.email).toLowerCase(),
     whatsapp: normalizePhone(session.whatsapp),
     cpfCnpj: digits(session.cpfCnpj),
-    produto: decodeTitle(session.produto),
+    produto: decodeTitle(session.tituloCheckout || session.produto),
     tipoProduto: normalizeType(session.tipoProduto),
     codigoProjeto: safe(session.codigoProjeto),
     img: safe(session.img),
     valor: amount,
     valorFormatado: amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + decodeTitle(session.produto),
-    tituloEmail: decodeTitle(session.produto),
+    assuntoEmail: "Pagamento confirmado com sucesso! ✅ " + decodeTitle(session.tituloCheckout || session.produto),
+    tituloEmail: decodeTitle(session.tituloCheckout || session.produto),
     botaoTexto: normalizeType(session.tipoProduto) === "GRAFICOS"
       ? "BAIXAR GRÁFICOS"
       : normalizeType(session.tipoProduto) === "PROJETO_COMPLETO"
@@ -543,13 +543,7 @@ export async function garantirPosPagamentoValidaPay({ checkoutId, chargeId, paym
     console.error("Falha ao garantir notificações pós-pagamento:", error?.message || error);
   }
 
-  let invoice = { sent: false, error: "not_attempted" };
-  try {
-    invoice = await garantirFaturaValidaPay(id, charge);
-  } catch (error) {
-    invoice = { sent: false, error: error?.message || "invoice_error" };
-    console.error("Falha ao garantir fatura ValidaPay:", error?.message || error);
-  }
+  const invoice = { sent:false, skipped:true, reason:"provider_native_resend_not_supported_public_api" };
 
   return { ok: true, notification, invoice };
 }
@@ -562,6 +556,7 @@ export async function criarCobrancaPixTransparente(input = {}) {
     const codigoProjeto = digits(first(input.codigoProjeto, ctx.codigoProjeto));
     const tipoProduto = normalizeType(first(input.tipoProduto, ctx.tipoProduto));
     const produto = tituloEtapaProjetoPronto(first(input.produto, ctx.produto, ctx.titulo, "Projeto Pronto"), tipoProduto, codigoProjeto);
+    const tituloCheckout = decodeTitle(first(input.tituloCheckout, ctx.titulo));
     const valor = parseMoney(input.valor ?? ctx.valor ?? ctx.price);
     const clienteId = safe(first(input.clienteId, ctx.clienteId));
     const nome = decodeTitle(first(input.nomeCliente, input.nome, ctx.nomeCliente, ctx.nome));
@@ -595,6 +590,7 @@ export async function criarCobrancaPixTransparente(input = {}) {
       codigoProjeto,
       tipoProduto,
       produto,
+      tituloCheckout,
       img,
       valor,
       returnUrl,

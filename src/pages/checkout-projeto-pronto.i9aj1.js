@@ -490,6 +490,7 @@ function basePayload(data={}) {
     codigoProjeto:ctx.codigoProjeto,
     tipoProduto:ctx.tipoProduto,
     produto:ctx.produto,
+    tituloCheckout:ctx.titulo,
     valor:ctx.valor,
     img:ctx.img,
     returnUrl:ctx.returnUrl,

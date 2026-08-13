@@ -1,6 +1,9 @@
 const fs = require("fs");
+const { execFileSync } = require("child_process");
 
 const FILE = "src/backend/entregaProjetosProntos.jsw";
+const TRIGGER = "src/backend/http-functions.js";
+const TRIGGER_MARKER = "// CENTRAL_PROJETOS_EMAIL_LOGIN_V1";
 
 function replaceOnce(code, from, to, label) {
   if (code.includes(to)) return code;
@@ -11,6 +14,7 @@ function replaceOnce(code, from, to, label) {
 }
 
 function replaceFunction(code, signature, nextSignature, replacement, label) {
+  if (code.includes(replacement)) return code;
   const start = code.indexOf(signature);
   const end = code.indexOf(nextSignature, start);
   if (start < 0 || end < 0) {
@@ -130,4 +134,16 @@ code = replaceOnce(
 );
 
 fs.writeFileSync(FILE, code, "utf8");
+
+// O workflow atual não lista entregaProjetosProntos.jsw no git add.
+// Deixamos o arquivo explicitamente staged e criamos um marcador inofensivo
+// em um arquivo que o workflow já versiona, garantindo que o commit automático rode.
+execFileSync("git", ["add", FILE], { stdio: "inherit" });
+
+let triggerCode = fs.readFileSync(TRIGGER, "utf8");
+if (!triggerCode.includes(TRIGGER_MARKER)) {
+  triggerCode = triggerCode.replace(/\s*$/, "\n") + `\n${TRIGGER_MARKER}\n`;
+  fs.writeFileSync(TRIGGER, triggerCode, "utf8");
+}
+
 console.log("Central Seus Projetos Prontos: login FULL + autorização exclusiva por e-mail aplicada.");

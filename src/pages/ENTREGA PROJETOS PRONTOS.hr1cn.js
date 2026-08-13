@@ -2835,14 +2835,20 @@ async function encerrarProcessamentoPendente(titulo, mensagem) {
     iniciarCicloRepeater(dados.length);
     repetidor.data = dados;
     await aguardarRepeaterPronto(3000);
+
+    await esconderProcessamento();
+
+    if (typeof repetidor.expand === "function") await repetidor.expand();
+    if (typeof repetidor.show === "function") await repetidor.show("fade");
   } catch (erro) {
     console.warn(
       "Falha ao mostrar mensagem de processamento pendente:",
       erro?.message || erro
     );
+
+    await esconderProcessamento();
   }
 
-  await esconderProcessamento();
   processamentoVisualEncerrado = true;
 }
 

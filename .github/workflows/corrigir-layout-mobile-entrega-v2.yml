@@ -1,0 +1,46 @@
+name: Corrigir Layout Mobile Entrega V2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-layout-mobile-entrega-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Aplicar ajuste mobile
+        run: node scripts/fix-layout-mobile-entrega.cjs
+
+      - name: Validar
+        run: npm run lint
+
+      - name: Gravar no main
+        run: |
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if ! git diff --cached --quiet; then
+            git commit -m "Corrigir sobreposicao do repeater no mobile"
+            git push origin HEAD:main
+          fi

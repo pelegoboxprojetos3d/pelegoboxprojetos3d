@@ -1,6 +1,7 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import { currentMember } from "wix-members-backend";
 import { normalizarWhatsappBrasil, normalizarTituloProduto } from "backend/projetosProntosNormalizacao";
 
 // TÍTULO NO WIX: backend/entregaProjetosProntos.jsw
@@ -1566,6 +1567,330 @@ function projectPayload(
         project?.valor_etapa_3 ||
         0
       )
+  };
+}
+
+async function identidadeMembroAtual() {
+  let membro = null;
+
+  try {
+    membro = await currentMember.getMember();
+  } catch (_) {
+    return null;
+  }
+
+  if (!membro?._id) {
+    return null;
+  }
+
+  const emailsContato =
+    Array.isArray(membro?.contactDetails?.emails)
+      ? membro.contactDetails.emails
+      : [];
+
+  const emails = emailsContato
+    .map((item) =>
+      typeof item === "string"
+        ? item
+        : firstValue(item?.email, item?.value)
+    )
+    .filter(Boolean);
+
+  const email = normalizeEmail(
+    firstValue(
+      membro?.loginEmail,
+      emails[0],
+      membro?.contactDetails?.email
+    )
+  );
+
+  const nomeMembro = firstValue(
+    membro?.profile?.nickname,
+    [
+      safe(membro?.contactDetails?.firstName),
+      safe(membro?.contactDetails?.lastName)
+    ].filter(Boolean).join(" ")
+  );
+
+  let cliente = null;
+
+  if (email) {
+    cliente = await findOne(
+      CLIENTS_COLLECTION,
+      "email",
+      email
+    );
+  }
+
+  const payloadCliente = clientPayload(cliente);
+
+  return {
+    memberId: safe(membro._id),
+    cliente,
+    clienteId: firstValue(
+      payloadCliente.clienteId,
+      cliente?._id
+    ),
+    nome: firstValue(
+      payloadCliente.nome,
+      nomeMembro
+    ),
+    email: firstValue(
+      payloadCliente.email,
+      email
+    ),
+    whatsapp: firstValue(
+      payloadCliente.whatsapp,
+      cliente?.whatsapp,
+      cliente?.whatsApp
+    )
+  };
+}
+
+async function queryPurchasesByIdentity(identity = {}) {
+  const found = new Map();
+
+  const clientId = safe(identity?.clienteId);
+  const clientRef = safe(identity?.cliente?._id);
+  const email = normalizeEmail(identity?.email);
+  const whatsapp = normalizeWhatsapp(identity?.whatsapp);
+
+  const attempts = [];
+
+  if (clientId) attempts.push(["clienteId", clientId]);
+  if (clientRef) attempts.push(["cliente", clientRef]);
+  if (email) attempts.push(["email", email]);
+
+  if (whatsapp) {
+    attempts.push(["whatsapp", whatsapp]);
+    attempts.push(["whatsApp", whatsapp]);
+
+    const whatsappNumber = Number(whatsapp);
+    if (Number.isSafeInteger(whatsappNumber)) {
+      attempts.push(["whatsapp", whatsappNumber]);
+      attempts.push(["whatsApp", whatsappNumber]);
+    }
+  }
+
+  for (const [field, value] of attempts) {
+    try {
+      const result = await wixData
+        .query(PURCHASES_COLLECTION)
+        .eq(field, value)
+        .limit(1000)
+        .find(READ_OPTS);
+
+      for (const item of result.items || []) {
+        const id = safe(item?._id);
+        if (id) found.set(id, item);
+      }
+    } catch (error) {
+      console.warn(
+        `Busca de compras do membro por ${field} falhou:`,
+        error?.message || error
+      );
+    }
+  }
+
+  return [...found.values()].filter((purchase) =>
+    purchaseMatchesIdentity(purchase, identity)
+  );
+}
+
+function acessoDescricao(access = {}) {
+  if (access.projeto === true) {
+    return "Medidas, gráficos e projeto completo";
+  }
+
+  if (access.graficos === true) {
+    return "Medidas e gráficos";
+  }
+
+  return "Medidas";
+}
+
+export async function listarProjetosProntosDoMembroAtual() {
+  const identity = await identidadeMembroAtual();
+
+  if (!identity) {
+    return {
+      ok: false,
+      error: "LOGIN_NECESSARIO",
+      items: []
+    };
+  }
+
+  const purchases = (await queryPurchasesByIdentity(identity))
+    .filter(approvedPurchase);
+
+  const grouped = new Map();
+
+  for (const purchase of purchases) {
+    const codigoProjeto = normalizeProjectCode(
+      purchase?.codigoProjeto
+    );
+
+    if (!codigoProjeto) continue;
+
+    const current = grouped.get(codigoProjeto) || [];
+    current.push(purchase);
+    grouped.set(codigoProjeto, current);
+  }
+
+  const items = (
+    await Promise.all(
+      [...grouped.entries()].map(
+        async ([codigoProjeto, compras]) => {
+          const project = await findProjectByOrder(codigoProjeto);
+          if (!project) return null;
+
+          const access = calculateAccess(compras);
+          const newest = newestFirst(compras)[0] || {};
+
+          const timestamp = new Date(
+            newest?._updatedDate ||
+            newest?.dataLiberacao ||
+            newest?.dataCompra ||
+            0
+          ).getTime();
+
+          return {
+            codigoProjeto,
+            titulo: canonicalProjectTitle(
+              project,
+              { codigoProjeto, produto: newest?.produto }
+            ),
+            thumbnail: mediaSource(
+              project?.thumbnail ||
+              newest?.thumbnail ||
+              newest?.imagemMedidas
+            ),
+            access,
+            acessoTexto: acessoDescricao(access),
+            atualizadoEm: Number.isFinite(timestamp)
+              ? timestamp
+              : 0
+          };
+        }
+      )
+    )
+  )
+    .filter(Boolean)
+    .sort((a, b) => b.atualizadoEm - a.atualizadoEm);
+
+  return {
+    ok: true,
+    memberId: identity.memberId,
+    items
+  };
+}
+
+export async function buscarSegundaViaProjetoPronto(input = {}) {
+  const codigoProjeto = normalizeProjectCode(
+    input.codigoProjeto
+  );
+
+  if (!codigoProjeto) {
+    return {
+      ok: false,
+      error: "CODIGO_PROJETO_AUSENTE"
+    };
+  }
+
+  const identity = await identidadeMembroAtual();
+
+  if (!identity) {
+    return {
+      ok: false,
+      error: "LOGIN_NECESSARIO"
+    };
+  }
+
+  const allPurchases = await queryPurchasesByProject(
+    codigoProjeto
+  );
+
+  const purchases = allPurchases
+    .filter(approvedPurchase)
+    .filter((purchase) =>
+      purchaseMatchesIdentity(purchase, identity)
+    );
+
+  if (!purchases.length) {
+    return {
+      ok: false,
+      error: "COMPRA_NAO_ENCONTRADA"
+    };
+  }
+
+  const project = await findProjectByOrder(
+    codigoProjeto
+  );
+
+  if (!project) {
+    return {
+      ok: false,
+      error: "PROJETO_NAO_ENCONTRADO"
+    };
+  }
+
+  const access = calculateAccess(purchases);
+  const client = {
+    ...clientPayload(identity.cliente),
+    clienteId: firstValue(
+      identity.clienteId,
+      identity.cliente?._id
+    ),
+    nome: identity.nome,
+    email: identity.email,
+    whatsapp: identity.whatsapp
+  };
+
+  const tipoProduto = access.projeto
+    ? "PROJETO_COMPLETO"
+    : access.graficos
+      ? "GRAFICOS"
+      : "MEDIDAS";
+
+  const session = {
+    checkoutId: "",
+    status: "approved",
+    paymentId: "",
+    clienteId: client.clienteId,
+    nomeCliente: client.nome,
+    email: client.email,
+    whatsapp: client.whatsapp,
+    codigoProjeto,
+    tipoProduto,
+    produto: canonicalProjectTitle(project, { codigoProjeto }),
+    img: mediaSource(project?.thumbnail),
+    valor: 0,
+    returnUrl: "",
+    compraRegistrada: true,
+    emailEnviado: true,
+    tokenEntrega: ""
+  };
+
+  const projectData = projectPayload(
+    project,
+    session,
+    purchases,
+    client
+  );
+
+  return {
+    ok: true,
+    approved: true,
+    segundaVia: true,
+    session,
+    client,
+    access,
+    stages: buildStages(
+      access,
+      purchases,
+      project
+    ),
+    project: projectData
   };
 }
 

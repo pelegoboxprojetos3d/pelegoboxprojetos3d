@@ -784,7 +784,6 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
         documentNumber: cpfCnpj,
         phone: whatsapp
       },
-      paymentMethodId,
       installments,
       passFeesToCustomer: false,
       freeInstallments: 1,

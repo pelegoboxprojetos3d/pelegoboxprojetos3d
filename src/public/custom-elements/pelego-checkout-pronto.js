@@ -712,6 +712,7 @@ function hydrate(ctx){
  if(S.ctx.nome)E.name.value=safe(S.ctx.nome);
  if(S.ctx.cpfCnpj)E.cpf.value=formatCpf(S.ctx.cpfCnpj);
  if(S.ctx.email){E.email.value=email(S.ctx.email);E.email2.value=email(S.ctx.email)}
+ hydrateCardIdentity(S.ctx);
  fillInstallments();
  syncIdentityButton();
 }
@@ -756,6 +757,15 @@ function validateIdentity(){
  if(!validCpf(c)){setAlert(E.identityAlert,"error","Informe um CPF válido.");E.cpf.focus();return false}
  if(!validEmail(a)){setAlert(E.identityAlert,"error","Não foi possível carregar o e-mail da sua conta Google/Facebook.");return false}
  return true
+}
+
+function hydrateCardIdentity(data){
+ var d=data&&typeof data==="object"?data:{};
+ var name=safe(d.nome||d.nomeCliente||S.ctx.nome);
+ var doc=digits(d.cpfCnpj||d.cpf||S.ctx.cpfCnpj).slice(0,14);
+ if(name){S.ctx.nome=name;if(!safe(E.cardName.value))E.cardName.value=name}
+ if(doc){S.ctx.cpfCnpj=doc;if(!digits(E.cardDocument.value))E.cardDocument.value=doc}
+ updateVisual();
 }
 
 function customerPayload(){
@@ -1069,9 +1079,12 @@ window.addEventListener("message",function(event){
 }
 if(type==="SAVED_CARD"){S.savedCard=d.existe===true?{...d,existe:true}:null;if(!E.cardMode.classList.contains("hidden"))applySavedCardMode(Boolean(S.savedCard));return}
 if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$("checkoutBoot"),main=$("checkoutMain");if(boot)boot.classList.add("hidden");if(main)main.style.display="block";document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
+ if(type==="CUSTOMER_CONTEXT"){
+   if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);hydrateCardIdentity(d);return
+ }
  if(["CUSTOMER_READY","DATA_SAVED","PAYMENT_READY","SHOW_PAYMENT"].indexOf(type)>=0){
    if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.");return}
-   if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);showPayment();return
+   if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);hydrateCardIdentity(d);showPayment();return
  }
  if(type==="CUSTOMER_RESULT"){if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.")}else if(d.ok===true){if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);showPayment()}return}
  if(type==="ALREADY_PURCHASED"){showAlready();return}

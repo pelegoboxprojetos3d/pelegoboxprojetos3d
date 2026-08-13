@@ -864,6 +864,35 @@ async function createCard(data={}) {
   } finally { cardRequestBusy=false; }
 }
 
+async function carregarContextoClienteAutenticado() {
+  try {
+    const perfil = await waitTimeout(buscarClienteDoMembroAtual(), 5000, "");
+    const cliente = perfil?.cliente && typeof perfil.cliente === "object" ? perfil.cliente : null;
+    const mail = email(perfil?.email || cliente?.email || ctx.email);
+
+    const patch = {
+      clienteId: safe(cliente?._id || cliente?.clienteId || ctx.clienteId),
+      nome: safe(cliente?.nome || perfil?.nome || ctx.nome),
+      email: mail,
+      cpfCnpj: cpf(cliente?.cpfCnpj || cliente?.cpf || ctx.cpfCnpj)
+    };
+
+    ctx = { ...ctx, ...patch };
+    saveIdentity(patch);
+
+    post({
+      type: "CUSTOMER_CONTEXT",
+      ok: true,
+      clienteId: ctx.clienteId,
+      nome: ctx.nome,
+      email: ctx.email,
+      cpfCnpj: ctx.cpfCnpj
+    });
+  } catch (error) {
+    console.warn("Contexto do cliente autenticado não pôde ser atualizado:", error?.message || error);
+  }
+}
+
 async function carregarMetodoPagamentoSalvo() {
   try {
     const result = await waitTimeout(buscarMetodoPagamentoDoMembroAtual(), 5000, "");
@@ -913,6 +942,7 @@ $w.onReady(function(){
   */
   contextReady=true;
   sendInit(true);
+  carregarContextoClienteAutenticado().catch(console.error);
   carregarMetodoPagamentoSalvo().catch(console.error);
 
   completarContextoPelaColecao()

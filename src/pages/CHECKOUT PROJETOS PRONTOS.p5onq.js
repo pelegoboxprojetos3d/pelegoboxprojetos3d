@@ -760,9 +760,31 @@ async function buscarProjetoVizinho(
         .limit(1)
         .find();
 
-    return resultado.items.length
-      ? resultado.items[0]
-      : null;
+    if (resultado.items.length) {
+      return resultado.items[0];
+    }
+
+    /*
+      Navegação circular: ao ultrapassar o último projeto pela direita,
+      volta para o primeiro. Ao ultrapassar o primeiro pela esquerda,
+      volta para o último. Assim as duas setas nunca chegam a um beco sem saída.
+    */
+    let consultaExtremo = wixData.query(COLLECTION);
+    consultaExtremo = direcao < 0
+      ? consultaExtremo.descending("ordem_video")
+      : consultaExtremo.ascending("ordem_video");
+
+    const extremo = await consultaExtremo.limit(1).find();
+    const circular = extremo.items.length ? extremo.items[0] : null;
+
+    if (
+      circular &&
+      codigoPublico(circular) !== String(codigoAtual)
+    ) {
+      return circular;
+    }
+
+    return null;
 
   } catch (error) {
     console.warn(
@@ -3212,6 +3234,22 @@ $w.onReady(
     if (!paginaLoginSocialAtiva()) {
       cancelarPopupAgendado();
       return;
+    }
+
+    /*
+      Regra da página protegida: se o membro deslogar enquanto estiver aqui,
+      não deixamos o checkout social aberto nem reabrimos o modal de login.
+      O visitante volta imediatamente para a Home.
+    */
+    try {
+      authentication.onLogout(() => {
+        cancelarPopupAgendado();
+        identificado = false;
+        popupAberto = false;
+        wixLocation.to("/");
+      });
+    } catch (error) {
+      console.warn("Não foi possível registrar o redirecionamento após logout:", error?.message || error);
     }
 
     if (

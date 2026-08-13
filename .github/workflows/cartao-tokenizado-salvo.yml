@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/cartao-tokenizado-salvo.yml"
       - "scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs"
+      - "scripts/corrigir-visual-cartao-salvo-2026-08-12.cjs"
       - "src/backend/metodosPagamentoProjetosProntos.js"
       - "src/backend/metodosPagamentoProjetosProntos.web.js"
 
@@ -40,6 +41,9 @@ jobs:
 
       - name: Aplicar cartão salvo tokenizado
         run: node scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs
+
+      - name: Preservar visual do cartão salvo
+        run: node scripts/corrigir-visual-cartao-salvo-2026-08-12.cjs
 
       - name: Validar código
         run: npm run lint

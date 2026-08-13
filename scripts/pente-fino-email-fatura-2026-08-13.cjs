@@ -112,7 +112,7 @@ if (!code.includes("CARTAO_TOKENIZACAO_COM_FALLBACK_V1")) {
         number,
         cvv,
         name: holder,
-        expiration: \`${month}/${year}\`
+        expiration: month + "/" + year
       };
     }
 

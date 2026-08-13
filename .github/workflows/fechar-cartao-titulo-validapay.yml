@@ -1,0 +1,90 @@
+name: Fechar cartão, título e pós-pagamento
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fechar-cartao-titulo-validapay.yml"
+      - "scripts/fechar-cartao-titulo-validapay-2026-08-13.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fechar-cartao-titulo-validapay
+  cancel-in-progress: true
+
+jobs:
+  aplicar-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar código atual
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências atuais
+        run: npm ci --ignore-scripts
+
+      - name: Restaurar SDK oficial de tokenização
+        run: npm install @validapay/tokenize@latest --save --ignore-scripts
+
+      - name: Restaurar cartão tokenizado e cartão salvo
+        run: node scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs
+
+      - name: Preservar visual do cartão salvo
+        run: node scripts/corrigir-visual-cartao-salvo-2026-08-12.cjs
+
+      - name: Aplicar título exato e remover atraso 401
+        run: node scripts/fechar-cartao-titulo-validapay-2026-08-13.cjs
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar estado final
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add \
+            package.json package-lock.json \
+            src/backend/validaPayCartaoProjetosProntos.jsw \
+            src/backend/validaPayPixProjetosProntosCore.jsw \
+            src/backend/notificarVendaProjetoPronto.js \
+            src/pages/checkout-projeto-pronto.i9aj1.js \
+            src/public/custom-elements/pelego-checkout-pronto.js
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração pendente."
+          else
+            git commit -m "Fechar cartão salvo, título exato e pós-pagamento"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar GitHub sincronizar com Wix
+        run: sleep 75
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix HTTP $status"
+          cat "$response_file" || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

@@ -334,7 +334,18 @@ function esperar(
 
 
 async function esconderSecao(id) {
-  try { const e=$w(id); if(typeof e.hide==='function') await e.hide(); if(typeof e.collapse==='function') await e.collapse(); } catch (_) {}
+  /*
+    MOBILE: esconder sem recolher preserva a posição real das seções
+    inferiores enquanto o Repeater termina de calcular sua altura.
+    Isso impede os banners de subirem por cima do botão 3 e da linha
+    tracejada quando o HTML da impressora é recolhido.
+  */
+  try {
+    const e = $w(id);
+    if (typeof e.hide === "function") {
+      await e.hide();
+    }
+  } catch (_) {}
 }
 async function mostrarSecao(id) {
   try { const e=$w(id); if(typeof e.expand==='function') await e.expand(); if(typeof e.show==='function') await e.show(); } catch (_) {}
@@ -346,7 +357,23 @@ async function prepararSecoesEntrega() {
 }
 async function liberarSecoesPosRepeater() {
   const mobile = wixWindowFrontend.formFactor === "Mobile";
+
   await mostrarSecao(SECOES_ENTREGA.banners);
+
+  /*
+    A regra dos banners já existia, mas não estava sendo aplicada
+    depois que a entrega passou a ser montada pelo Repeater.
+    No mobile, banner de etapa paga some e recolhe somente o próprio
+    box. No desktop não mudamos absolutamente nada.
+  */
+  if (
+    mobile &&
+    !centralSegundasViasAtiva &&
+    entrega?.access
+  ) {
+    await mostrarAvisosEntrega();
+  }
+
   await esperar(mobile ? 260 : 120);
   await mostrarSecao(SECOES_ENTREGA.final);
 }

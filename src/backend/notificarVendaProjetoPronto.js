@@ -274,6 +274,12 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
 
   const emailPayload = {
     ...payload,
+    // O cenário do Make ainda usa o campo legado "produto" no assunto e no HTML.
+    // Para não mexer no checkout nem na ValidaPay, somente o payload do e-mail
+    // sobrescreve esse campo com o título canônico vindo de Videosprojetos.
+    produto: tituloEmailCorreto,
+    tituloProjeto: tituloEmailCorreto,
+    tituloEmail: tituloEmailCorreto,
     botaoUrl: payload.botaoUrl + "&via=email",
     deliveryUrl: payload.deliveryUrl + "&via=email"
   };

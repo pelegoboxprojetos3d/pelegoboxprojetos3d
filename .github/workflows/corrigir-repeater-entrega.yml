@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/corrigir-repeater-entrega.yml"
-      - "scripts/corrigir-repeater-entrega-2026-08-13.cjs"
-      - "scripts/orquestrar-secoes-entrega-2026-08-13.cjs"
   workflow_dispatch:
 
 permissions:
@@ -35,25 +33,107 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Garantir repeater da entrega
-        run: node scripts/corrigir-repeater-entrega-2026-08-13.cjs
+      - name: Orquestrar abertura da entrega
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const f='src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+          let s=fs.readFileSync(f,'utf8');
 
-      - name: Orquestrar seções da entrega
-        run: node scripts/orquestrar-secoes-entrega-2026-08-13.cjs
+          if(!s.includes('const SECOES_ENTREGA =')) s=s.replace('const CORES = {',`const SECOES_ENTREGA = {
+            principal: '#imagensdoprodutobotao1e2',
+            banners: '#textodobotaobaixaranalisegrafica',
+            final: '#section2'
+          };
+
+          const CORES = {`);
+
+          if(!s.includes('async function prepararSecoesEntrega()')) s=s.replace('function dinheiro(\n  valor\n) {',`async function esconderSecao(id) {
+            try { const e=$w(id); if(typeof e.hide==='function') await e.hide(); if(typeof e.collapse==='function') await e.collapse(); } catch (_) {}
+          }
+          async function mostrarSecao(id) {
+            try { const e=$w(id); if(typeof e.expand==='function') await e.expand(); if(typeof e.show==='function') await e.show(); } catch (_) {}
+          }
+          async function prepararSecoesEntrega() {
+            try { const e=$w(SECOES_ENTREGA.principal); if(typeof e.show==='function') await e.show(); } catch (_) {}
+            await esconderSecao(SECOES_ENTREGA.banners);
+            await esconderSecao(SECOES_ENTREGA.final);
+          }
+          async function liberarSecoesPosRepeater() {
+            await mostrarSecao(SECOES_ENTREGA.banners);
+            await esperar(120);
+            await mostrarSecao(SECOES_ENTREGA.final);
+          }
+
+          function dinheiro(
+            valor
+          ) {`);
+
+          if(!s.includes('let cicloRepeater = null;')) s=s.replace('const indiceImagemPorProjeto =\n  new Map();',`const indiceImagemPorProjeto =
+            new Map();
+
+          let cicloRepeater = null;
+          function iniciarCicloRepeater(total) {
+            let resolver; const pronto=new Promise(r=>{resolver=r;});
+            cicloRepeater={total:Math.max(0,Number(total)||0),prontos:0,resolver,pronto};
+            if(!cicloRepeater.total) resolver();
+          }
+          function marcarItemRepeaterPronto() {
+            if(!cicloRepeater)return; cicloRepeater.prontos+=1;
+            if(cicloRepeater.prontos>=cicloRepeater.total)cicloRepeater.resolver();
+          }
+          async function aguardarRepeaterPronto(ms=5000) {
+            if(!cicloRepeater)return; await Promise.race([cicloRepeater.pronto,esperar(ms)]);
+          }`);
+
+          const p1=s.indexOf('async function prepararRepeaterParaCarregamento() {');
+          const p2=s.indexOf('function configurarRepeater() {',p1);
+          if(p1>=0&&p2>p1){let b=s.slice(p1,p2);b=b.replace(/\n\s*if \(typeof repetidor\.collapse[\s\S]*?\n\s*\}/,'');s=s.slice(0,p1)+b+s.slice(p2);}
+
+          const c1=s.indexOf('function configurarRepeater() {');
+          const c2=s.indexOf('async function mostrarDadosRepeater(itens) {',c1);
+          if(c1<0||c2<0)throw new Error('configurarRepeater não encontrado');
+          s=s.slice(0,c1)+`function configurarRepeater() {
+            const repetidor=$w(IDS.repetidor);
+            try { const g=$w(IDS.galeria); if(typeof g.hide==='function')g.hide(); if(typeof g.collapse==='function')g.collapse(); } catch (_) {}
+            repetidor.onItemReady(($item,itemData)=>{
+              renderizarItemRepeater($item,itemData).catch((erro)=>console.error('Falha ao renderizar projeto no repeater:',erro?.message||erro)).finally(()=>marcarItemRepeaterPronto());
+            });
+          }
+
+          `+s.slice(c2);
+
+          const m1=s.indexOf('async function mostrarDadosRepeater(itens) {');
+          const m2=s.indexOf('async function carregarDetalhesDaCentral(resumos) {',m1);
+          if(m1<0||m2<0)throw new Error('mostrarDadosRepeater não encontrado');
+          s=s.slice(0,m1)+`async function mostrarDadosRepeater(itens) {
+            const repetidor=$w(IDS.repetidor);
+            const dados=Array.isArray(itens)?itens:[];
+            iniciarCicloRepeater(dados.length);
+            repetidor.data=dados;
+            await aguardarRepeaterPronto(5000);
+            await esconderProcessamento();
+            if(typeof repetidor.show==='function')await repetidor.show();
+            await esperar(100);
+            await liberarSecoesPosRepeater();
+          }
+
+          `+s.slice(m2);
+
+          if(!s.includes('await prepararSecoesEntrega();')) s=s.replace('  await ocultarDadosAteCarregamento();','  await prepararSecoesEntrega();\n  await ocultarDadosAteCarregamento();');
+          fs.writeFileSync(f,s,'utf8');
+          NODE
 
       - name: Validar código
         run: npm run lint
 
       - name: Gravar correção no main
         run: |
-          set -euo pipefail
           git config user.name "PELEGO BOX Automação"
           git config user.email "pelegobox82@gmail.com"
           git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          if git diff --cached --quiet; then
-            echo "Nenhuma alteração pendente."
-          else
-            git commit -m "Orquestrar seções e repeater da entrega"
+          if ! git diff --cached --quiet; then
+            git commit -m "Orquestrar entrega por seções sem alterar layout"
             git push origin HEAD:main
           fi
 
@@ -65,13 +145,6 @@ jobs:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
           WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
         run: |
-          set -euo pipefail
-          response_file="$(mktemp)"
-          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
-            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
-            --header "Authorization: $WIX_API_KEY" \
-            --header "wix-site-id: $WIX_SITE_ID" \
-            --header "Content-Type: application/json" --data '{}')"
-          cat "$response_file" || true
-          echo
+          status=$(curl --silent --output /tmp/wix --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')
+          cat /tmp/wix || true
           test "$status" -ge 200 -a "$status" -lt 300

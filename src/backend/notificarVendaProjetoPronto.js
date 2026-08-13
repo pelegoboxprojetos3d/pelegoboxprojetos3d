@@ -33,7 +33,7 @@ function tituloProjetoParaEmail(session) {
     REGRA FINAL: o e-mail usa exatamente o mesmo título comercial já salvo
     na sessão do checkout. Não consulta Videosprojetos e não reconstrói a frase.
   */
-  return safe(session?.tituloCheckout) || safe(session?.produto) || "Projeto Pronto";
+  return safe(session?.produto) || safe(session?.tituloCheckout) || "Projeto Pronto";
 }
 
 async function reservarEnvioEmail(checkoutId) {
@@ -94,7 +94,7 @@ async function registrarHistoricoCompraAprovada({ session, chargeId, paymentMeth
   }
 
   const codigoCompra = gerarCodigoCompra();
-  const produto = safe(session?.tituloCheckout) || safe(session?.produto);
+  const produto = safe(session?.produto) || safe(session?.tituloCheckout);
   const item = {
     title: codigoCompra,
     emailCompra: safe(session?.email).toLowerCase(),

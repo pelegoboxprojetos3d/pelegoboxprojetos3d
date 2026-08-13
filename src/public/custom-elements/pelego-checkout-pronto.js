@@ -167,8 +167,8 @@ button{cursor:pointer}
   width:min(76%,340px);aspect-ratio:1.586/1;margin:0 auto 10px;padding:18px;
   display:flex;flex-direction:column;justify-content:space-between;border-radius:17px;
   background:linear-gradient(145deg,#171a20,#343b46 58%,#15171c);color:#fff;
-  border:1px solid rgba(255,255,255,.20);
-  box-shadow:0 13px 28px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.26);
+  border:1px solid rgba(10,14,18,.38);
+  box-shadow:0 3px 7px rgba(0,0,0,.10);
   text-shadow:0 1px 2px rgba(0,0,0,.55);
   transition:background .28s ease,border-color .28s ease,box-shadow .28s ease,filter .28s ease
 }

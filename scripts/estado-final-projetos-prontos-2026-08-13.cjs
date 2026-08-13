@@ -147,6 +147,7 @@ function patchRegressionScripts() {
 patchEmailTitle();
 patchInvoiceFunction(CARD, "timeout");
 patchInvoiceFunction(PIX, "sleep");
+require("./blindar-regra-titulos-2026-08-13.cjs");
 patchDeliveryTime();
 patchRegressionScripts();
 require("./corrigir-central-projetos-email-2026-08-13.cjs");

@@ -6,7 +6,6 @@
     "react": "16.14.0"
   },
   "dependencies": {
-    "@validapay/tokenize": "^1.2.0",
     "mercadopago": "3.1.0"
   },
   "scripts": {

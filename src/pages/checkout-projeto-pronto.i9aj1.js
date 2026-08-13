@@ -41,10 +41,17 @@ const digits = v => safe(v).replace(/\D/g, "");
 const email = v => safe(v).toLowerCase();
 const waitTimeout = (p, ms, m) => Promise.race([p, new Promise((_,r)=>setTimeout(()=>r(new Error(m)),ms))]);
 
-function phone(v) {
+function phone(v, ddi = "55") {
   let n = digits(v);
-  if (n.startsWith("55") && (n.length === 12 || n.length === 13)) n = n.slice(2);
-  return n.length === 10 || n.length === 11 ? n : "";
+  const d = digits(ddi) || "55";
+  if (d && n.startsWith(d) && n.length > d.length + 5) n = n.slice(d.length);
+  return n.length >= 6 && n.length <= 15 ? n : "";
+}
+
+function phoneE164(v, ddi = "55") {
+  const d = digits(ddi) || "55";
+  const n = phone(v, d);
+  return n ? "+" + d + n : "";
 }
 
 function cpf(v) { return digits(v).slice(0,11); }
@@ -63,7 +70,7 @@ function validCpf(v) {
 
 function identityComplete(value = ctx) {
   return Boolean(
-    phone(value?.whatsappE164 || value?.whatsapp) &&
+    phone(value?.whatsappE164 || value?.whatsapp, value?.ddi || "55") &&
     safe(value?.nome || value?.nomeCliente).replace(/\s+/g," ").length >= 3 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email(value?.email)) &&
     validCpf(value?.cpfCnpj || value?.cpf)
@@ -89,12 +96,14 @@ function checkoutHandoffSnapshot(project = "", type = "") {
       nome: safe(marker.nome || marker.nomeCliente),
       email: email(marker.email),
       cpfCnpj: cpf(marker.cpfCnpj || marker.cpf),
-      whatsapp: phone(marker.whatsappE164 || marker.whatsapp),
+      ddi: digits(marker.ddi || "55") || "55",
+      country: safe(marker.country || "br").toLowerCase(),
+      whatsapp: phone(marker.whatsappE164 || marker.whatsapp, marker.ddi || "55"),
       whatsappE164: "",
       whatsappConfirmado: marker.whatsappConfirmado === true
     };
 
-    if (snapshot.whatsapp) snapshot.whatsappE164 = "+55" + snapshot.whatsapp;
+    if (snapshot.whatsapp) snapshot.whatsappE164 = phoneE164(snapshot.whatsapp, snapshot.ddi);
 
     if (!snapshot.clienteId || snapshot.whatsappConfirmado !== true || !identityComplete(snapshot)) {
       return null;
@@ -123,14 +132,14 @@ function sessionIdentityCandidate() {
 }
 
 function sessionIdentityVerified(value = ctx) {
-  const n = phone(value?.whatsappE164 || value?.whatsapp);
+  const n = phone(value?.whatsappE164 || value?.whatsapp, value?.ddi || "55");
   if (!n || !identityComplete(value)) return false;
 
   try {
     const raw = session.getItem(VERIFIED_SESSION_KEY);
     if (raw) {
       const marker = JSON.parse(raw);
-      if (marker?.ok === true && phone(marker.whatsapp) === n) return true;
+      if (marker?.ok === true && phone(marker.whatsapp, marker.ddi || value?.ddi || "55") === n) return true;
     }
   } catch (_) {}
 
@@ -156,6 +165,7 @@ function markSessionIdentityVerified(value = ctx) {
       JSON.stringify({
         ok:true,
         whatsapp:n,
+        ddi:digits(value?.ddi || "55") || "55",
         clienteId:safe(value?.clienteId),
         verifiedAt:Date.now()
       })
@@ -164,7 +174,7 @@ function markSessionIdentityVerified(value = ctx) {
 }
 
 async function hydrateReturningCustomer() {
-  const n = phone(ctx.whatsappE164 || ctx.whatsapp);
+  const n = phone(ctx.whatsappE164 || ctx.whatsapp, ctx.ddi || "55");
   if (!n) {
     ctx.skipIdentity = false;
     return;
@@ -180,14 +190,14 @@ async function hydrateReturningCustomer() {
   ctx.skipIdentity = (alreadyVerifiedThisSession || ctx.skipIdentity === true) && socialDataConfirmed(ctx.email);
 
   try {
-    const found = await waitTimeout(buscarClienteCadastrado(n), 3500, "");
+    const found = await waitTimeout(buscarClienteCadastrado(phoneE164(n, ctx.ddi || "55")), 3500, "");
     if (!found) return;
 
     customer = found;
     const id = safe(found._id || found.clienteId);
     const cadastroBackend = {
       whatsapp:n,
-      whatsappE164:`+55${n}`,
+      whatsappE164:phoneE164(n, ctx.ddi || "55"),
       nome:safe(found.nome || found.nomeCliente),
       email:email(found.email),
       cpfCnpj:cpf(found.cpfCnpj || found.cpf)
@@ -201,7 +211,7 @@ async function hydrateReturningCustomer() {
       email:cadastroBackend.email,
       cpfCnpj:cadastroBackend.cpfCnpj,
       whatsapp:n,
-      whatsappE164:`+55${n}`,
+      whatsappE164:phoneE164(n, ctx.ddi || "55"),
       whatsappConfirmado:true
     });
     ctx.skipIdentity = socialDataConfirmed(cadastroBackend.email);
@@ -226,9 +236,13 @@ function savedIdentity() {
 
 function saveIdentity(patch) {
   const next = { ...savedIdentity(), ...patch };
-  const n = phone(next.whatsappE164 || next.whatsapp);
+  const ddi = digits(next.ddi || "55") || "55";
+  const n = phone(next.whatsappE164 || next.whatsapp, ddi);
   if (n) {
-    next.whatsapp=n; next.whatsappE164=`+55${n}`; next.ddi="55"; next.country="br";
+    next.whatsapp=n;
+    next.whatsappE164=phoneE164(n, ddi);
+    next.ddi=ddi;
+    next.country=safe(next.country || "br").toLowerCase();
   }
   const raw = JSON.stringify(next);
   try { session.setItem(SESSION_KEY,raw); } catch(_) {}
@@ -288,7 +302,9 @@ function contextFromUrl() {
   const handoff=checkoutHandoffSnapshot(project,type);
   const source=handoff || saved;
   const verifiedSession=sessionIdentityVerified(source);
-  const number=phone(source.whatsappE164 || source.whatsapp);
+  const sourceDdi=digits(source.ddi || "55") || "55";
+  const sourceCountry=safe(source.country || "br").toLowerCase();
+  const number=phone(source.whatsappE164 || source.whatsapp, sourceDdi);
   const product=safe(q.tituloOriginal || q.titulo || q.produto || q.name || "Projeto Pronto");
   const displayTitle=safe(q.tituloBase || q.tituloProjeto || product);
   return {
@@ -302,8 +318,8 @@ function contextFromUrl() {
     price:Number(q.valor || q.price || 0),
     tipoProduto:type,
     whatsapp:number,
-    whatsappE164:number ? `+55${number}` : "",
-    ddi:"55", country:"br",
+    whatsappE164:number ? phoneE164(number, sourceDdi) : "",
+    ddi:sourceDdi, country:sourceCountry,
     clienteId:safe(source.clienteId),
     nome:safe(source.nome || source.nomeCliente),
     email:email(source.email),
@@ -414,6 +430,20 @@ function deliveryUrl() {
   return `/entregaprojetosprontos?checkout_id=${encodeURIComponent(checkoutId)}&pos_pagamento=1`;
 }
 
+function abrirEntregaComFallback(delay=650) {
+  const destino = deliveryUrl();
+  setTimeout(() => {
+    try { wixLocation.to(destino); } catch (_) {}
+  }, delay);
+  setTimeout(() => {
+    try {
+      if (safe(wixLocation.path?.[0]).toLowerCase() === "checkout-projeto-pronto") {
+        wixLocation.to(destino);
+      }
+    } catch (_) {}
+  }, delay + 1800);
+}
+
 function post(data) {
   const payload = { ...(data || {}), __bridgeSeq: ++bridgeSeq };
   try {
@@ -442,7 +472,9 @@ function sendInit(force=false) {
 }
 
 function basePayload(data={}) {
-  const n=phone(data.whatsappE164 || data.whatsapp || ctx.whatsappE164 || ctx.whatsapp);
+  const ddi=digits(data.ddi || ctx.ddi || "55") || "55";
+  const country=safe(data.country || ctx.country || "br").toLowerCase();
+  const n=phone(data.whatsappE164 || data.whatsapp || ctx.whatsappE164 || ctx.whatsapp, ddi);
   return {
     checkoutId,
     clienteId:safe(data.clienteId || customer?._id || customer?.clienteId || ctx.clienteId),
@@ -451,8 +483,8 @@ function basePayload(data={}) {
     email:email(data.email || ctx.email),
     cpfCnpj:cpf(data.cpfCnpj || ctx.cpfCnpj),
     whatsapp:n,
-    whatsappE164:n ? `+55${n}` : "",
-    ddi:"55", country:"br",
+    whatsappE164:n ? phoneE164(n, ddi) : "",
+    ddi, country,
     codigoProjeto:ctx.codigoProjeto,
     tipoProduto:ctx.tipoProduto,
     produto:ctx.produto,
@@ -472,12 +504,15 @@ function avisarDadosSalvos(payload) {
 async function saveCustomer(data={}) {
   if (busy) return;
 
+  const ddi = digits(data.ddi || ctx.ddi || "55") || "55";
+  const country = safe(data.country || ctx.country || "br").toLowerCase();
   const n =
     phone(
       data.whatsappE164 ||
       data.whatsapp ||
       ctx.whatsappE164 ||
-      ctx.whatsapp
+      ctx.whatsapp,
+      ddi
     );
 
   const name =
@@ -548,7 +583,9 @@ async function saveCustomer(data={}) {
       await waitTimeout(
         criarCliente({
           whatsapp:
-            `+55${n}`,
+            phoneE164(n, ddi),
+          ddi,
+          country,
           nome:
             name,
           email:
@@ -590,7 +627,9 @@ async function saveCustomer(data={}) {
         ),
       whatsapp: n,
       whatsappE164:
-        `+55${n}`,
+        phoneE164(n, ddi),
+      ddi,
+      country,
       whatsappConfirmado: true,
       confirmacaoWhatsappVersao: 5,
       confirmadoEm:
@@ -611,7 +650,7 @@ async function saveCustomer(data={}) {
             email:
               mail,
             whatsapp:
-              n
+              digits(phoneE164(n, ddi))
           }),
           3500,
           ""
@@ -712,7 +751,7 @@ async function pollCardDelivery(n=1) {
       */
       stopCardPoll();
       post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
-      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+      abrirEntregaComFallback(650);
       return;
     }
   } catch(_) {}
@@ -739,7 +778,7 @@ async function pollPix(n=1) {
     if(r?.approved===true || ["approved","paid"].includes(safe(r?.status).toLowerCase())) {
       stopPoll(); busy=false;
       post({type:"PIX_APPROVED",ok:true,checkoutId,chargeId,deliveryUrl:deliveryUrl()});
-      setTimeout(()=>wixLocation.to(deliveryUrl()),850);
+      abrirEntregaComFallback(850);
       return;
     }
   } catch(_) {}
@@ -803,7 +842,7 @@ async function createCard(data={}) {
         cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
         error:"Pagamento aprovado. Abrindo sua entrega..."
       });
-      setTimeout(()=>wixLocation.to(deliveryUrl()),650);
+      abrirEntregaComFallback(650);
       return;
     }
 

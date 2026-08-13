@@ -42,26 +42,30 @@ function normalizarCpfCnpj(valor) {
  * +5547988419261
  */
 export function normalizarWhatsapp(numero) {
-  let numeros = somenteNumeros(numero);
+  const original = texto(numero);
+  let numeros = somenteNumeros(original);
 
-  if (
-    numeros.startsWith(DDI_BRASIL) &&
-    (
-      numeros.length === 12 ||
-      numeros.length === 13
-    )
-  ) {
-    numeros = numeros.slice(2);
+  if (!numeros) return "";
+
+  // E164 explícito: preserva qualquer DDI válido.
+  if (original.startsWith("+") && numeros.length >= 7 && numeros.length <= 15) {
+    return `+${numeros}`;
   }
 
-  if (
-    numeros.length !== 10 &&
-    numeros.length !== 11
-  ) {
-    return "";
+  // Compatibilidade com o Brasil legado.
+  if (numeros.startsWith(DDI_BRASIL) && (numeros.length === 12 || numeros.length === 13)) {
+    return `+${numeros}`;
+  }
+  if (numeros.length === 10 || numeros.length === 11) {
+    return `+${DDI_BRASIL}${numeros}`;
   }
 
-  return `+${DDI_BRASIL}${numeros}`;
+  // Número internacional sem o sinal +, já contendo DDI.
+  if (numeros.length >= 7 && numeros.length <= 15) {
+    return `+${numeros}`;
+  }
+
+  return "";
 }
 
 function criarVariantesWhatsapp(numero) {

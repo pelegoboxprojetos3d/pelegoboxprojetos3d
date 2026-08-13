@@ -73,8 +73,8 @@ button{cursor:pointer}
 .required{color:#d32f2f}
 .control{width:100%;height:48px;padding:0 13px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none}
 .control:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
-.phoneRow{display:grid;grid-template-columns:76px 1fr}
-.phonePrefix{height:48px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #d7d7d7;border-right:0;border-radius:12px 0 0 12px;background:#fafafa;font-size:13px;font-weight:700}
+.phoneRow{display:grid;grid-template-columns:122px 1fr}
+.phonePrefix{height:48px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #d7d7d7;border-right:0;border-radius:12px 0 0 12px;background:#fafafa;font-size:13px;font-weight:700}.countrySelect{width:122px;padding:0 7px;cursor:pointer;outline:none;color:#171717;appearance:auto}.countrySelect:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
 .phoneRow .control{border-radius:0 12px 12px 0}
 .hint{margin:5px 0 0;color:#777;font-size:9px}
 .emailNotice{padding:9px 11px;border-left:4px solid #1877f2;border-radius:9px;background:#eef5ff;color:#2d405b;font-size:10px;line-height:1.4}
@@ -230,7 +230,31 @@ button{cursor:pointer}
           <div>
             <label class="label">WhatsApp com DDD <span class="required">*</span></label>
             <div class="phoneRow">
-              <div class="phonePrefix">🇧🇷 +55</div>
+              <select id="countrySelect" class="phonePrefix countrySelect" aria-label="País e código do WhatsApp"><option value="55|br">🇧🇷 +55</option>
+<option value="1|us">🇺🇸 +1</option>
+<option value="351|pt">🇵🇹 +351</option>
+<option value="54|ar">🇦🇷 +54</option>
+<option value="595|py">🇵🇾 +595</option>
+<option value="598|uy">🇺🇾 +598</option>
+<option value="56|cl">🇨🇱 +56</option>
+<option value="591|bo">🇧🇴 +591</option>
+<option value="51|pe">🇵🇪 +51</option>
+<option value="57|co">🇨🇴 +57</option>
+<option value="593|ec">🇪🇨 +593</option>
+<option value="58|ve">🇻🇪 +58</option>
+<option value="52|mx">🇲🇽 +52</option>
+<option value="34|es">🇪🇸 +34</option>
+<option value="44|gb">🇬🇧 +44</option>
+<option value="33|fr">🇫🇷 +33</option>
+<option value="49|de">🇩🇪 +49</option>
+<option value="39|it">🇮🇹 +39</option>
+<option value="41|ch">🇨🇭 +41</option>
+<option value="31|nl">🇳🇱 +31</option>
+<option value="32|be">🇧🇪 +32</option>
+<option value="353|ie">🇮🇪 +353</option>
+<option value="81|jp">🇯🇵 +81</option>
+<option value="61|au">🇦🇺 +61</option>
+<option value="64|nz">🇳🇿 +64</option></select>
               <input id="phoneInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="47988168971">
             </div>
             <p class="hint">Informe somente DDD e número.</p>
@@ -238,7 +262,31 @@ button{cursor:pointer}
           <div>
             <label class="label">Confirme seu WhatsApp <span class="required">*</span></label>
             <div class="phoneRow">
-              <div class="phonePrefix">🇧🇷 +55</div>
+              <select id="countryConfirmSelect" class="phonePrefix countrySelect" aria-label="País e código da confirmação do WhatsApp"><option value="55|br">🇧🇷 +55</option>
+<option value="1|us">🇺🇸 +1</option>
+<option value="351|pt">🇵🇹 +351</option>
+<option value="54|ar">🇦🇷 +54</option>
+<option value="595|py">🇵🇾 +595</option>
+<option value="598|uy">🇺🇾 +598</option>
+<option value="56|cl">🇨🇱 +56</option>
+<option value="591|bo">🇧🇴 +591</option>
+<option value="51|pe">🇵🇪 +51</option>
+<option value="57|co">🇨🇴 +57</option>
+<option value="593|ec">🇪🇨 +593</option>
+<option value="58|ve">🇻🇪 +58</option>
+<option value="52|mx">🇲🇽 +52</option>
+<option value="34|es">🇪🇸 +34</option>
+<option value="44|gb">🇬🇧 +44</option>
+<option value="33|fr">🇫🇷 +33</option>
+<option value="49|de">🇩🇪 +49</option>
+<option value="39|it">🇮🇹 +39</option>
+<option value="41|ch">🇨🇭 +41</option>
+<option value="31|nl">🇳🇱 +31</option>
+<option value="32|be">🇧🇪 +32</option>
+<option value="353|ie">🇮🇪 +353</option>
+<option value="81|jp">🇯🇵 +81</option>
+<option value="61|au">🇦🇺 +61</option>
+<option value="64|nz">🇳🇿 +64</option></select>
               <input id="phoneConfirmInput" class="control" type="tel" inputmode="numeric" maxlength="15" placeholder="Digite novamente">
             </div>
             <p id="phoneConfirmHint" class="hint">Digite novamente o mesmo WhatsApp.</p>
@@ -426,7 +474,7 @@ function $(id){return document.getElementById(id)}
 var E={
  step1:$("step1"),step2:$("step2"),step3:$("step3"),img:$("productImage"),fallback:$("productFallback"),title:$("productTitle"),price:$("productPrice"),
  identity:$("identityPanel"),payment:$("paymentPanel"),normal:$("paymentNormal"),cardMode:$("paymentCardMode"),success:$("successPanel"),already:$("alreadyPanel"),
- phone:$("phoneInput"),phoneConfirm:$("phoneConfirmInput"),phoneConfirmHint:$("phoneConfirmHint"),name:$("nameInput"),cpf:$("cpfInput"),email:$("emailInput"),email2:$("emailConfirmInput"),identityAlert:$("identityAlert"),identityBtn:$("identityButton"),
+ country:$("countrySelect"),countryConfirm:$("countryConfirmSelect"),phone:$("phoneInput"),phoneConfirm:$("phoneConfirmInput"),phoneConfirmHint:$("phoneConfirmHint"),name:$("nameInput"),cpf:$("cpfInput"),email:$("emailInput"),email2:$("emailConfirmInput"),identityAlert:$("identityAlert"),identityBtn:$("identityButton"),
  topGrid:$("paymentTopGrid"),left:$("leftColumn"),center:$("centerColumn"),notice:$("paymentNotice"),google:$("googleMethod"),pixAuto:$("pixAutoMethod"),apple:$("appleMethod"),paypal:$("paypalMethod"),deferred:$("mobileDeferred"),
  pix:$("pixMethod"),card:$("cardMethod"),pixFromCard:$("pixFromCard"),pixArea:$("pixArea"),qr:$("qrRender"),tetrisWrap:$("tetrisWrap"),tetrisCanvas:$("tetrisCanvas"),pixCode:$("pixCode"),copy:$("copyPixButton"),pixStatus:$("pixStatus"),pixStatusText:$("pixStatusText"),
  cardLeft:$("cardLeft"),cardRight:$("cardRight"),cardSelected:$("cardSelected"),cardPaymentNotice:$("cardPaymentNotice"),cardForm:$("cardForm"),cardNumber:$("cardNumber"),cardMonth:$("cardMonth"),cardYear:$("cardYear"),cardCvv:$("cardCvv"),cardName:$("cardName"),cardDocument:$("cardDocument"),installments:$("installments"),cardAlert:$("cardAlert"),cardSubmit:$("cardSubmit"),
@@ -519,8 +567,9 @@ function prettyTitle(v){
 function setStep(n){
  [E.step1,E.step2,E.step3].forEach(function(el,i){el.classList.remove("active","done");if(i+1<n)el.classList.add("done");if(i+1===n)el.classList.add("active")});
 }
-function phoneLocal(v){var n=digits(v);if(n.indexOf("55")===0&&(n.length===12||n.length===13))n=n.slice(2);return n.length===10||n.length===11?n:""}
-function formatPhone(v){var n=phoneLocal(v)||digits(v).slice(-11);if(n.length===11)return n.replace(/^(\d{2})(\d{5})(\d{4})$/,"($1) $2-$3");if(n.length===10)return n.replace(/^(\d{2})(\d{4})(\d{4})$/,"($1) $2-$3");return n}
+function countryInfo(select){var raw=safe(select&&select.value||"55|br").split("|");return{ddi:digits(raw[0])||"55",country:safe(raw[1]||"br").toLowerCase()}}
+function phoneLocal(v,ddi){var n=digits(v),d=digits(ddi||"55");if(d&&n.indexOf(d)===0&&n.length>d.length+5)n=n.slice(d.length);return n.length>=6&&n.length<=15?n:""}
+function formatPhone(v,ddi){var d=digits(ddi||"55"),n=phoneLocal(v,d)||digits(v).slice(0,15);if(d==="55"&&n.length===11)return n.replace(/^(\d{2})(\d{5})(\d{4})$/,"($1) $2-$3");if(d==="55"&&n.length===10)return n.replace(/^(\d{2})(\d{4})(\d{4})$/,"($1) $2-$3");return n}
 function cpf(v){return digits(v).slice(0,11)}
 function formatCpf(v){var n=cpf(v);return n.replace(/^(\d{3})(\d)/,"$1.$2").replace(/^(\d{3})\.(\d{3})(\d)/,"$1.$2.$3").replace(/\.(\d{3})(\d)/,".$1-$2")}
 function validCpf(v){var n=cpf(v);if(n.length!==11||/^(\d)\1{10}$/.test(n))return false;var s=0,i,d;for(i=0;i<9;i++)s+=Number(n[i])*(10-i);d=(s*10)%11;if(d===10)d=0;if(d!==Number(n[9]))return false;s=0;for(i=0;i<10;i++)s+=Number(n[i])*(11-i);d=(s*10)%11;if(d===10)d=0;return d===Number(n[10])}
@@ -551,7 +600,7 @@ function hydrate(ctx){
  E.price.textContent=money(S.ctx.valor||S.ctx.price);
  var src=safe(S.ctx.imagem||S.ctx.img);
  if(src){E.img.src=src;E.img.classList.remove("hidden");E.fallback.classList.add("hidden")}else{E.img.classList.add("hidden");E.fallback.classList.remove("hidden")}
- var p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp);if(p)E.phone.value=formatPhone(p);if(E.phoneConfirm)E.phoneConfirm.value="";
+ var wantedDdi=digits(S.ctx.ddi||"55")||"55";[E.country,E.countryConfirm].forEach(function(sel){if(!sel)return;var opt=Array.prototype.find.call(sel.options,function(o){return safe(o.value).split("|")[0]===wantedDdi});if(opt)sel.value=opt.value});var ci=countryInfo(E.country),p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp,ci.ddi);if(p)E.phone.value=formatPhone(p,ci.ddi);if(E.phoneConfirm)E.phoneConfirm.value="";
  if(S.ctx.nome)E.name.value=safe(S.ctx.nome);
  if(S.ctx.cpfCnpj)E.cpf.value=formatCpf(S.ctx.cpfCnpj);
  if(S.ctx.email){E.email.value=email(S.ctx.email);E.email2.value=email(S.ctx.email)}
@@ -570,19 +619,19 @@ function hydrate(ctx){
 
 
 function phoneConfirmationMatches(){
- var a=phoneLocal(E.phone.value),b=phoneLocal(E.phoneConfirm.value);
+ var a=phoneLocal(E.phone.value,countryInfo(E.country).ddi),b=phoneLocal(E.phoneConfirm.value,countryInfo(E.countryConfirm).ddi);
  return Boolean(a&&b&&a===b)
 }
 function syncPhoneConfirmationState(){
  if(!E.phoneConfirm||!E.phoneConfirmHint)return;
- var a=phoneLocal(E.phone.value),b=phoneLocal(E.phoneConfirm.value),mismatch=Boolean(b&&a!==b);
+ var a=phoneLocal(E.phone.value,countryInfo(E.country).ddi),b=phoneLocal(E.phoneConfirm.value,countryInfo(E.countryConfirm).ddi),mismatch=Boolean(b&&a!==b);
  E.phoneConfirm.style.borderColor=mismatch?"#d32f2f":"";
  E.phoneConfirm.style.boxShadow=mismatch?"0 0 0 3px rgba(211,47,47,.10)":"";
  E.phoneConfirmHint.textContent=mismatch?"Os números não conferem.":"Digite novamente o mesmo WhatsApp.";
  E.phoneConfirmHint.style.color=mismatch?"#b3261e":"#777";
 }
 function identityFieldsReady(){
- var p=phoneLocal(E.phone.value),p2=phoneLocal(E.phoneConfirm.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
+ var p=phoneLocal(E.phone.value,countryInfo(E.country).ddi),p2=phoneLocal(E.phoneConfirm.value,countryInfo(E.countryConfirm).ddi),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
  return Boolean(p&&p2&&p===p2&&n.length>=3&&validCpf(c)&&validEmail(a))
 }
 function syncIdentityButton(){
@@ -591,7 +640,7 @@ function syncIdentityButton(){
  E.identityBtn.disabled=S.saving||!identityFieldsReady();
 }
 function validateIdentity(){
- var p=phoneLocal(E.phone.value),p2=phoneLocal(E.phoneConfirm.value),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
+ var p=phoneLocal(E.phone.value,countryInfo(E.country).ddi),p2=phoneLocal(E.phoneConfirm.value,countryInfo(E.countryConfirm).ddi),n=safe(E.name.value).replace(/\s+/g," "),c=cpf(E.cpf.value),a=email(E.email.value);
  if(!p){setAlert(E.identityAlert,"error","Informe um WhatsApp válido com DDD.");E.phone.focus();return false}
  if(!p2){setAlert(E.identityAlert,"error","Confirme seu WhatsApp.");E.phoneConfirm.focus();return false}
  if(p!==p2){setAlert(E.identityAlert,"error","Os números de WhatsApp não conferem.");syncPhoneConfirmationState();E.phoneConfirm.focus();return false}
@@ -602,12 +651,12 @@ function validateIdentity(){
 }
 
 function customerPayload(){
- var p=phoneLocal(E.phone.value),n=safe(E.name.value).replace(/\s+/g," ");
- return{type:"CREATE_CUSTOMER",checkoutId:S.checkoutId,whatsapp:p,whatsappE164:p?"+55"+p:"",ddi:"55",country:"br",nome:n,nomeCliente:n,cpfCnpj:cpf(E.cpf.value),cpf:cpf(E.cpf.value),email:email(E.email.value),ctx:S.ctx}
+ var ci=countryInfo(E.country),p=phoneLocal(E.phone.value,ci.ddi),n=safe(E.name.value).replace(/\s+/g," ");
+ return{type:"CREATE_CUSTOMER",checkoutId:S.checkoutId,whatsapp:p,whatsappE164:p?"+"+ci.ddi+p:"",ddi:ci.ddi,country:ci.country,nome:n,nomeCliente:n,cpfCnpj:cpf(E.cpf.value),cpf:cpf(E.cpf.value),email:email(E.email.value),ctx:S.ctx}
 }
 function basePayment(){
- var p=phoneLocal(E.phone.value||S.ctx.whatsapp);
- return{checkoutId:S.checkoutId,clienteId:safe(S.ctx.clienteId),nome:safe(E.name.value||S.ctx.nome),nomeCliente:safe(E.name.value||S.ctx.nome),email:email(E.email.value||S.ctx.email),cpfCnpj:cpf(E.cpf.value||S.ctx.cpfCnpj),whatsapp:p,whatsappE164:p?"+55"+p:"",ddi:"55",country:"br",codigoProjeto:safe(S.ctx.codigoProjeto),tipoProduto:safe(S.ctx.tipoProduto||"MEDIDAS"),produto:decodeEntities(S.ctx.produto||S.ctx.titulo),valor:Number(S.ctx.valor||S.ctx.price||0),img:safe(S.ctx.img||S.ctx.imagem),returnUrl:safe(S.ctx.returnUrl),ctx:S.ctx}
+ var ci=countryInfo(E.country),p=phoneLocal(E.phone.value||S.ctx.whatsapp,ci.ddi);
+ return{checkoutId:S.checkoutId,clienteId:safe(S.ctx.clienteId),nome:safe(E.name.value||S.ctx.nome),nomeCliente:safe(E.name.value||S.ctx.nome),email:email(E.email.value||S.ctx.email),cpfCnpj:cpf(E.cpf.value||S.ctx.cpfCnpj),whatsapp:p,whatsappE164:p?"+"+ci.ddi+p:"",ddi:ci.ddi,country:ci.country,codigoProjeto:safe(S.ctx.codigoProjeto),tipoProduto:safe(S.ctx.tipoProduto||"MEDIDAS"),produto:decodeEntities(S.ctx.produto||S.ctx.titulo),valor:Number(S.ctx.valor||S.ctx.price||0),img:safe(S.ctx.img||S.ctx.imagem),returnUrl:safe(S.ctx.returnUrl),ctx:S.ctx}
 }
 function showPayment(){
  if(S.paymentReady)return;
@@ -779,12 +828,43 @@ function submitCard(ev){
  var p=basePayment();p.type="CREATE_CARD";p.card={number:number,month:month,year:year,cvv:cvv,name:name};p.cardDocument=doc;p.installments=Number(E.installments.value||1);post(p)
 }
 function resetCard(){S.cardBusy=false;E.cardSubmit.disabled=false;E.cardCvv.value=""}
-function showSuccess(){stopTetris();E.identity.classList.add("hidden");E.payment.classList.add("hidden");E.already.classList.add("hidden");E.success.classList.remove("hidden");setStep(3);layoutMode("SUCCESS")}
+function celebratePayment(){
+ var old=document.getElementById("paymentCelebrationCanvas");if(old)old.remove();
+ var canvas=document.createElement("canvas");canvas.id="paymentCelebrationCanvas";
+ canvas.style.cssText="position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:2147483646;";
+ document.body.appendChild(canvas);
+ var ctx=canvas.getContext("2d"),dpr=Math.min(window.devicePixelRatio||1,2),w=0,h=0,particles=[],raf=0,start=performance.now();
+ function resize(){w=window.innerWidth;h=window.innerHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0)}
+ resize();
+ var raw=safe(S.ctx.tipoProduto||"MEDIDAS").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[\s-]+/g,"_");
+ var mode=raw==="GRAFICOS"?2:raw==="PROJETO_COMPLETO"?3:1;
+ var colors=mode===1?["#159447","#88d49f","#ffffff","#f0c84b"]:mode===2?["#159447","#77c8ff","#ffffff","#a78bfa"]:["#159447","#f1c84b","#ffffff","#ff8a65","#80cbc4"];
+ function add(x,y,vx,vy,size,life,shape){particles.push({x:x,y:y,vx:vx,vy:vy,size:size,life:life,max:life,rot:Math.random()*6.28,vr:(Math.random()-.5)*.22,color:colors[(Math.random()*colors.length)|0],shape:shape||0})}
+ function burst(x,y,count,power){for(var i=0;i<count;i++){var a=Math.random()*Math.PI*2,s=power*(.45+Math.random()*.75);add(x,y,Math.cos(a)*s,Math.sin(a)*s-(Math.random()*1.5),4+Math.random()*6,80+Math.random()*40,i%3)}}
+ if(mode===1){
+   burst(w*.5,h*.42,88,6.2);
+   for(var i=0;i<28;i++){add(0,h*.68,3+Math.random()*4,-5-Math.random()*4,4+Math.random()*5,95+Math.random()*30,i%3);add(w,h*.68,-3-Math.random()*4,-5-Math.random()*4,4+Math.random()*5,95+Math.random()*30,i%3)}
+ }else if(mode===2){
+   for(var j=0;j<95;j++){add(Math.random()*w,-20-Math.random()*h*.28,(Math.random()-.5)*1.8,2.2+Math.random()*3.8,3+Math.random()*5,120+Math.random()*60,j%2)}
+   setTimeout(function(){if(canvas.isConnected)burst(w*.5,h*.38,54,5.2)},260);
+ }else{
+   burst(w*.28,h*.38,62,6.8);burst(w*.72,h*.38,62,6.8);
+   setTimeout(function(){if(canvas.isConnected)burst(w*.5,h*.30,96,7.6)},240);
+   setTimeout(function(){if(canvas.isConnected)burst(w*.5,h*.48,70,6.4)},520);
+ }
+ function draw(p){ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;if(p.shape===1){ctx.fillRect(-p.size*.7,-p.size*.18,p.size*1.4,p.size*.36)}else if(p.shape===2){ctx.beginPath();ctx.arc(0,0,p.size*.46,0,Math.PI*2);ctx.fill()}else{ctx.fillRect(-p.size*.45,-p.size*.45,p.size*.9,p.size*.9)}ctx.restore()}
+ function frame(now){ctx.clearRect(0,0,w,h);for(var i=particles.length-1;i>=0;i--){var p=particles[i];p.life--;p.vy+=mode===2?.045:.085;p.vx*=.992;p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;draw(p);if(p.life<=0||p.y>h+80)particles.splice(i,1)}if((particles.length&&now-start<4200)||now-start<900){raf=requestAnimationFrame(frame)}else{cancelAnimationFrame(raf);canvas.remove()}}
+ raf=requestAnimationFrame(frame);
+ setTimeout(function(){if(canvas.isConnected){cancelAnimationFrame(raf);canvas.remove()}},4700)
+}
+function showSuccess(){stopTetris();E.identity.classList.add("hidden");E.payment.classList.add("hidden");E.already.classList.add("hidden");E.success.classList.remove("hidden");setStep(3);layoutMode("SUCCESS");requestAnimationFrame(celebratePayment)}
 function showAlready(){stopTetris();E.identity.classList.add("hidden");E.payment.classList.add("hidden");E.success.classList.add("hidden");E.already.classList.remove("hidden");setStep(3);layoutMode("SUCCESS")}
 
 E.img.addEventListener("error",function(){E.img.classList.add("hidden");E.fallback.classList.remove("hidden")});
-E.phone.addEventListener("input",function(){this.value=formatPhone(this.value);syncIdentityButton()});
-E.phoneConfirm.addEventListener("input",function(){this.value=formatPhone(this.value);syncIdentityButton()});
+E.country.addEventListener("change",function(){E.countryConfirm.value=this.value;E.phone.value=formatPhone(E.phone.value,countryInfo(E.country).ddi);E.phoneConfirm.value="";syncIdentityButton()});
+E.countryConfirm.addEventListener("change",function(){E.country.value=this.value;E.phone.value=formatPhone(E.phone.value,countryInfo(E.country).ddi);E.phoneConfirm.value="";syncIdentityButton()});
+E.phone.addEventListener("input",function(){this.value=formatPhone(this.value,countryInfo(E.country).ddi);syncIdentityButton()});
+E.phoneConfirm.addEventListener("input",function(){this.value=formatPhone(this.value,countryInfo(E.countryConfirm).ddi);syncIdentityButton()});
 E.name.addEventListener("input",syncIdentityButton);
 E.cpf.addEventListener("input",function(){this.value=formatCpf(this.value);syncIdentityButton()});
 E.email.addEventListener("input",syncIdentityButton);

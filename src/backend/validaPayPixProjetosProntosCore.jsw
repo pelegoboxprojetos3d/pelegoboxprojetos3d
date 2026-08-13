@@ -66,7 +66,7 @@ function decodeTitle(value) {
 
 function normalizeStatus(value) {
   const status = safe(value).toUpperCase();
-  if (["PAID", "APPROVED", "CONFIRMED", "SUCCEEDED"].includes(status)) return "approved";
+  if (["PAID", "APPROVED", "CONFIRMED", "SUCCEEDED", "SUCCESS", "COMPLETED", "SETTLED", "CAPTURED"].includes(status)) return "approved";
   if (["FAILED", "REJECTED", "DECLINED", "DENIED", "REFUSED"].includes(status)) return "rejected";
   if (["CANCELED", "CANCELLED"].includes(status)) return "cancelled";
   if (status === "EXPIRED") return "expired";
@@ -396,8 +396,10 @@ function extractQr(data = {}) {
 }
 
 function publicCharge(checkoutId, chargeId, data = {}, fallbackAmount = 0) {
-  const status = normalizeStatus(first(data?.status, data?.charge?.status, data?.payment?.status, data?.data?.status));
+  const status = normalizeStatus(first(data?.status, data?.charge?.status, data?.payment?.status, data?.data?.status, data?.transaction?.status, data?.paymentStatus, data?.chargeStatus));
   const emv = extractEmv(data);
+  const paidAt = safe(first(data?.paidAt, data?.payment?.paidAt, data?.charge?.paidAt, data?.data?.paidAt));
+  const approved = status === "approved" || Boolean(paidAt);
   return {
     ok: true,
     provider: "VALIDAPAY",
@@ -405,7 +407,7 @@ function publicCharge(checkoutId, chargeId, data = {}, fallbackAmount = 0) {
     checkoutId: safe(checkoutId),
     chargeId: safe(chargeId),
     status,
-    approved: status === "approved",
+    approved,
     processing: !emv && status === "pending",
     recoverable: !emv && status === "pending",
     amount: parseMoney(first(data?.amount, data?.value, data?.total, data?.charge?.amount, fallbackAmount)),
@@ -504,6 +506,46 @@ async function notifyApproved(checkoutId, chargeId, charge) {
   }
 
   if (patch.emailEnviadoEm || patch.chatbotVendaEnviado === true) await saveSession(checkoutId, patch, session);
+}
+
+export async function garantirPosPagamentoValidaPay({ checkoutId, chargeId, paymentMethod = "PIX" } = {}) {
+  const id = safe(checkoutId);
+  const charge = safe(chargeId);
+  if (!id || !charge) return { ok: false, error: "checkout_or_charge_missing" };
+
+  const current = await findSession(id);
+  if (!current) return { ok: false, error: "session_not_found" };
+
+  if (safe(current.status).toLowerCase() !== "approved") {
+    await saveSession(id, {
+      status: "approved",
+      paymentId: charge,
+      validaPayChargeId: charge,
+      updatedAtDate: new Date()
+    }, current);
+  }
+
+  let notification = { ok: false, error: "not_attempted" };
+  try {
+    notification = await notificarVendaProjetoProntoAprovada({
+      checkoutId: id,
+      chargeId: charge,
+      paymentMethod
+    });
+  } catch (error) {
+    notification = { ok: false, error: error?.message || "notification_error" };
+    console.error("Falha ao garantir notificações pós-pagamento:", error?.message || error);
+  }
+
+  let invoice = { sent: false, error: "not_attempted" };
+  try {
+    invoice = await garantirFaturaValidaPay(id, charge);
+  } catch (error) {
+    invoice = { sent: false, error: error?.message || "invoice_error" };
+    console.error("Falha ao garantir fatura ValidaPay:", error?.message || error);
+  }
+
+  return { ok: true, notification, invoice };
 }
 
 export async function criarCobrancaPixTransparente(input = {}) {
@@ -673,21 +715,11 @@ export async function consultarCobrancaPix(input = {}) {
         validaPayChargeId: chargeId,
         updatedAtDate: new Date()
       }, current);
-      try {
-        await notificarVendaProjetoProntoAprovada({
-          checkoutId,
-          chargeId,
-          paymentMethod: "PIX"
-        });
-      } catch (error) {
-        console.error("Falha ao notificar venda aprovada:", error?.message || error);
-      }
-
-      try {
-        await garantirFaturaValidaPay(checkoutId, chargeId, current);
-      } catch (error) {
-        console.error("Falha ao reenviar fatura ValidaPay no Pix:", error?.message || error);
-      }
+      await garantirPosPagamentoValidaPay({
+        checkoutId,
+        chargeId,
+        paymentMethod: "PIX"
+      });
     }
 
     return result;

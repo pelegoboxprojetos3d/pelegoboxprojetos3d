@@ -15,6 +15,7 @@ import { checkAbandoned } from "backend/checkAbandoned";
 import { importarImagensProjetoPronto } from "backend/processarImagensProjetosProntos";
 import { processarCompraProjetoPronto } from "backend/processarCompraProjetoPronto";
 import { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";
+import { garantirPosPagamentoValidaPay } from "backend/validaPayPixProjetosProntosCore.jsw";
 
 const DB_OPTS = {
   suppressAuth: true
@@ -2261,10 +2262,15 @@ export async function post_validaPayWebhookPro(
       body?.type
     ).toLowerCase();
 
-    if (
-      event !==
-      "payment.success"
-    ) {
+    const eventosAprovados = new Set([
+      "payment.success",
+      "payment.approved",
+      "charge.paid",
+      "charge.success",
+      "checkout.paid"
+    ]);
+
+    if (!eventosAprovados.has(event)) {
       return ok({
         headers: {
           "Content-Type":
@@ -2375,6 +2381,13 @@ export async function post_validaPayWebhookPro(
           chargeId
       )
     ) {
+      const duplicateRetryPosPagamento =
+        await garantirPosPagamentoValidaPay({
+          checkoutId: safe(session.checkoutId),
+          chargeId,
+          paymentMethod: safe(session.paymentMethod) || "VALIDAPAY"
+        });
+
       return ok({
         headers: {
           "Content-Type":
@@ -2500,7 +2513,7 @@ export async function post_validaPayWebhookPro(
       });
 
     const notificationResult =
-      await notificarVendaProjetoProntoAprovada({
+      await garantirPosPagamentoValidaPay({
         checkoutId: safe(session.checkoutId),
         chargeId,
         paymentMethod: safe(session.paymentMethod) || "VALIDAPAY"

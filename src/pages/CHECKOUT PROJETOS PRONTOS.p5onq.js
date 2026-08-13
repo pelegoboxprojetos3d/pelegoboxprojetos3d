@@ -2269,11 +2269,19 @@ async function abrirPopupWhatsapp() {
       await currentMember.getMember();
 
     if (!membro?._id) {
-      await authentication
-        .promptLogin({
+      try {
+        await authentication.promptLogin({
           mode: "login",
           modal: true
         });
+      } catch (_) {}
+
+      const membroDepois = await currentMember.getMember();
+      if (!membroDepois?._id) {
+        reabrirAposCancelamento = true;
+        bloquearSemIdentificacao();
+        return;
+      }
     }
 
     await identificarMembroSocial();
@@ -2342,6 +2350,12 @@ function salvarAutorizacaoCheckout(
 
         whatsappE164:
           telefone.whatsappE164,
+
+        ddi:
+          telefone.ddi,
+
+        country:
+          telefone.country,
 
         whatsappConfirmado:
           identificacao.whatsappConfirmado === true,
@@ -2668,27 +2682,29 @@ function iniciarPaginaComTratamento() {
     );
 }
 
-function solicitarLoginSocial() {
-  authentication
-    .promptLogin({
+async function solicitarLoginSocial() {
+  try {
+    await authentication.promptLogin({
       mode: "login",
       modal: true
-    })
-    .then(
-      () => {
-        iniciarPaginaComTratamento();
-      }
-    )
-    .catch(
-      () => {
-        /*
-          Fechar no X ou clicar fora mantém o visitante nesta página e
-          reabre o login automaticamente após 3 segundos.
-        */
-        iniciarPaginaComTratamento();
-        agendarRetornoLoginSocial();
-      }
-    );
+    });
+  } catch (_) {
+    // Cancelar o modal não muda de página.
+  }
+
+  let membro = null;
+  try {
+    membro = await currentMember.getMember();
+  } catch (_) {}
+
+  if (membro?._id) {
+    iniciarPaginaComTratamento();
+    return;
+  }
+
+  identificado = false;
+  bloquearSemIdentificacao();
+  agendarRetornoLoginSocial();
 }
 
 function iniciarComLoginSocial() {

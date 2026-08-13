@@ -345,8 +345,9 @@ async function prepararSecoesEntrega() {
   await esconderSecao(SECOES_ENTREGA.final);
 }
 async function liberarSecoesPosRepeater() {
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
   await mostrarSecao(SECOES_ENTREGA.banners);
-  await esperar(120);
+  await esperar(mobile ? 260 : 120);
   await mostrarSecao(SECOES_ENTREGA.final);
 }
 
@@ -545,6 +546,13 @@ async function esconderProcessamento() {
       erro?.message || erro
     );
   }
+}
+
+async function aguardarMinimoProcessamentoInicial() {
+  if (!processamentoVisivelDesde) return;
+  const minimoVisivel = processamentoEmailPendente ? EMAIL_PROCESSAMENTO_MS : MIN_PROCESSAMENTO_VISIVEL;
+  const restante = minimoVisivel - (Date.now() - processamentoVisivelDesde);
+  if (restante > 0) await esperar(restante);
 }
 
 function entregaProcessada(resultado) {
@@ -2760,23 +2768,12 @@ async function renderizarItemRepeater($item, itemData) {
 }
 
 async function prepararRepeaterParaCarregamento() {
-  /*
-    O Editor mantém um item-modelo do Repeater visível antes de os dados reais
-    chegarem. Na abertura por e-mail/F5 isso expunha título, valores, botões e
-    setas crus. O Repeater fica vazio, oculto e recolhido até receber dados.
-  */
   try {
     const repetidor = $w(IDS.repetidor);
     repetidor.data = [];
-
-    if (typeof repetidor.hide === "function") {
-      await repetidor.hide();
-    }
+    if (typeof repetidor.show === "function") await repetidor.show();
   } catch (erro) {
-    console.warn(
-      "Não foi possível preparar o estado inicial do repeater:",
-      erro?.message || erro
-    );
+    console.warn("Falha ao preparar repeater:", erro?.message || erro);
   }
 }
 
@@ -2789,14 +2786,16 @@ function configurarRepeater() {
 }
 
 async function mostrarDadosRepeater(itens) {
-  const repetidor=$w(IDS.repetidor);
-  const dados=Array.isArray(itens)?itens:[];
+  const repetidor = $w(IDS.repetidor);
+  const dados = Array.isArray(itens) ? itens : [];
+  const mobile = wixWindowFrontend.formFactor === "Mobile";
+  await aguardarMinimoProcessamentoInicial();
   iniciarCicloRepeater(dados.length);
-  repetidor.data=dados;
+  repetidor.data = dados;
   await aguardarRepeaterPronto(5000);
+  await esperar(mobile ? 650 : 120);
   await esconderProcessamento();
-  if(typeof repetidor.show==='function')await repetidor.show();
-  await esperar(100);
+  await esperar(mobile ? 450 : 120);
   await liberarSecoesPosRepeater();
 }
 

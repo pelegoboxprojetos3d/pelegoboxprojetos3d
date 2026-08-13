@@ -39,6 +39,9 @@ jobs:
       - name: Reabrir login social após 3 segundos
         run: node scripts/reabrir-login-social-3s-2026-08-12.cjs
 
+      - name: Corrigir título pela coleção Videosprojetos
+        run: node scripts/corrigir-titulo-videosprojetos-checkout-2026-08-12.cjs
+
       - name: Validar código
         run: npm run lint
 
@@ -52,6 +55,7 @@ jobs:
             git config user.email "pelegobox82@gmail.com"
             git add \
               "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
+              "src/pages/checkout-projeto-pronto.i9aj1.js" \
               "src/public/custom-elements/pelego-checkout-pronto.js"
             git commit -m "Automação: atualizar checkout Projetos Prontos"
             git push origin HEAD:main

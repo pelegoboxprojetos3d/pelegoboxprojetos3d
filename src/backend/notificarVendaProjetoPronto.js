@@ -309,8 +309,10 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     tituloOriginal: tituloEmailCorreto,
     nomeProduto: tituloEmailCorreto,
     tituloEmail: tituloEmailCorreto,
-    botaoUrl: payload.botaoUrl + "&via=email",
-    deliveryUrl: payload.deliveryUrl + "&via=email"
+    // O cenário do Make recebe a URL limpa e adiciona a origem uma única vez.
+    // Assim evitamos links com &via=email&via=email.
+    botaoUrl: payload.botaoUrl,
+    deliveryUrl: payload.deliveryUrl
   };
 
   const patch = { updatedAtDate: new Date() };

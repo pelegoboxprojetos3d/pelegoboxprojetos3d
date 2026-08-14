@@ -58,6 +58,52 @@ function normalizeEmail(value) {
   return safe(value).toLowerCase();
 }
 
+// ENTREGA_PROTEGIDA_POR_EMAIL_V1
+async function autorizarSessaoParaMembroAtual(session) {
+  let membro = null;
+
+  try {
+    membro = await currentMember.getMember({ fieldsets: ["FULL"] });
+  } catch (_) {
+    membro = null;
+  }
+
+  const memberId = safe(membro?._id);
+  if (!memberId) {
+    return { ok: false, error: "LOGIN_NECESSARIO" };
+  }
+
+  const emails = new Set();
+  const adicionarEmail = (value) => {
+    const email = normalizeEmail(
+      typeof value === "string"
+        ? value
+        : firstValue(value?.email, value?.value)
+    );
+    if (email) emails.add(email);
+  };
+
+  adicionarEmail(membro?.loginEmail);
+  adicionarEmail(membro?.contactDetails?.email);
+
+  const contatos = Array.isArray(membro?.contactDetails?.emails)
+    ? membro.contactDetails.emails
+    : [];
+
+  contatos.forEach(adicionarEmail);
+
+  const emailCompra = normalizeEmail(session?.email);
+  if (!emailCompra) {
+    return { ok: false, error: "EMAIL_DA_COMPRA_AUSENTE" };
+  }
+
+  if (!emails.has(emailCompra)) {
+    return { ok: false, error: "COMPRA_DE_OUTRA_CONTA" };
+  }
+
+  return { ok: true, memberId, emailCompra };
+}
+
 function normalizeWhatsapp(value) {
   return safe(value).replace(/\D/g, "");
 }
@@ -2196,6 +2242,16 @@ export async function buscarEntregaProjetoPronto(
       ok: false,
       error:
         "SESSAO_NAO_ENCONTRADA"
+    };
+  }
+
+  const autorizacaoEntrega =
+    await autorizarSessaoParaMembroAtual(session);
+
+  if (!autorizacaoEntrega.ok) {
+    return {
+      ok: false,
+      error: autorizacaoEntrega.error
     };
   }
 

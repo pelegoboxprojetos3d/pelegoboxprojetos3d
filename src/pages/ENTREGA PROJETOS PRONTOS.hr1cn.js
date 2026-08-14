@@ -241,6 +241,9 @@ let videoCarregando =
 let centralSegundasViasAtiva =
   false;
 
+let loginEntregaSolicitado =
+  false;
+
 let projetosSegundaVia =
   [];
 
@@ -2983,6 +2986,33 @@ async function renderizarEntrega(dados) {
 }
 
 
+// ACESSO_PROTEGIDO_EMAIL_V1
+function solicitarLoginDaCompra() {
+  if (loginEntregaSolicitado) {
+    return;
+  }
+
+  loginEntregaSolicitado = true;
+
+  authentication
+    .promptLogin({
+      mode: "login",
+      modal: true
+    })
+    .then(() => {
+      loginEntregaSolicitado = false;
+      carregarEntrega().catch((erro) => {
+        console.error(
+          "Falha ao recarregar entrega após login:",
+          erro?.message || erro
+        );
+      });
+    })
+    .catch(() => {
+      loginEntregaSolicitado = false;
+    });
+}
+
 // ======================================================
 // CARREGAR ENTREGA
 // ======================================================
@@ -3035,6 +3065,43 @@ async function carregarEntrega() {
       if (
         !resultado?.ok
       ) {
+        if (
+          resultado?.error ===
+          "LOGIN_NECESSARIO"
+        ) {
+          await encerrarProcessamentoPendente(
+            "ACESSO PROTEGIDO",
+            "Entre na sua conta usando o mesmo e-mail informado na compra para acessar este produto."
+          );
+
+          solicitarLoginDaCompra();
+          return;
+        }
+
+        if (
+          resultado?.error ===
+          "COMPRA_DE_OUTRA_CONTA"
+        ) {
+          await encerrarProcessamentoPendente(
+            "ACESSO PROTEGIDO",
+            "Esta compra pertence a outra conta. Saia da conta atual e entre com o mesmo e-mail usado no pagamento."
+          );
+
+          return;
+        }
+
+        if (
+          resultado?.error ===
+          "EMAIL_DA_COMPRA_AUSENTE"
+        ) {
+          await encerrarProcessamentoPendente(
+            "ACESSO PROTEGIDO",
+            "Não foi possível validar o titular desta compra. Entre em contato com o suporte."
+          );
+
+          return;
+        }
+
         /*
           Logo após o pagamento, o webhook ainda pode
           estar terminando o registro.

@@ -63,6 +63,9 @@ jobs:
       - name: Fechar teste final de pagamento
         run: node scripts/fechar-teste-final-2026-08-12.cjs
 
+      - name: Blindar idempotência da regra de títulos
+        run: node scripts/corrigir-idempotencia-regra-titulos-2026-08-14.cjs
+
       - name: Pente fino final de e-mail e fatura
         run: node scripts/pente-fino-email-fatura-2026-08-13.cjs
 

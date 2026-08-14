@@ -34,11 +34,57 @@ jobs:
         with:
           node-version: 20
 
+      - name: Reparar substituição literal do corretor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs")
+          code = path.read_text(encoding="utf-8")
+          old = '''function replaceRequired(code, from, to, label) {
+            if (code.includes(to)) return code;
+            if (!code.includes(from)) {
+              throw new Error(`${label}: trecho esperado não encontrado.`);
+            }
+            return code.replace(from, to);
+          }'''
+          new = '''function replaceRequired(code, from, to, label) {
+            if (code.includes(to)) return code;
+            const index = code.indexOf(from);
+            if (index < 0) {
+              throw new Error(`${label}: trecho esperado não encontrado.`);
+            }
+            return code.slice(0, index) + to + code.slice(index + from.length);
+          }'''
+          if old in code:
+              code = code.replace(old, new, 1)
+              path.write_text(code, encoding="utf-8")
+          elif new not in code:
+              raise SystemExit("Helper replaceRequired não está no formato conhecido.")
+          PY
+
       - name: Validar sintaxe do corretor
         run: node --check scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs
 
       - name: Aplicar correção em ambiente de teste
         run: node scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs
+
+      - name: Conferir integridade do checkout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code = Path("src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js").read_text(encoding="utf-8")
+          marker = 'import wixLocation from "wix-location";'
+          if code.count(marker) != 1:
+              raise SystemExit(f"Checkout corrompido: {marker!r} apareceu {code.count(marker)} vezes.")
+          for expected in (
+              "Medidas Projeto Pronto",
+              "Gráficos Projeto Pronto",
+              "Projeto Pronto Completo",
+              "const codigoQuestionario =",
+          ):
+              if expected not in code:
+                  raise SystemExit(f"Checkout sem regra esperada: {expected}")
+          PY
 
       - name: Conferir diff gerado
         run: git diff --check
@@ -60,10 +106,46 @@ jobs:
         with:
           node-version: 20
 
+      - name: Reparar substituição literal do corretor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs")
+          code = path.read_text(encoding="utf-8")
+          old = '''function replaceRequired(code, from, to, label) {
+            if (code.includes(to)) return code;
+            if (!code.includes(from)) {
+              throw new Error(`${label}: trecho esperado não encontrado.`);
+            }
+            return code.replace(from, to);
+          }'''
+          new = '''function replaceRequired(code, from, to, label) {
+            if (code.includes(to)) return code;
+            const index = code.indexOf(from);
+            if (index < 0) {
+              throw new Error(`${label}: trecho esperado não encontrado.`);
+            }
+            return code.slice(0, index) + to + code.slice(index + from.length);
+          }'''
+          if old in code:
+              code = code.replace(old, new, 1)
+              path.write_text(code, encoding="utf-8")
+          elif new not in code:
+              raise SystemExit("Helper replaceRequired não está no formato conhecido.")
+          PY
+
       - name: Aplicar correção definitiva
         run: |
           set -euo pipefail
+          node --check scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs
           node scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs
+          python - <<'PY'
+          from pathlib import Path
+          code = Path("src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js").read_text(encoding="utf-8")
+          marker = 'import wixLocation from "wix-location";'
+          if code.count(marker) != 1:
+              raise SystemExit(f"Checkout corrompido: {marker!r} apareceu {code.count(marker)} vezes.")
+          PY
           git diff --check
 
       - name: Gravar correção na main
@@ -73,6 +155,7 @@ jobs:
           git config user.email "pelegobox82@gmail.com"
 
           git add -- \
+            "scripts/corrigir-titulo-email-definitivo-2026-08-14.cjs" \
             "src/backend/projetosProntosNormalizacao.js" \
             "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
             "src/backend/notificarVendaProjetoPronto.js" \

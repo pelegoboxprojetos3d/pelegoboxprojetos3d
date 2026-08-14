@@ -98,6 +98,9 @@ const SECOES_ENTREGA = {
   final: '#section2'
 };
 
+const PAGINA_AVISO_PROJETOS_PRONTOS =
+  "/semprodutonaologao";
+
 const CORES = {
   compradoFundo:
     "#159447",
@@ -370,6 +373,26 @@ function esperar(
         milliseconds
       );
     }
+  );
+}
+
+function abrirPaginaAvisoProjetosProntos(motivo, extras = {}) {
+  const partes = [
+    `motivo=${encodeURIComponent(safe(motivo))}`
+  ];
+
+  if (safe(extras.checkoutId)) {
+    partes.push(`checkout_id=${encodeURIComponent(safe(extras.checkoutId))}`);
+  }
+  if (safe(extras.token)) {
+    partes.push(`token=${encodeURIComponent(safe(extras.token))}`);
+  }
+  if (safe(extras.via)) {
+    partes.push(`via=${encodeURIComponent(safe(extras.via))}`);
+  }
+
+  wixLocation.to(
+    `${PAGINA_AVISO_PROJETOS_PRONTOS}?${partes.join("&")}`
   );
 }
 
@@ -2953,9 +2976,10 @@ async function carregarCentralSegundasVias() {
     });
     if (!resultado?.ok) {
       if (resultado?.error === "LOGIN_NECESSARIO") {
-        redirecionarPaginaAcessoProjetos({
-          motivo: "login"
-        });
+        abrirPaginaAvisoProjetosProntos(
+          "login",
+          { via: "avatar" }
+        );
         return;
       }
 
@@ -2973,9 +2997,10 @@ async function carregarCentralSegundasVias() {
       : [];
 
     if (!projetosSegundaVia.length) {
-      redirecionarPaginaAcessoProjetos({
-        motivo: "sem_produtos"
-      });
+      abrirPaginaAvisoProjetosProntos(
+        "sem_produtos",
+        { via: "avatar" }
+      );
       return;
     }
 
@@ -3160,12 +3185,17 @@ async function carregarEntrega() {
           resultado?.error ===
           "LOGIN_NECESSARIO"
         ) {
-          redirecionarPaginaAcessoProjetos({
-            checkoutId,
-            token,
-            via: origemViaEmail ? "email" : "",
-            motivo: "login_compra"
-          });
+          abrirPaginaAvisoProjetosProntos(
+            "login",
+            {
+              checkoutId,
+              token,
+              via: firstValue(
+                wixLocation.query.via,
+                "email"
+              )
+            }
+          );
           return;
         }
 

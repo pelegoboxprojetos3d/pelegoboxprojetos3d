@@ -5,8 +5,7 @@ const CHECKOUT_HTML = String.raw`<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Pelego Box - Checkout Projeto Pronto</title>
 <script defer src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@29.2.2/dist/css/intlTelInput.css">
-<script src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.2.2/dist/js/intlTelInput.min.js"></script>
+<!-- intl-tel-input é carregado em segundo plano depois do READY -->
 <style>
 :root{
   --green:#159447;--green-dark:#0f7c3a;--green-soft:#f3fff6;
@@ -617,6 +616,39 @@ function initInternationalPhonePickers(){
 }
 initInternationalPhonePickers();
 
+var intlPhoneAssetsRequested=false;
+function carregarIntlPhoneSemBloquearCheckout(){
+ if(itiPhone||intlPhoneAssetsRequested)return;
+ intlPhoneAssetsRequested=true;
+
+ try{
+  var css=document.createElement("link");
+  css.rel="stylesheet";
+  css.href="https://cdn.jsdelivr.net/npm/intl-tel-input@29.2.2/dist/css/intlTelInput.css";
+  document.head.appendChild(css);
+ }catch(_){}
+
+ if(window.intlTelInput){
+  initInternationalPhonePickers();
+  return;
+ }
+
+ try{
+  var script=document.createElement("script");
+  script.src="https://cdn.jsdelivr.net/npm/intl-tel-input@29.2.2/dist/js/intlTelInput.min.js";
+  script.async=true;
+  script.onload=function(){
+   try{initInternationalPhonePickers()}catch(_){}
+  };
+  script.onerror=function(){
+   intlPhoneAssetsRequested=false;
+  };
+  document.head.appendChild(script);
+ }catch(_){
+  intlPhoneAssetsRequested=false;
+ }
+}
+
 function safe(v){return String(v==null?"":v).trim()}
 function digits(v){return safe(v).replace(/\D/g,"")}
 function email(v){return safe(v).toLowerCase()}
@@ -1151,7 +1183,8 @@ window.addEventListener("load",function(){
   layoutMode("INITIAL");
 });
 
-post({type:"READY",version:"HTML36_SOCIAL_MINIMAL_DATA"});
+post({type:"READY",version:"HTML37_FAST_BOOT_NO_BLOCKING_INTL"});
+setTimeout(carregarIntlPhoneSemBloquearCheckout,0);
 })();
 </script>
 </body>

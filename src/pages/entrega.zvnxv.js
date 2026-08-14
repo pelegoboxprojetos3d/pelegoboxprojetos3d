@@ -292,7 +292,7 @@ $w.onReady(async()=>{
 
           if($item('#checkPdf')){
             $item('#checkPdf').checked = true;
-            $item('#checkPdf').show();
+            $item('#checkPdf').show('fade');
           }
 
         });
@@ -313,7 +313,7 @@ $w.onReady(async()=>{
 
           if($item('#checkVideo')){
             $item('#checkVideo').checked = true;
-            $item('#checkVideo').show();
+            $item('#checkVideo').show('fade');
           }
 
         });

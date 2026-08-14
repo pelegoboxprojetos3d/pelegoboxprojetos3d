@@ -26,10 +26,11 @@ function writeIfChanged(file, before, after) {
 
 function replaceRequired(code, from, to, label) {
   if (code.includes(to)) return code;
-  if (!code.includes(from)) {
+  const index = code.indexOf(from);
+  if (index < 0) {
     throw new Error(`${label}: trecho esperado não encontrado.`);
   }
-  return code.replace(from, to);
+  return code.slice(0, index) + to + code.slice(index + from.length);
 }
 
 function patchNormalizer() {

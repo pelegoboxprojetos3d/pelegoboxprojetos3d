@@ -468,14 +468,39 @@ function codigoPublico(item) {
 }
 
 function tituloProjeto(item) {
-  return decodeText(
-    item?.titulo_video
-  )
-    .split(
-      /\bPELEGO(?:\s*BOX)?\b/i
-    )[0]
-    .replace(/\s+/g, " ")
-    .trim();
+  const original =
+    decodeText(
+      item?.titulo_video
+    );
+
+  /*
+    O código 001–014 pode estar DEPOIS do sufixo PELEGO BOX.
+    Primeiro capturamos o código no título original e só depois removemos
+    a parte institucional. Assim o checkout nunca perde o questionário.
+  */
+  const codigoQuestionario =
+    original.match(
+      /\b(00[1-9]|01[0-4])\b\s*$/i
+    )?.[1] || "";
+
+  const base =
+    original
+      .split(
+        /\bPELEGO(?:\s*BOX)?\b/i
+      )[0]
+      .replace(/\s+/g, " ")
+      .trim();
+
+  if (
+    !codigoQuestionario ||
+    new RegExp(
+      `\\b${codigoQuestionario}\\b\\s*$`
+    ).test(base)
+  ) {
+    return base;
+  }
+
+  return `${base} ${codigoQuestionario}`.trim();
 }
 
 function tituloSemCodigo(value) {
@@ -554,9 +579,7 @@ function tituloEtapa(
     "GRAFICOS"
   ) {
     return (
-      `#${codigo} ` +
-      "ANÁLISES GRÁFICAS DO PROJETO PRONTO PARA " +
-      base
+      `#${codigo} Gráficos Projeto Pronto ${base}`
     );
   }
 
@@ -565,16 +588,12 @@ function tituloEtapa(
     "PROJETO_COMPLETO"
   ) {
     return (
-      `#${codigo} ` +
-      "PROJETO COMPLETO PARA " +
-      base
+      `#${codigo} Projeto Pronto Completo ${base}`
     );
   }
 
   return (
-    `#${codigo} ` +
-    "MEDIDAS DO PROJETO PRONTO PARA " +
-    base
+    `#${codigo} Medidas Projeto Pronto ${base}`
   );
 }
 

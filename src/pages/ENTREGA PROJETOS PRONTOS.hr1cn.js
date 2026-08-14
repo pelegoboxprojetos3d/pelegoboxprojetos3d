@@ -94,7 +94,7 @@ const IDS = {
 
 const SECOES_ENTREGA = {
   principal: '#imagensdoprodutobotao1e2',
-  banners: '#textodobotaobaixaranalisegrafica',
+  banners: '#section1',
   final: '#section2'
 };
 
@@ -3303,10 +3303,50 @@ function redirecionarHomeAoDeslogar() {
 }
 
 // ======================================================
+// BLINDAGEM VISUAL DA ABERTURA
+// ======================================================
+
+function blindarAberturaEntrega() {
+  /*
+    Esta função precisa rodar antes de qualquer await.
+
+    Ordem visual desejada:
+    1. limpa/esconde o Repeater imediatamente;
+    2. esconde e recolhe as duas seções inferiores;
+    3. abre a impressora imediatamente;
+    4. o fluxo normal só libera o produto e as seções inferiores
+       depois que o Repeater estiver pronto.
+  */
+
+  try {
+    const repetidor = $w(IDS.repetidor);
+    repetidor.data = [];
+    if (typeof repetidor.hide === "function") repetidor.hide();
+  } catch (_) {}
+
+  for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {
+    try {
+      const secao = $w(id);
+      if (typeof secao.hide === "function") secao.hide();
+      if (typeof secao.collapse === "function") secao.collapse();
+    } catch (_) {}
+  }
+
+  try {
+    const processando = $w(IDS.processando);
+    if (typeof processando.expand === "function") processando.expand();
+    if (typeof processando.show === "function") processando.show();
+    if (!processamentoVisivelDesde) processamentoVisivelDesde = Date.now();
+  } catch (_) {}
+}
+
+// ======================================================
 // ON READY
 // ======================================================
 
 $w.onReady(async function () {
+  blindarAberturaEntrega();
+
   checkoutEmAndamento = false;
   redirecionarHomeAoDeslogar();
 

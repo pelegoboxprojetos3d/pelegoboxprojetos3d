@@ -1,6 +1,3 @@
-import wixLocation from "wix-location";
-import { authentication, currentMember } from "wix-members-frontend";
-
 function configurarProjetos() {
     $w("#repeater1").onItemReady(($item, itemData, index) => {
 
@@ -101,31 +98,6 @@ function configurarProjetos() {
     });
 }
 
-async function verificarAcessoProjetosProntos() {
-    try {
-        const membro = await currentMember.getMember();
-
-        if (membro?._id) {
-            configurarProjetos();
-            return;
-        }
-    } catch (_) {
-        // Visitante ainda não autenticado.
-    }
-
-    authentication
-        .promptLogin({
-            mode: "login",
-            modal: true
-        })
-        .then(() => {
-            configurarProjetos();
-        })
-        .catch(() => {
-            wixLocation.to("/");
-        });
-}
-
 $w.onReady(function () {
-    verificarAcessoProjetosProntos().catch(console.error);
+    configurarProjetos();
 });

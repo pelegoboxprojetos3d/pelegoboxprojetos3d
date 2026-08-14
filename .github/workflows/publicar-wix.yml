@@ -67,7 +67,7 @@ jobs:
         run: node scripts/pente-fino-email-fatura-2026-08-13.cjs
 
       - name: Restaurar cartão salvo tokenizado
-        run: node scripts/restaurar-cartao-salvo-tokenizado-v2-2026-08-14.cjs
+        run: node scripts/restaurar-cartao-salvo-tokenizado-v3-2026-08-14.cjs
 
       - name: Validar código
         run: npm run lint

@@ -886,7 +886,18 @@ function stopTetris(){if(S.tetris){cancelAnimationFrame(S.tetris);S.tetris=null}
 function mobilePixOrder(){
  if(window.innerWidth>680)return;
  E.topGrid.classList.add("pix-selected");
- [E.card,E.google,E.pixAuto,E.apple,E.paypal,E.notice].forEach(function(node){E.deferred.appendChild(node)});
+
+ /* MOBILE PIX:
+    Cartão fica acima do Pix.
+    O QR continua imediatamente abaixo do bloco principal.
+    Informações importantes ficam logo abaixo de AGUARDANDO PIX.
+    Os métodos em breve permanecem depois do aviso. */
+ if(E.card&&E.pix&&E.pix.parentElement===E.left){
+   E.left.insertBefore(E.card,E.pix);
+ }
+ [E.notice,E.google,E.pixAuto,E.apple,E.paypal].forEach(function(node){
+   if(node)E.deferred.appendChild(node);
+ });
  E.deferred.classList.add("active");
 }
 function restoreDesktopOrder(){
@@ -963,12 +974,17 @@ function mobileCardOrder(){
  var list=E.cardSelected&&E.cardSelected.parentElement;
  if(!list)return;
 
- /* Ordem mobile aprovada:
-    Cartão selecionado -> cartão/formulário/Pagar -> informações -> Pix -> demais métodos. */
+ /* MOBILE CARTÃO:
+    Pix fica acima do cartão selecionado.
+    Depois vêm cartão/formulário/Pagar, informações e os demais métodos. */
+ if(E.pixFromCard)list.insertBefore(E.pixFromCard,E.cardSelected);
  if(E.cardRight)list.insertBefore(E.cardRight,E.cardSelected.nextSibling);
  if(E.cardPaymentNotice){
-   if(E.pixFromCard&&E.pixFromCard.parentElement===list)list.insertBefore(E.cardPaymentNotice,E.pixFromCard);
-   else list.appendChild(E.cardPaymentNotice);
+   if(E.cardRight&&E.cardRight.parentElement===list){
+     list.insertBefore(E.cardPaymentNotice,E.cardRight.nextSibling);
+   }else{
+     list.appendChild(E.cardPaymentNotice);
+   }
  }
 }
 function applySavedCardMode(useSaved){

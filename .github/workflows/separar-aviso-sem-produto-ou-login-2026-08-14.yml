@@ -31,7 +31,7 @@ jobs:
           node-version: "20"
 
       - name: Aplicar nova lógica
-        run: node scripts/separar-aviso-sem-produto-ou-login-2026-08-14.cjs
+        run: node scripts/separar-aviso-sem-produto-ou-login-v2-2026-08-14.cjs
 
       - name: Validar páginas
         run: |
@@ -40,8 +40,8 @@ jobs:
           cp "src/pages/sem produto ou nao logado.xu6gd.js" /tmp/aviso.mjs
           node --check /tmp/entrega.mjs
           node --check /tmp/aviso.mjs
-          grep -q 'motivo=sem_produtos' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          grep -q 'motivo=login' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'sem_produtos' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'PAGINA_AVISO_PROJETOS_PRONTOS' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
           grep -q 'VOCÊ AINDA NÃO TEM PROJETOS PRONTOS' "src/pages/sem produto ou nao logado.xu6gd.js"
           grep -q 'VOCÊ NÃO ESTÁ LOGADO' "src/pages/sem produto ou nao logado.xu6gd.js"
           grep -q '#SESSAO2BANEERDOBOTAO' "src/pages/sem produto ou nao logado.xu6gd.js"

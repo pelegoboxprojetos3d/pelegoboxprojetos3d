@@ -4,6 +4,7 @@ import { getSecret } from "wix-secrets-backend";
 import { tituloEtapaProjetoPronto } from "backend/projetosProntosNormalizacao";
 
 const SESSIONS = "SessoesProjetosProntos2";
+const PROJECTS = "Videosprojetos";
 const HISTORICO_COMPRAS = "HistoricoComprasProjetosProntos";
 const DB = { suppressAuth: true };
 const SITE_BASE = "https://www.pelegobox.com.br";
@@ -29,11 +30,58 @@ function type(value) {
   return ["MEDIDAS", "GRAFICOS", "PROJETO_COMPLETO"].includes(t) ? t : "MEDIDAS";
 }
 
-function tituloProjetoParaEmail(session) {
+function tituloProjetoSessao(session) {
   return tituloEtapaProjetoPronto(
     safe(session?.produto) || safe(session?.tituloCheckout) || "Projeto Pronto",
     type(session?.tipoProduto),
     digits(session?.codigoProjeto)
+  ) || "Projeto Pronto";
+}
+
+async function tituloProjetoParaEmail(session) {
+  /*
+    REGRA DO E-MAIL VIA MAKE:
+    1) O título-base vem SEMPRE de Videosprojetos.titulo_video.
+    2) O código do projeto vem de ordem_video/codigoProjeto.
+    3) O botão vem de tipoProduto e é aplicado por tituloEtapaProjetoPronto.
+    4) A normalização converte o título para apresentação natural e remove
+       o sufixo PELEGO BOX..., preservando o código 001–014 já existente.
+    O e-mail não usa mais o título bruto da URL/sessão como fonte principal.
+  */
+  const codigo = digits(session?.codigoProjeto);
+  let tituloBase = "";
+
+  if (codigo) {
+    const numeric = Number(codigo);
+
+    if (Number.isSafeInteger(numeric)) {
+      try {
+        const r = await wixData.query(PROJECTS).eq("ordem_video", numeric).limit(1).find(DB);
+        tituloBase = safe(r.items?.[0]?.titulo_video);
+      } catch (_) {}
+    }
+
+    if (!tituloBase) {
+      try {
+        const r = await wixData.query(PROJECTS).eq("ordem_video", codigo).limit(1).find(DB);
+        tituloBase = safe(r.items?.[0]?.titulo_video);
+      } catch (_) {}
+    }
+
+    if (!tituloBase) {
+      try {
+        const r = await wixData.query(PROJECTS).startsWith("titulo_video", `#${codigo}`).limit(1).find(DB);
+        tituloBase = safe(r.items?.[0]?.titulo_video);
+      } catch (_) {}
+    }
+  }
+
+  const base = tituloBase || safe(session?.produto) || safe(session?.tituloCheckout) || "Projeto Pronto";
+
+  return tituloEtapaProjetoPronto(
+    base,
+    type(session?.tipoProduto),
+    codigo
   ) || "Projeto Pronto";
 }
 
@@ -95,7 +143,7 @@ async function registrarHistoricoCompraAprovada({ session, chargeId, paymentMeth
   }
 
   const codigoCompra = gerarCodigoCompra();
-  const produto = tituloProjetoParaEmail(session);
+  const produto = tituloProjetoSessao(session);
   const item = {
     title: codigoCompra,
     emailCompra: safe(session?.email).toLowerCase(),
@@ -209,7 +257,7 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
   }
 
   const amount = Number(session.valor || 0);
-  const tituloEmailCorreto = tituloProjetoParaEmail(session);
+  const tituloEmailCorreto = await tituloProjetoParaEmail(session);
   const payload = {
     event: "venda_aprovada_PROJETOS_PRONTOS",
     origem: "PELEGO_BOX_PROJETOS_PRONTOS",

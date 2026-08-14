@@ -2265,6 +2265,21 @@ function perfilMembroFrontend(membro = {}) {
   };
 }
 
+async function aguardarMembroLogado(maxWaitMs = 8000) {
+  const inicio = Date.now();
+
+  while (Date.now() - inicio < maxWaitMs) {
+    try {
+      const membro = await currentMember.getMember();
+      if (membro?._id) return membro;
+    } catch (_) {}
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  return null;
+}
+
 async function hidratarClienteMembroSocial(memberEmail) {
   try {
     const perfil =
@@ -2460,11 +2475,13 @@ async function hidratarClienteMembroSocial(memberEmail) {
   }
 }
 
-async function identificarMembroSocial() {
+async function identificarMembroSocial(membroConfirmado = null) {
   cancelarPopupAgendado();
 
   const membro =
-    await currentMember.getMember();
+    membroConfirmado?._id
+      ? membroConfirmado
+      : await aguardarMembroLogado(5000);
 
   const {
     memberId,
@@ -2823,34 +2840,51 @@ async function abrirPopupWhatsapp() {
   }
 
   cancelarPopupAgendado();
+  popupAberto = true;
 
-  popupAberto =
-    true;
-
-  let reabrirAposCancelamento =
-    false;
+  let reabrirAposCancelamento = false;
 
   try {
-    const membro =
-      await currentMember.getMember();
+    let membro = null;
+
+    try {
+      membro = await currentMember.getMember();
+    } catch (_) {}
 
     if (!membro?._id) {
+      let loginConcluido = false;
+
       try {
         await authentication.promptLogin({
           mode: "login",
           modal: true
         });
-      } catch (_) {}
+        loginConcluido = true;
+      } catch (_) {
+        loginConcluido = false;
+      }
 
-      const membroDepois = await currentMember.getMember();
-      if (!membroDepois?._id) {
+      if (!loginConcluido) {
+        reabrirAposCancelamento = true;
+        bloquearSemIdentificacao();
+        return;
+      }
+
+      /*
+        No celular o cookie/sessão do Wix pode levar alguns instantes para
+        aparecer em currentMember depois que o login social fecha. Não abrimos
+        outro modal nesse intervalo. Esperamos a sessão propagar primeiro.
+      */
+      membro = await aguardarMembroLogado(10000);
+
+      if (!membro?._id) {
         reabrirAposCancelamento = true;
         bloquearSemIdentificacao();
         return;
       }
     }
 
-    await identificarMembroSocial();
+    await identificarMembroSocial(membro);
 
   } catch (error) {
     console.error(
@@ -2858,13 +2892,10 @@ async function abrirPopupWhatsapp() {
       error?.message || error
     );
 
-    reabrirAposCancelamento =
-      true;
-
+    reabrirAposCancelamento = true;
     bloquearSemIdentificacao();
   } finally {
-    popupAberto =
-      false;
+    popupAberto = false;
 
     if (
       reabrirAposCancelamento &&
@@ -2874,8 +2905,6 @@ async function abrirPopupWhatsapp() {
     }
   }
 }
-
-
 
 function salvarAutorizacaoCheckout(
   tipoProduto
@@ -3287,13 +3316,16 @@ async function solicitarLoginSocial() {
     return;
   }
 
+  let loginConcluido = false;
+
   try {
     await authentication.promptLogin({
       mode: "login",
       modal: true
     });
+    loginConcluido = true;
   } catch (_) {
-    // Cancelar o modal não muda de página.
+    loginConcluido = false;
   }
 
   if (!paginaLoginSocialAtiva()) {
@@ -3301,13 +3333,18 @@ async function solicitarLoginSocial() {
     return;
   }
 
-  let membro = null;
-  try {
-    membro = await currentMember.getMember();
-  } catch (_) {}
+  if (!loginConcluido) {
+    identificado = false;
+    bloquearSemIdentificacao();
+    agendarRetornoLoginSocial();
+    return;
+  }
+
+  const membro = await aguardarMembroLogado(10000);
 
   if (membro?._id) {
-    iniciarPaginaComTratamento();
+    cancelarPopupAgendado();
+    await identificarMembroSocial(membro);
     return;
   }
 
@@ -3378,6 +3415,44 @@ $w.onReady(
     if (!paginaLoginSocialAtiva()) {
       cancelarPopupAgendado();
       return;
+    }
+
+    /*
+      LOGIN MOBILE: o evento oficial do Wix é a confirmação principal.
+      Isso evita pedir login de novo enquanto currentMember ainda está
+      propagando a sessão criada pelo Google/Facebook no navegador móvel.
+    */
+    try {
+      authentication.onLogin(async (memberApi) => {
+        cancelarPopupAgendado();
+        popupAberto = false;
+
+        let membro = null;
+
+        try {
+          membro = await memberApi.getMember();
+        } catch (_) {}
+
+        if (!membro?._id) {
+          membro = await aguardarMembroLogado(10000);
+        }
+
+        if (!membro?._id) return;
+
+        try {
+          await identificarMembroSocial(membro);
+        } catch (error) {
+          console.error(
+            "Falha ao consolidar login do membro:",
+            error?.message || error
+          );
+        }
+      });
+    } catch (error) {
+      console.warn(
+        "Não foi possível registrar confirmação de login:",
+        error?.message || error
+      );
     }
 
     /*

@@ -3415,30 +3415,42 @@ function blindarAberturaEntrega() {
 // ON READY
 // ======================================================
 
+// ROTA_SEM_FLASH_V1
 $w.onReady(async function () {
-  blindarAberturaEntrega();
-
   checkoutEmAndamento = false;
   redirecionarHomeAoDeslogar();
 
-  try { $w(IDS.repetidor).hide(); } catch (_) {}
+  const checkoutIdInicial = safe(
+    wixLocation.query.checkout_id ||
+    wixLocation.query.checkoutId
+  );
+  const tokenInicial = safe(wixLocation.query.token);
+  const acessoDireto = Boolean(checkoutIdInicial || tokenInicial);
+
+  /*
+    Primeiro escondemos tudo que pertence à entrega antiga. A impressora NÃO
+    abre automaticamente quando o visitante chega pelo avatar ou quando ainda
+    nem sabemos se ele tem autorização para um link de e-mail.
+  */
   try {
-    const banners = $w(SECOES_ENTREGA.banners);
-    if (typeof banners.hide === "function") banners.hide();
-    if (typeof banners.collapse === "function") banners.collapse();
-  } catch (_) {}
-  try {
-    const final = $w(SECOES_ENTREGA.final);
-    if (typeof final.hide === "function") final.hide();
-    if (typeof final.collapse === "function") final.collapse();
+    const repetidor = $w(IDS.repetidor);
+    repetidor.data = [];
+    if (typeof repetidor.hide === "function") repetidor.hide();
   } catch (_) {}
 
-  const inicioProcessamento = mostrarProcessamento().catch((erro) => {
-    console.warn(
-      "Falha ao abrir processamento inicial:",
-      erro?.message || erro
-    );
-  });
+  try {
+    const processando = $w(IDS.processando);
+    if (typeof processando.hide === "function") processando.hide();
+    if (typeof processando.collapse === "function") processando.collapse();
+  } catch (_) {}
+
+  for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {
+    try {
+      const secao = $w(id);
+      if (typeof secao.hide === "function") secao.hide();
+      if (typeof secao.collapse === "function") secao.collapse();
+    } catch (_) {}
+  }
 
   await prepararSecoesEntrega();
   await ocultarDadosAteCarregamento();
@@ -3456,13 +3468,78 @@ $w.onReady(async function () {
   }
 
   void ligarEventos;
-  await inicioProcessamento;
+
+  if (acessoDireto) {
+    /*
+      Faz uma consulta de autorização ANTES de abrir a impressora. Assim um
+      link encaminhado por e-mail não pisca a tela de entrega para quem está
+      deslogado ou em outra conta.
+    */
+    try {
+      const preflight = await buscarEntregaProjetoPronto({
+        checkoutId: checkoutIdInicial,
+        token: tokenInicial
+      });
+
+      if (preflight?.error === "LOGIN_NECESSARIO") {
+        abrirPaginaAvisoProjetosProntos(
+          "login",
+          {
+            checkoutId: checkoutIdInicial,
+            token: tokenInicial,
+            via: firstValue(wixLocation.query.via, "email")
+          }
+        );
+        return;
+      }
+
+      if (preflight?.error === "COMPRA_DE_OUTRA_CONTA") {
+        abrirPaginaAvisoProjetosProntos(
+          "conta_errada",
+          {
+            checkoutId: checkoutIdInicial,
+            token: tokenInicial,
+            via: firstValue(wixLocation.query.via, "email")
+          }
+        );
+        return;
+      }
+    } catch (erro) {
+      console.warn(
+        "Pré-validação da entrega falhou; mantendo fluxo normal:",
+        erro?.message || erro
+      );
+    }
+
+    blindarAberturaEntrega();
+    await mostrarProcessamento().catch((erro) => {
+      console.warn(
+        "Falha ao abrir processamento inicial:",
+        erro?.message || erro
+      );
+    });
+  } else {
+    /*
+      Entrada pelo avatar: não existe produto específico sendo entregue.
+      Portanto não existe motivo para mostrar a impressora enquanto a central
+      consulta se o membro possui projetos.
+    */
+    processamentoVisualEncerrado = true;
+  }
 
   carregarEntrega().catch((erro) => {
     console.error(
       "Falha assíncrona ao carregar a entrega:",
       erro?.message || erro
     );
+
+    if (!acessoDireto) {
+      abrirPaginaAvisoProjetosProntos(
+        "sem_produtos",
+        { via: "avatar" }
+      );
+      return;
+    }
 
     mostrarDadosRepeater([
       itemRepeaterMensagem(

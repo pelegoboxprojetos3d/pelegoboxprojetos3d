@@ -93,9 +93,14 @@ const IDS = {
 };
 
 const SECOES_ENTREGA = {
-  principal: '#imagensdoprodutobotao1e2',
-  banners: '#section1',
-  final: '#section2'
+  // Seção 1: Repeater + impressora. Fica visível durante o processamento.
+  principal: '#SESSAO1REPETIDOREIMPRESSORA',
+
+  // Seção 2: três banners dos botões. Fica desligada enquanto a impressora roda.
+  banners: '#SESSAODOISBANERSBOTAO',
+
+  // Seção 3: aviso IMPORTANTE. Fica desligada enquanto a impressora roda.
+  final: '#SESSAO3AVISOIMPORTANTE'
 };
 
 const PAGINA_AVISO_PROJETOS_PRONTOS =

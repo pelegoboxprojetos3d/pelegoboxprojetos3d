@@ -73,6 +73,9 @@ const PAGINA_MANUTENCAO =
 const SLUG_LOGIN_SOCIAL =
   "checkoutprojetosprontos";
 
+const MOBILE_LOGIN_AFTER_RENDER_DELAY =
+  350;
+
 const IDS = {
   titulo:
     "#txtTitulo",
@@ -3179,7 +3182,9 @@ function cadastroProntoParaPagamento(data = identificacao) {
   );
 }
 
-async function iniciarPagina() {
+async function iniciarPagina({
+  identificarSocial = true
+} = {}) {
   if (!paginaLoginSocialAtiva()) {
     cancelarPopupAgendado();
     return;
@@ -3227,7 +3232,9 @@ async function iniciarPagina() {
 
   await mostrarProjetoCompleto();
 
-  await identificarMembroSocial();
+  if (identificarSocial) {
+    await identificarMembroSocial();
+  }
 
 }
 
@@ -3307,6 +3314,46 @@ function iniciarComLoginSocial() {
 }
 
 
+function iniciarMobileDepoisDeRender() {
+  iniciarPagina({
+    identificarSocial: false
+  })
+    .then(() => {
+      if (
+        !paginaLoginSocialAtiva() ||
+        identificado ||
+        popupAberto ||
+        !projeto
+      ) {
+        return;
+      }
+
+      setTimeout(() => {
+        if (
+          !paginaLoginSocialAtiva() ||
+          identificado ||
+          popupAberto ||
+          !projeto
+        ) {
+          return;
+        }
+
+        abrirPopupWhatsapp()
+          .catch(console.error);
+      }, MOBILE_LOGIN_AFTER_RENDER_DELAY);
+    })
+    .catch(
+      (error) => {
+        console.error(
+          "Erro ao preparar checkout mobile:",
+          error?.message || error,
+          error
+        );
+      }
+    );
+}
+
+
 // ======================================================
 // ON READY
 // ======================================================
@@ -3337,6 +3384,14 @@ $w.onReady(
     if (
       aplicarBloqueioManutencao()
     ) {
+      return;
+    }
+
+    if (
+      wixWindowFrontend.formFactor ===
+      "Mobile"
+    ) {
+      iniciarMobileDepoisDeRender();
       return;
     }
 

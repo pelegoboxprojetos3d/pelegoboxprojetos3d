@@ -51,6 +51,7 @@ jobs:
             git config user.email "pelegobox82@gmail.com"
             git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
             git commit -m "Remover flash da impressora antes dos avisos"
+            git pull --rebase origin main
             git push origin HEAD:main
           fi
 

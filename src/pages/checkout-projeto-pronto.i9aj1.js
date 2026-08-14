@@ -1016,9 +1016,24 @@ $w.onReady(function(){
     O contexto da URL + storage é enviado imediatamente e as consultas
     complementares continuam em paralelo, sem bloquear a renderização.
   */
-  contextReady=true;
-  sendInit(true);
-  carregarContextoClienteAutenticado().catch(console.error);
+  // BOOT_CLIENTE_RECORRENTE_V1
+  // Evita mostrar Nome/CPF/WhatsApp por um instante para quem acabou de
+  // entrar novamente na MESMA conta Wix. Damos no máximo 850 ms para o
+  // backend recuperar o cadastro; depois o checkout abre normalmente e a
+  // consulta continua em segundo plano, sem travar a compra.
+  const contextoAutenticadoPromise =
+    carregarContextoClienteAutenticado();
+
+  Promise.race([
+    contextoAutenticadoPromise,
+    new Promise((resolve) => setTimeout(resolve, 850))
+  ])
+    .catch(() => {})
+    .finally(() => {
+      contextReady = true;
+      sendInit(true);
+    });
+
   carregarMetodoPagamentoSalvo().catch(console.error);
 
   completarContextoPelaColecao()

@@ -430,16 +430,61 @@ export const buscarClienteDoMembroAtual =
           ).values()
         ).filter((item) => safe(item?._id));
 
+      // CLIENTE_RECORRENTE_EMAIL_CANONICO_V1
+      // A conta Wix autenticada já fixa o e-mail. Cadastros duplicados com
+      // esse MESMO e-mail não devem obrigar o cliente a preencher tudo outra vez.
+      // Escolhemos o registro mais completo e, em empate, o mais recente.
+      const pontuarCadastro = (item) => {
+        const publico = clientePublico(item);
+        if (!publico) return -1;
+
+        let pontos = 0;
+        const documento = limparCpfCnpj(publico.cpfCnpj);
+
+        if (limparEmail(publico.email) === memberEmail) pontos += 100;
+        if (safe(publico.whatsapp)) pontos += 30;
+        if (limparNome(publico.nome).length >= 3) pontos += 20;
+        if (documento.length === 11 || documento.length === 14) pontos += 30;
+        if (safe(publico.clienteId)) pontos += 10;
+        if (publico.ativo !== false) pontos += 5;
+
+        return pontos;
+      };
+
+      const timestampCadastro = (item) =>
+        new Date(
+          item?._updatedDate ||
+          item?._createdDate ||
+          0
+        ).getTime();
+
+      const ordenados =
+        [...unicos].sort((a, b) => {
+          const diferencaPontos =
+            pontuarCadastro(b) -
+            pontuarCadastro(a);
+
+          if (diferencaPontos) {
+            return diferencaPontos;
+          }
+
+          return (
+            timestampCadastro(b) -
+            timestampCadastro(a)
+          );
+        });
+
+      const clienteCanonico =
+        ordenados[0] ||
+        null;
+
       return {
         memberId,
         email: memberEmail,
         nome: memberName,
-        cliente:
-          unicos.length === 1
-            ? clientePublico(unicos[0])
-            : null,
-        ambiguo:
-          unicos.length > 1
+        cliente: clientePublico(clienteCanonico),
+        ambiguo: unicos.length > 1,
+        totalCadastrosMesmoEmail: unicos.length
       };
     }
   );

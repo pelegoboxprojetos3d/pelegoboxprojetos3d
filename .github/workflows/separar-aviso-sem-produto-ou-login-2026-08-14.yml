@@ -1,0 +1,78 @@
+name: Separar aviso sem produto ou login
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/separar-aviso-sem-produto-ou-login-2026-08-14.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: separar-aviso-sem-produto-ou-login
+  cancel-in-progress: false
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Aplicar nova lógica
+        run: node scripts/separar-aviso-sem-produto-ou-login-2026-08-14.cjs
+
+      - name: Validar páginas
+        run: |
+          set -euo pipefail
+          cp "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" /tmp/entrega.mjs
+          cp "src/pages/sem produto ou nao logado.xu6gd.js" /tmp/aviso.mjs
+          node --check /tmp/entrega.mjs
+          node --check /tmp/aviso.mjs
+          grep -q 'motivo=sem_produtos' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'motivo=login' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'VOCÊ AINDA NÃO TEM PROJETOS PRONTOS' "src/pages/sem produto ou nao logado.xu6gd.js"
+          grep -q 'VOCÊ NÃO ESTÁ LOGADO' "src/pages/sem produto ou nao logado.xu6gd.js"
+          grep -q '#SESSAO2BANEERDOBOTAO' "src/pages/sem produto ou nao logado.xu6gd.js"
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" "src/pages/sem produto ou nao logado.xu6gd.js"; then
+            echo "Lógica já aplicada."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" "src/pages/sem produto ou nao logado.xu6gd.js"
+            git commit -m "Separar avisos da página de entrega"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub → Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

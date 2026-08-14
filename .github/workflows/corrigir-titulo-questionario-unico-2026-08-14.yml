@@ -1,4 +1,5 @@
 name: Corrigir título com questionário único
+# Reexecução dedicada da regra de título pós-clique.
 
 on:
   push:

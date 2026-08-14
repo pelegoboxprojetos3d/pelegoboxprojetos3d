@@ -1,0 +1,114 @@
+name: Corrigir abertura Entrega com impressora limpa
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-abertura-entrega-impressora.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-abertura-entrega-impressora
+  cancel-in-progress: true
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Corrigir ordem visual da abertura
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js';
+          let s = fs.readFileSync(file, 'utf8');
+
+          // A seção dos banners estava apontando para um elemento interno do Repeater.
+          // Isso fazia os cards aparecerem por um instante antes de serem ocultados.
+          const antigo = "  banners: '#textodobotaobaixaranalisegrafica',";
+          const novo = "  banners: '#section1',";
+          if (s.includes(antigo)) {
+            s = s.replace(antigo, novo);
+          } else if (!s.includes(novo)) {
+            throw new Error('Não encontrei o ID atual da seção de banners.');
+          }
+
+          // Blindagem sem await: é a primeira ação do onReady, para reduzir ao mínimo
+          // qualquer flash de Repeater/banners/aviso antes da impressora.
+          if (!s.includes('function blindarAberturaEntrega() {')) {
+            const marker = '// ======================================================\n// ON READY\n// ======================================================';
+            const idx = s.indexOf(marker);
+            if (idx < 0) throw new Error('Marcador ON READY não encontrado.');
+
+            const helper = `// ======================================================\n// BLINDAGEM VISUAL DA ABERTURA\n// ======================================================\n\nfunction blindarAberturaEntrega() {\n  /*\n    Esta função precisa rodar antes de qualquer await.\n\n    Ordem visual desejada:\n    1. limpa/esconde o Repeater imediatamente;\n    2. esconde e recolhe as duas seções inferiores;\n    3. abre a impressora imediatamente;\n    4. o fluxo normal só libera o produto e as seções inferiores\n       depois que o Repeater estiver pronto.\n  */\n\n  try {\n    const repetidor = $w(IDS.repetidor);\n    repetidor.data = [];\n    if (typeof repetidor.hide === \"function\") repetidor.hide();\n  } catch (_) {}\n\n  for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {\n    try {\n      const secao = $w(id);\n      if (typeof secao.hide === \"function\") secao.hide();\n      if (typeof secao.collapse === \"function\") secao.collapse();\n    } catch (_) {}\n  }\n\n  try {\n    const processando = $w(IDS.processando);\n    if (typeof processando.expand === \"function\") processando.expand();\n    if (typeof processando.show === \"function\") processando.show();\n    if (!processamentoVisivelDesde) processamentoVisivelDesde = Date.now();\n  } catch (_) {}\n}\n\n`;
+
+            s = s.slice(0, idx) + helper + s.slice(idx);
+          }
+
+          const onReady = '$w.onReady(async function () {\n  checkoutEmAndamento = false;';
+          const onReadyNovo = '$w.onReady(async function () {\n  blindarAberturaEntrega();\n\n  checkoutEmAndamento = false;';
+
+          if (s.includes(onReady)) {
+            s = s.replace(onReady, onReadyNovo);
+          } else if (!s.includes('  blindarAberturaEntrega();')) {
+            throw new Error('Não encontrei o início do onReady para aplicar a blindagem.');
+          }
+
+          fs.writeFileSync(file, s, 'utf8');
+          console.log('Abertura da entrega corrigida: impressora primeiro; seções inferiores depois.');
+          NODE
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        run: |
+          if git diff --quiet; then
+            echo "Nada para gravar."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+            git commit -m "Impedir flash dos banners antes da impressora"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file" || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

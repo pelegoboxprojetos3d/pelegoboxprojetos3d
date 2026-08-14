@@ -338,15 +338,20 @@ function esperar(
 
 async function esconderSecao(id) {
   /*
-    MOBILE: esconder sem recolher preserva a posição real das seções
-    inferiores enquanto o Repeater termina de calcular sua altura.
-    Isso impede os banners de subirem por cima do botão 3 e da linha
-    tracejada quando o HTML da impressora é recolhido.
+    Na abertura da entrega, as seções inferiores precisam ficar realmente
+    desligadas enquanto a impressora está visível. Hide sozinho deixa o espaço
+    da seção reservado e produz a faixa vazia/branca (e o rodapé preto) antes
+    de o Repeater terminar. Recolher aqui remove esse espaço temporariamente.
+    Depois que a impressora encerra e o Repeater está pronto,
+    liberarSecoesPosRepeater() expande e mostra tudo novamente.
   */
   try {
     const e = $w(id);
     if (typeof e.hide === "function") {
       await e.hide();
+    }
+    if (typeof e.collapse === "function") {
+      await e.collapse();
     }
   } catch (_) {}
 }
@@ -3260,8 +3265,16 @@ $w.onReady(async function () {
   redirecionarHomeAoDeslogar();
 
   try { $w(IDS.repetidor).hide(); } catch (_) {}
-  try { $w(SECOES_ENTREGA.banners).hide(); } catch (_) {}
-  try { $w(SECOES_ENTREGA.final).hide(); } catch (_) {}
+  try {
+    const banners = $w(SECOES_ENTREGA.banners);
+    if (typeof banners.hide === "function") banners.hide();
+    if (typeof banners.collapse === "function") banners.collapse();
+  } catch (_) {}
+  try {
+    const final = $w(SECOES_ENTREGA.final);
+    if (typeof final.hide === "function") final.hide();
+    if (typeof final.collapse === "function") final.collapse();
+  } catch (_) {}
 
   const inicioProcessamento = mostrarProcessamento().catch((erro) => {
     console.warn(

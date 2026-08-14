@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "scripts/acelerar-bootstrap-checkout-pronto-2026-08-14.cjs"
+      - "scripts/ajustar-ordem-pagamento-mobile-2026-08-14.cjs"
       - ".github/workflows/acelerar-checkout-pronto.yml"
 
 permissions:
@@ -32,6 +33,9 @@ jobs:
       - name: Aplicar bootstrap rápido
         run: node scripts/acelerar-bootstrap-checkout-pronto-2026-08-14.cjs
 
+      - name: Ajustar ordem mobile Pix e cartão
+        run: node scripts/ajustar-ordem-pagamento-mobile-2026-08-14.cjs
+
       - name: Validar arquivo do checkout
         run: node --check src/public/custom-elements/pelego-checkout-pronto.js
 
@@ -45,7 +49,7 @@ jobs:
           git config user.name 'PELEGO BOX Automacao'
           git config user.email 'pelegobox82@gmail.com'
           git add src/public/custom-elements/pelego-checkout-pronto.js
-          git commit -m 'Acelerar abertura do checkout projeto pronto'
+          git commit -m 'Ajustar ordem Pix e cartao no mobile'
           git push origin HEAD:main
 
       - name: Aguardar sincronização GitHub para Wix

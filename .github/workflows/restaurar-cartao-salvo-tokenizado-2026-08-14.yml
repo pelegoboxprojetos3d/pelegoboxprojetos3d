@@ -1,0 +1,92 @@
+name: Restaurar cartão salvo tokenizado
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/restaurar-cartao-salvo-tokenizado-2026-08-14.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cartao-salvo-tokenizado
+  cancel-in-progress: false
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Aplicar cartão salvo tokenizado
+        run: node scripts/restaurar-cartao-salvo-tokenizado-v3-2026-08-14.cjs
+
+      - name: Validar backend do cartão
+        run: |
+          set -euo pipefail
+          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
+          node --check /tmp/validaPayCartaoProjetosProntos.mjs
+          grep -q 'import { tokenize } from "@validapay/tokenize";' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'pendingPaymentMethodId: paymentMethodId' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'await persistirMetodoPagamentoAprovado(session, chargeId);' src/backend/validaPayCartaoProjetosProntos.jsw
+          if grep -q 'chargePayload.card = {' src/backend/validaPayCartaoProjetosProntos.jsw; then
+            echo "ERRO: PAN/CVV ainda estão no payload final da cobrança."
+            exit 1
+          fi
+
+      - name: Gravar correção no main
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/backend/validaPayCartaoProjetosProntos.jsw; then
+            echo "Backend do cartão já está correto."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add src/backend/validaPayCartaoProjetosProntos.jsw
+            git commit -m "Salvar cartão por token após aprovação"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub → Wix
+        run: sleep 90
+
+      - name: Publicar versão salva no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

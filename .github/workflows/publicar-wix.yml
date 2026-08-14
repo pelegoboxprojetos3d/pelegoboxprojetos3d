@@ -48,6 +48,9 @@ jobs:
       - name: Corrigir título pela coleção Videosprojetos
         run: node scripts/corrigir-titulo-videosprojetos-checkout-2026-08-12.cjs
 
+      - name: Garantir código de questionário único no título
+        run: node scripts/corrigir-codigo-questionario-titulo-unico-2026-08-14.cjs
+
       - name: Preparar clientes para DDI internacional
         run: node scripts/preparar-clientes-ddi-internacional-2026-08-12.cjs
 
@@ -82,6 +85,7 @@ jobs:
             "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
             "src/pages/checkout-projeto-pronto.i9aj1.js"
             "src/public/custom-elements/pelego-checkout-pronto.js"
+            "src/backend/projetosProntosNormalizacao.js"
             "src/backend/clientes.js"
             "src/backend/clientes.web.js"
             "src/backend/validaPayPixProjetosProntosCore.jsw"

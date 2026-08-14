@@ -1,0 +1,165 @@
+name: Ajustar login atrasado no checkout de Projetos Prontos
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-login-atrasado-checkout-projetos-prontos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-login-atrasado-checkout-projetos-prontos
+  cancel-in-progress: true
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Ajustar abertura e login atrasado
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const file = 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js';
+          let s = fs.readFileSync(file, 'utf8');
+
+          function replaceOnce(from, to, label) {
+            if (!s.includes(from)) throw new Error(`${label}: trecho não encontrado`);
+            s = s.replace(from, to);
+          }
+
+          function replaceBetween(start, end, replacement, label) {
+            const i = s.indexOf(start);
+            const j = s.indexOf(end, i + start.length);
+            if (i < 0 || j < 0) throw new Error(`${label}: trecho não encontrado`);
+            s = s.slice(0, i) + replacement + '\n\n' + s.slice(j);
+          }
+
+          replaceOnce(
+            'const POPUP_REOPEN_DELAY =\n  3000;',
+            'const POPUP_REOPEN_DELAY =\n  7000;',
+            'tempo de reabertura'
+          );
+
+          replaceBetween(
+            'function iniciarComLoginSocial() {',
+            '// ======================================================\n// ON READY',
+            `function iniciarDepoisDeRender() {
+  iniciarPagina({
+    identificarSocial: false
+  })
+    .then(async () => {
+      if (
+        !paginaLoginSocialAtiva() ||
+        !projeto
+      ) {
+        cancelarPopupAgendado();
+        return;
+      }
+
+      /*
+        REGRA DA PÁGINA PROTEGIDA:
+        - primeiro renderiza título, thumbnail, setas e os três botões;
+        - enquanto estiver deslogado, os valores ficam escondidos;
+        - os três botões permanecem bloqueados;
+        - só depois do conteúdo estar pronto verificamos o membro;
+        - se estiver deslogado, o login abre após 5 segundos;
+        - se fechar o login, ele volta após POPUP_REOPEN_DELAY;
+        - a regra vale igualmente para desktop e mobile.
+      */
+      let membro = null;
+
+      try {
+        membro = await currentMember.getMember();
+      } catch (_) {}
+
+      if (membro?._id) {
+        cancelarPopupAgendado();
+        await identificarMembroSocial();
+        return;
+      }
+
+      identificado = false;
+      bloquearSemIdentificacao();
+
+      agendarRetornoLoginSocial(
+        MOBILE_LOGIN_AFTER_RENDER_DELAY
+      );
+    })
+    .catch(
+      (error) => {
+        console.error(
+          "Erro ao preparar checkout protegido:",
+          error?.message || error,
+          error
+        );
+      }
+    );
+}`,
+            'fluxo de abertura protegido'
+          );
+
+          replaceOnce(
+            `    if (\n      wixWindowFrontend.formFactor ===\n      "Mobile"\n    ) {\n      iniciarMobileDepoisDeRender();\n      return;\n    }\n\n    iniciarComLoginSocial();`,
+            `    iniciarDepoisDeRender();`,
+            'onReady unificado'
+          );
+
+          fs.writeFileSync(file, s, 'utf8');
+          console.log('Checkout protegido ajustado: conteúdo primeiro, login depois.');
+          NODE
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        run: |
+          if git diff --quiet; then
+            echo "Nada para gravar."
+            exit 0
+          fi
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
+          git commit -m "Mostrar projeto antes de pedir login no checkout"
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file" || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

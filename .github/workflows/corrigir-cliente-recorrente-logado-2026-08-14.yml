@@ -1,0 +1,258 @@
+name: Corrigir cliente recorrente logado
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/corrigir-cliente-recorrente-logado-2026-08-14.yml
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Recuperar dados da compra anterior para membro logado
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/backend/clientes.web.js')
+          text = path.read_text(encoding='utf-8')
+
+          old_const = 'const COLLECTION = "Campo";\n\nconst DB_OPTS = {'
+          new_const = 'const COLLECTION = "Campo";\nconst SESSIONS_COLLECTION = "SessoesProjetosProntos2";\n\nconst DB_OPTS = {'
+          if 'const SESSIONS_COLLECTION = "SessoesProjetosProntos2";' not in text:
+              if old_const not in text:
+                  raise SystemExit('Âncora da coleção não encontrada')
+              text = text.replace(old_const, new_const, 1)
+
+          old = '''      const clienteCanonico =
+        ordenados[0] ||
+        null;
+
+      return {
+        memberId,
+        email: memberEmail,
+        nome: memberName,
+        cliente: clientePublico(clienteCanonico),
+        ambiguo: unicos.length > 1,
+        totalCadastrosMesmoEmail: unicos.length
+      };'''
+
+          new = '''      const clienteCanonico =
+        ordenados[0] ||
+        null;
+
+      /*
+        CLIENTE_RECORRENTE_COMPRA_ANTERIOR_V2
+
+        A conta Wix autenticada é a âncora de identidade. Alguns cadastros
+        antigos em Campo não possuem CPF/CNPJ, embora uma compra ValidaPay já
+        tenha gravado esse dado em SessoesProjetosProntos2. Nesse caso, usamos
+        SOMENTE sessões do mesmo e-mail autenticado para completar campos
+        ausentes. Assim o cliente recorrente não repete Nome/WhatsApp/CPF ao
+        comprar a próxima etapa ou outro projeto.
+      */
+      const sessoesMesmoEmail = [];
+
+      for (const campo of ["email", "Email"]) {
+        try {
+          const resultado =
+            await wixData
+              .query(SESSIONS_COLLECTION)
+              .eq(campo, memberEmail)
+              .descending("_updatedDate")
+              .limit(50)
+              .find(DB_OPTS);
+
+          sessoesMesmoEmail.push(
+            ...(resultado.items || [])
+          );
+        } catch (_) {}
+      }
+
+      const sessoesUnicas =
+        Array.from(
+          new Map(
+            sessoesMesmoEmail
+              .filter(Boolean)
+              .map((item) => [safe(item?._id), item])
+          ).values()
+        ).filter((item) => safe(item?._id));
+
+      const pontuarSessao = (item) => {
+        let pontos = 0;
+        const documento = limparCpfCnpj(
+          primeiroValor(
+            item?.cpfCnpj,
+            item?.cpf,
+            item?.cpfcnpj,
+            item?.Cpfcnpj,
+            item?.["CPF/CNPJ"]
+          )
+        );
+        const numero = primeiroValor(
+          item?.whatsappE164,
+          item?.whatsapp,
+          item?.whatsApp,
+          item?.Whatsapp,
+          item?.WhatsApp
+        );
+        const nome = primeiroValor(
+          item?.nomeCliente,
+          item?.nome,
+          item?.Nomecliente,
+          item?.title,
+          item?.Title
+        );
+
+        if (limparEmail(item?.email || item?.Email) === memberEmail) pontos += 100;
+        if (documento.length === 11 || documento.length === 14) pontos += 50;
+        if (safe(numero)) pontos += 30;
+        if (limparNome(nome).length >= 3) pontos += 20;
+        if (safe(item?.clienteId || item?.["Cliente ID"])) pontos += 10;
+
+        return pontos;
+      };
+
+      const sessaoCanonica =
+        [...sessoesUnicas]
+          .sort((a, b) => {
+            const diferenca = pontuarSessao(b) - pontuarSessao(a);
+            if (diferenca) return diferenca;
+
+            const dataA = new Date(a?._updatedDate || a?._createdDate || 0).getTime();
+            const dataB = new Date(b?._updatedDate || b?._createdDate || 0).getTime();
+            return dataB - dataA;
+          })[0] ||
+        null;
+
+      const cadastro =
+        clientePublico(clienteCanonico);
+
+      let clienteMesclado =
+        cadastro
+          ? { ...cadastro }
+          : null;
+
+      if (sessaoCanonica) {
+        const whatsappSessao =
+          normalizarWhatsapp(
+            primeiroValor(
+              sessaoCanonica?.whatsappE164,
+              sessaoCanonica?.whatsapp,
+              sessaoCanonica?.whatsApp,
+              sessaoCanonica?.Whatsapp,
+              sessaoCanonica?.WhatsApp
+            )
+          );
+
+        const cpfSessao =
+          limparCpfCnpj(
+            primeiroValor(
+              sessaoCanonica?.cpfCnpj,
+              sessaoCanonica?.cpf,
+              sessaoCanonica?.cpfcnpj,
+              sessaoCanonica?.Cpfcnpj,
+              sessaoCanonica?.["CPF/CNPJ"]
+            )
+          );
+
+        const nomeSessao =
+          limparNome(
+            primeiroValor(
+              sessaoCanonica?.nomeCliente,
+              sessaoCanonica?.nome,
+              sessaoCanonica?.Nomecliente,
+              sessaoCanonica?.title,
+              sessaoCanonica?.Title
+            )
+          );
+
+        const clienteIdSessao =
+          safe(
+            primeiroValor(
+              sessaoCanonica?.clienteId,
+              sessaoCanonica?.["Cliente ID"]
+            )
+          );
+
+        if (!clienteMesclado) {
+          clienteMesclado = {
+            _id: clienteIdSessao,
+            clienteId: clienteIdSessao,
+            nome: nomeSessao || memberName,
+            whatsapp: whatsappSessao,
+            whatsappE164: whatsappSessao,
+            whatsappNacional: whatsappNacional(whatsappSessao),
+            email: memberEmail,
+            cpfCnpj: cpfSessao,
+            status: "",
+            ativo: true
+          };
+        } else {
+          clienteMesclado._id =
+            safe(clienteMesclado._id) || clienteIdSessao;
+          clienteMesclado.clienteId =
+            safe(clienteMesclado.clienteId) || clienteIdSessao || safe(clienteMesclado._id);
+          clienteMesclado.nome =
+            limparNome(clienteMesclado.nome) || nomeSessao || memberName;
+          clienteMesclado.whatsapp =
+            normalizarWhatsapp(clienteMesclado.whatsapp) || whatsappSessao;
+          clienteMesclado.whatsappE164 =
+            clienteMesclado.whatsapp;
+          clienteMesclado.whatsappNacional =
+            whatsappNacional(clienteMesclado.whatsapp);
+          clienteMesclado.email = memberEmail;
+          clienteMesclado.cpfCnpj =
+            limparCpfCnpj(clienteMesclado.cpfCnpj) || cpfSessao;
+        }
+      }
+
+      return {
+        memberId,
+        email: memberEmail,
+        nome: memberName,
+        cliente: clienteMesclado,
+        ambiguo: unicos.length > 1,
+        totalCadastrosMesmoEmail: unicos.length,
+        recuperadoDeCompraAnterior: Boolean(
+          sessaoCanonica &&
+          clienteMesclado &&
+          limparCpfCnpj(clienteMesclado.cpfCnpj)
+        )
+      };'''
+
+          if 'CLIENTE_RECORRENTE_COMPRA_ANTERIOR_V2' not in text:
+              if old not in text:
+                  raise SystemExit('Bloco canônico do membro não encontrado')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validar código
+        run: npm ci --ignore-scripts && npm run lint
+
+      - name: Publicar correção no main
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração necessária."
+            exit 0
+          fi
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/clientes.web.js
+          git commit -m "Reaproveitar dados da compra anterior no login"
+          git push origin HEAD:main

@@ -37,7 +37,7 @@ jobs:
       - name: Conferir sintaxe dos arquivos alterados
         run: |
           node --check "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          node --check "src/backend/entregaProjetosProntos.jsw"
+          node --check < "src/backend/entregaProjetosProntos.jsw"
           node --check "src/backend/notificarVendaProjetoPronto.js"
 
       - name: Conferir diff

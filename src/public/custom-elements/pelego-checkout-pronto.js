@@ -28,9 +28,9 @@ button{cursor:pointer}
   padding:8px 88px;margin-bottom:9px;background:#fff;border:1px solid #e8e8e8;border-radius:17px;
   box-shadow:0 6px 18px rgba(0,0,0,.035)
 }
-.step{min-height:42px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #e1e1e1;border-radius:23px;background:#fafafa;color:#555;font-size:11px}
+.step{min-height:42px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #e1e1e1;border-radius:23px;background:#fafafa;color:#555;font-size:11px;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease}
 .step.active,.step.done{border-color:#b9e5c5;background:#effcf3;color:var(--green-dark);font-weight:700}
-.stepNo{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #ccc;background:#fff;font-weight:700}
+.stepNo{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #ccc;background:#fff;font-weight:700;transition:background-color .16s ease,border-color .16s ease,color .16s ease}
 .step.active .stepNo,.step.done .stepNo{background:var(--green);border-color:var(--green);color:#fff}
 .sep{height:5px;border-radius:8px;background:#e6e6e6}
 
@@ -73,13 +73,13 @@ button{cursor:pointer}
 .emailField{margin-bottom:10px}
 .label{display:block;margin-bottom:5px;color:#171717;font-size:12px;font-weight:700}
 .required{color:#d32f2f}
-.control{width:100%;height:48px;padding:0 13px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none}
+.control{width:100%;height:48px;padding:0 13px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none;transition:border-color .16s ease,box-shadow .16s ease,background-color .16s ease}
 .control:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
 .phoneRow{display:block;position:relative}
 .phonePrefix,.countrySelect{display:none!important}
 .phoneRow .control{border-radius:12px}
 .phoneRow .iti{width:100%}
-.phoneRow .iti__tel-input{width:100%;height:48px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none;padding-left:118px!important}
+.phoneRow .iti__tel-input{width:100%;height:48px;border:1px solid #d7d7d7;border-radius:12px;background:#fff;color:#171717;outline:none;padding-left:118px!important;transition:border-color .16s ease,box-shadow .16s ease,background-color .16s ease}
 .phoneRow .iti__tel-input:focus{border-color:#71ba87;box-shadow:0 0 0 3px rgba(21,148,71,.10)}
 .phoneRow .iti__selected-country{min-width:108px;padding:0 10px;border-right:1px solid #d7d7d7;background:#fafafa;border-radius:12px 0 0 12px}
 .phoneRow .iti__selected-country-primary{gap:8px;padding:0!important}
@@ -116,14 +116,14 @@ button{cursor:pointer}
 .method.available:hover{transform:translateY(-3px);box-shadow:0 7px 16px rgba(0,0,0,.07)}
 .method.active{border:2px solid var(--green);background:#f5fff7;box-shadow:0 3px 11px rgba(38,133,53,.09)}
 .method.disabled{background:#fafafa;opacity:.56}
-.methodLogo{display:flex;width:42px;height:35px;flex:0 0 42px;align-items:center;justify-content:center;overflow:hidden;border-radius:8px;background:#f4f4f4}
+.methodLogo{display:flex;width:42px;height:35px;flex:0 0 42px;align-items:center;justify-content:center;overflow:hidden;border-radius:8px;background:#f4f4f4;transition:background-color .16s ease}
 .method.active .methodLogo{background:#e3f6e7}
 .methodLogo img{display:block;width:31px;max-width:92%;height:24px;max-height:90%;object-fit:contain}
 .methodLogo.wide img{width:40px;height:22px}
 .methodText{min-width:0;flex:1 1 auto}
 .methodName{display:block;overflow:hidden;color:#222;font-size:12px;font-weight:700;line-height:1.15;text-overflow:ellipsis}
 .methodDescription{display:block;margin-top:2px;overflow:hidden;color:#777;font-size:8px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
-.methodStatus{flex:0 0 auto;padding:4px 5px;border-radius:999px;background:#eee;color:#777;font-size:7px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+.methodStatus{flex:0 0 auto;padding:4px 5px;border-radius:999px;background:#eee;color:#777;font-size:7px;font-weight:700;text-transform:uppercase;white-space:nowrap;transition:background-color .16s ease,color .16s ease}
 .method.active .methodStatus{background:#dff3e3;color:var(--green)}
 .paymentNotice{min-width:0;margin:0;padding:10px 11px;border:1px solid #d9e2ec;border-left:4px solid var(--green);border-radius:10px;background:#f7f9fb}
 .paymentNoticeTitle{margin:0 0 6px;color:#222;font-size:12px;font-weight:700;line-height:1.3}

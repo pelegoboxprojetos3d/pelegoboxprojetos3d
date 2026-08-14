@@ -1454,17 +1454,48 @@ class PelegoCheckoutPronto extends HTMLElement {
     if (data?.data && typeof data.data === "object" && !data.type) data = data.data;
     return data && typeof data === "object" ? data : {};
   }
+  _scrollCheckoutToTop() {
+    const scrollNow = () => {
+      try {
+        this.style.scrollMarginTop = "8px";
+        this.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      } catch (_) {
+        try {
+          const top = Math.max(0, (this.getBoundingClientRect().top || 0) + (window.scrollY || window.pageYOffset || 0) - 8);
+          window.scrollTo({ top, behavior: "smooth" });
+        } catch (_) {}
+      }
+    };
+
+    scrollNow();
+    requestAnimationFrame(scrollNow);
+    setTimeout(scrollNow, 120);
+  }
   _height(value, mode = "") {
     const requested = Math.ceil(Number(value || 0));
     if (!Number.isFinite(requested) || requested <= 0) return;
+
+    const modeKey = String(mode || "").trim().toUpperCase();
+    const modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);
+    if (modeKey) this._lastLayoutMode = modeKey;
+
     const height = Math.max(180, Math.min(2300, requested + 2));
-    if (Math.abs(height - this._appliedHeight) <= 1) return;
+
     /*
-      No modo CARD preservamos a posição da página durante o crescimento
-      do iframe. Isso impede o scroll anchoring do Chrome/Wix de empurrar
-      o checkout para baixo quando o formulário do cartão aparece.
+      Mesmo quando a altura nao muda, uma troca real de microtela precisa
+      trazer o checkout para o topo. Isso e especialmente importante no
+      celular depois de teclado, telefone, CPF, Pix ou troca para cartao.
     */
-    const preserveScroll = String(mode || "").trim().toUpperCase() === "CARD";
+    if (Math.abs(height - this._appliedHeight) <= 1) {
+      if (modeChanged) this._scrollCheckoutToTop();
+      return;
+    }
+
+    /*
+      Dentro do mesmo formulario de cartao preservamos a posicao durante
+      pequenos ajustes de altura. Na ENTRADA do modo CARD, entretanto, sobe.
+    */
+    const preserveScroll = modeKey === "CARD" && !modeChanged;
     const scrollX = window.scrollX || window.pageXOffset || 0;
     const scrollY = window.scrollY || window.pageYOffset || 0;
 
@@ -1493,8 +1524,14 @@ class PelegoCheckoutPronto extends HTMLElement {
       setTimeout(restoreScroll, 80);
       setTimeout(restoreScroll, 180);
     }
+
+    if (modeChanged) {
+      this._scrollCheckoutToTop();
+    }
+
     this.dispatchEvent(new CustomEvent("checkout-height-change", { detail: { height }, bubbles: true, composed: true }));
   }
+
   _onWindowMessage(event) {
     if (!this._frame?.contentWindow || event.source !== this._frame.contentWindow) return;
     const data = this._normalize(event.data);

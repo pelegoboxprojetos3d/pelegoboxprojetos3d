@@ -2319,12 +2319,21 @@ async function hidratarClienteMembroSocial(memberEmail) {
       });
 
     /*
-      Encontrar o cadastro pelo e-mail social NÃO significa que os dados já
-      foram conferidos neste navegador. Preservamos a confirmação anterior
-      somente quando ela já existia no próprio navegador.
+      A conta Wix autenticada e o cadastro unico encontrado pelo mesmo e-mail
+      sao a fonte da verdade entre dispositivos. Se o cadastro backend ja tem
+      telefone, nome e documento, nao obrigamos o cliente a repetir tudo apenas
+      porque trocou do PC para o celular.
     */
     const jaConfirmadoAqui =
       identificacao.whatsappConfirmado === true;
+
+    const cadastroContaCompleto = Boolean(
+      telefone.whatsapp &&
+      firstValue(cliente._id, cliente.clienteId) &&
+      firstValue(cliente.nome, perfil?.nome).length >= 3 &&
+      emailSeguro &&
+      onlyDigits(cliente.cpfCnpj || cliente.cpf).length === 11
+    );
 
     identificacao = {
       ...identificacao,
@@ -2358,17 +2367,17 @@ async function hidratarClienteMembroSocial(memberEmail) {
           identificacao.cpfCnpj
         ),
       whatsappConfirmado:
-        jaConfirmadoAqui,
+        jaConfirmadoAqui || cadastroContaCompleto,
       confirmacaoWhatsappVersao:
-        jaConfirmadoAqui
+        jaConfirmadoAqui || cadastroContaCompleto
           ? Number(
               identificacao.confirmacaoWhatsappVersao ||
               CONFIRMACAO_FLUXO_VERSAO
             )
           : 0,
       confirmadoEm:
-        jaConfirmadoAqui
-          ? safe(identificacao.confirmadoEm)
+        jaConfirmadoAqui || cadastroContaCompleto
+          ? safe(identificacao.confirmadoEm) || new Date().toISOString()
           : ""
     };
 

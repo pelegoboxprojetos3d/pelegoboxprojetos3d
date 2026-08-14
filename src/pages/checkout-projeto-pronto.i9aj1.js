@@ -189,7 +189,7 @@ async function hydrateReturningCustomer() {
     A consulta ao backend continua acontecendo, mas não faz a etapa de
     identificação piscar antes de mostrar as formas de pagamento.
   */
-  ctx.skipIdentity = (alreadyVerifiedThisSession || ctx.skipIdentity === true) && socialDataConfirmed(ctx.email);
+  ctx.skipIdentity = ctx.skipIdentity === true || (alreadyVerifiedThisSession && socialDataConfirmed(ctx.email));
 
   try {
     const found = await waitTimeout(buscarClienteCadastrado(phoneE164(n, ctx.ddi || "55")), 3500, "");
@@ -216,7 +216,7 @@ async function hydrateReturningCustomer() {
       whatsappE164:phoneE164(n, ctx.ddi || "55"),
       whatsappConfirmado:true
     });
-    ctx.skipIdentity = socialDataConfirmed(cadastroBackend.email);
+    ctx.skipIdentity = ctx.skipIdentity === true || socialDataConfirmed(cadastroBackend.email);
     markSessionIdentityVerified(ctx);
   } catch (_) {
     if (!alreadyVerifiedThisSession && ctx.skipIdentity !== true) ctx.skipIdentity = false;
@@ -327,7 +327,7 @@ function contextFromUrl() {
     email:email(source.email),
     cpfCnpj:cpf(source.cpfCnpj || source.cpf),
     whatsappConfirmado:source.whatsappConfirmado === true,
-    skipIdentity:(Boolean(handoff) || verifiedSession) && socialDataConfirmed(email(source.email)),
+    skipIdentity:Boolean(handoff) || (verifiedSession && socialDataConfirmed(email(source.email))),
     hideSku:true,
     returnUrl:safe(q.returnUrl) || (project ? `/checkoutprojetosprontos?codigo=${encodeURIComponent(project)}` : "/checkoutprojetosprontos")
   };
@@ -870,27 +870,90 @@ async function carregarContextoClienteAutenticado() {
     const perfil = await waitTimeout(buscarClienteDoMembroAtual(), 5000, "");
     const cliente = perfil?.cliente && typeof perfil.cliente === "object" ? perfil.cliente : null;
     const mail = email(perfil?.email || cliente?.email || ctx.email);
+    const ddi = "55";
+    const n = phone(
+      cliente?.whatsappE164 ||
+      cliente?.whatsappNacional ||
+      cliente?.whatsapp ||
+      ctx.whatsappE164 ||
+      ctx.whatsapp,
+      ddi
+    );
 
     const patch = {
       clienteId: safe(cliente?._id || cliente?.clienteId || ctx.clienteId),
       nome: safe(cliente?.nome || perfil?.nome || ctx.nome),
       email: mail,
-      cpfCnpj: cpf(cliente?.cpfCnpj || cliente?.cpf || ctx.cpfCnpj)
+      cpfCnpj: cpf(cliente?.cpfCnpj || cliente?.cpf || ctx.cpfCnpj),
+      whatsapp: n,
+      whatsappE164: n ? phoneE164(n, ddi) : "",
+      ddi,
+      country: "br"
     };
 
     ctx = { ...ctx, ...patch };
     saveIdentity(patch);
 
-    post({
-      type: "CUSTOMER_CONTEXT",
-      ok: true,
-      clienteId: ctx.clienteId,
-      nome: ctx.nome,
-      email: ctx.email,
-      cpfCnpj: ctx.cpfCnpj
-    });
+    /*
+      REGRA MULTIDISPOSITIVO:
+      se a pessoa esta autenticada na mesma conta Wix e o backend localiza um
+      unico cadastro completo pelo e-mail dessa conta, nao pedimos os mesmos
+      dados de novo naquele celular/navegador. A conta Wix passa a ser a ancora
+      de identidade; storage local vira apenas cache, nunca fonte da verdade.
+    */
+    const cadastroContaCompleto = Boolean(
+      patch.clienteId &&
+      n &&
+      identityComplete(patch)
+    );
+
+    if (cadastroContaCompleto) {
+      saveIdentity({
+        ...patch,
+        whatsappConfirmado: true,
+        confirmacaoWhatsappVersao: 5,
+        confirmadoEm: new Date().toISOString()
+      });
+
+      ctx.skipIdentity = true;
+      markSessionIdentityVerified(ctx);
+      markSocialDataConfirmed(mail);
+    }
+
+    /*
+      Antes do READY nao mandamos mensagens auxiliares, pois o Custom Element
+      guarda apenas o ultimo payload pendente. Isso evita que CUSTOMER_CONTEXT
+      substitua o INIT e deixe o celular preso em "Carregando checkout...".
+    */
+    if (checkoutUiReady) {
+      post({
+        type: "CUSTOMER_CONTEXT",
+        ok: true,
+        clienteId: ctx.clienteId,
+        nome: ctx.nome,
+        email: ctx.email,
+        cpfCnpj: ctx.cpfCnpj,
+        whatsapp: ctx.whatsapp,
+        whatsappE164: ctx.whatsappE164
+      });
+
+      if (cadastroContaCompleto) {
+        post({
+          type: "CUSTOMER_READY",
+          ok: true,
+          exists: true,
+          clienteId: ctx.clienteId,
+          nome: ctx.nome,
+          email: ctx.email,
+          cpfCnpj: ctx.cpfCnpj,
+          whatsapp: ctx.whatsapp,
+          whatsappE164: ctx.whatsappE164,
+          autoPayment: false
+        });
+      }
+    }
   } catch (error) {
-    console.warn("Contexto do cliente autenticado não pôde ser atualizado:", error?.message || error);
+    console.warn("Contexto do cliente autenticado nao pode ser atualizado:", error?.message || error);
   }
 }
 
@@ -928,7 +991,19 @@ $w.onReady(function(){
     if(data?.data && typeof data.data==="object" && !data.type) data=data.data;
     data=data && typeof data==="object" ? data : {};
     const type=safe(data.type || data.tipo || data.action).toUpperCase();
-    if(type==="READY"){checkoutUiReady=true;sendInit();if(savedCardPayload)post(savedCardPayload);return;}
+    if(type==="READY"){
+      checkoutUiReady=true;
+
+      /*
+        O Custom Element pode receber mensagens antes de terminar o bridge,
+        especialmente no celular. Quando ele declara READY, reenviamos o INIT
+        obrigatoriamente para impedir o loader infinito.
+      */
+      sendInit(true);
+
+      if(savedCardPayload)post(savedCardPayload);
+      return;
+    }
     if(type==="SAVE_CUSTOMER" || type==="CREATE_CUSTOMER"){saveCustomer(data).catch(console.error);return;}
     if(type==="CREATE_PIX" || type==="SUBMIT_PRO"){createPix(data).catch(console.error);return;}
     if(type==="CREATE_CARD"){createCard(data).catch(console.error);return;}

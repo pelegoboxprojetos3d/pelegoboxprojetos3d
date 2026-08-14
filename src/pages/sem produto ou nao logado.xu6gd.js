@@ -1,24 +1,23 @@
 import wixLocation from "wix-location";
-import {
-  authentication,
-  currentMember
-} from "wix-members-frontend";
+import { currentMember } from "wix-members-frontend";
 
 import {
   listarProjetosProntosDoMembroAtual,
-  buscarSegundaViaProjetoPronto
+  buscarSegundaViaProjetoPronto,
+  buscarEntregaProjetoPronto
 } from "backend/entregaProjetosProntos.jsw";
 
 // ======================================================
 // PÁGINA: SEM PRODUTO OU NÃO LOGADO
+// SLUG: /semprodutonaologao
 //
-// FUNÇÃO:
-// - Entrada pelo avatar > SEUS PROJETOS PRONTOS.
-// - Entrada por link de produto recebido por e-mail.
-// - Obriga login quando necessário.
-// - Usa a mesma identidade segura da central de Projetos Prontos.
-// - Se houver compras, envia para /entregaprojetosprontos.
-// - Se não houver compras, mantém o cliente nesta página.
+// Esta página serve SOMENTE para recados de acesso:
+// 1) usuário sem Projetos Prontos;
+// 2) pessoa que abriu link do e-mail sem estar logada;
+// 3) pessoa logada em conta diferente da usada na compra.
+//
+// Se a conta estiver correta e houver compra, ela não permanece aqui:
+// redireciona para /entregaprojetosprontos.
 // ======================================================
 
 const IDS = {
@@ -26,14 +25,9 @@ const IDS = {
   texto: "#textomenor"
 };
 
-const PAGINA_CENTRAL =
-  "/entregaprojetosprontos";
+const PAGINA_PROJETOS = "/entregaprojetosprontos";
 
-let loginEmAndamento =
-  false;
-
-let verificacaoEmAndamento =
-  false;
+let verificacaoEmAndamento = false;
 
 function safe(valor) {
   return String(valor ?? "").trim();
@@ -48,7 +42,6 @@ function firstValue(...valores) {
     const texto = safe(valor);
     if (texto) return texto;
   }
-
   return "";
 }
 
@@ -66,22 +59,23 @@ function parametrosDaUrl() {
   const query = wixLocation.query || {};
 
   return {
-    checkoutId: firstValue(
-      query.checkout_id,
-      query.checkoutId
-    ),
-
+    checkoutId: firstValue(query.checkout_id, query.checkoutId),
     token: safe(query.token),
-
-    codigoProjeto: digits(
-      firstValue(
-        query.codigoProjeto,
-        query.codigo
-      )
-    ),
-
-    via: safe(query.via).toLowerCase()
+    codigoProjeto: digits(firstValue(query.codigoProjeto, query.codigo)),
+    via: safe(query.via).toLowerCase(),
+    motivo: safe(query.motivo).toLowerCase()
   };
+}
+
+function veioDeEmailOuCompra(parametros = {}) {
+  return Boolean(
+    parametros.checkoutId ||
+    parametros.token ||
+    parametros.codigoProjeto ||
+    parametros.via === "email" ||
+    parametros.motivo === "login_compra" ||
+    parametros.motivo === "conta_errada"
+  );
 }
 
 async function membroAtual() {
@@ -98,84 +92,167 @@ async function membroAtual() {
   }
 }
 
-async function pedirLogin() {
-  if (loginEmAndamento) {
-    return false;
+function mostrarNaoLogado(parametros = {}) {
+  if (veioDeEmailOuCompra(parametros)) {
+    definirMensagem(
+      "VOCÊ NÃO ESTÁ LOGADO",
+      "Para acessar este Projeto Pronto, entre no site com a mesma conta e o mesmo e-mail usados no pagamento. Depois abra o botão do e-mail novamente."
+    );
+    return;
   }
-
-  loginEmAndamento = true;
 
   definirMensagem(
-    "ENTRE NA SUA CONTA",
-    "Use o mesmo e-mail informado na compra para acessar seus Projetos Prontos."
+    "VOCÊ NÃO ESTÁ LOGADO",
+    "Entre na sua conta para consultar seus Projetos Prontos."
   );
-
-  try {
-    await authentication.promptLogin({
-      mode: "login",
-      modal: true
-    });
-
-    return true;
-  } catch (_) {
-    definirMensagem(
-      "ACESSO AOS SEUS PROJETOS",
-      "Entre na sua conta usando o mesmo e-mail informado na compra."
-    );
-
-    return false;
-  } finally {
-    loginEmAndamento = false;
-  }
 }
 
-function abrirCentralComCompra(parametros) {
+function mostrarSemProdutos() {
+  definirMensagem(
+    "VOCÊ AINDA NÃO TEM PROJETOS PRONTOS",
+    "Você ainda não comprou nenhum Projeto Pronto. Após a primeira compra, seus projetos aparecerão automaticamente na sua conta."
+  );
+}
+
+function mostrarContaErrada() {
+  definirMensagem(
+    "ESTE PROJETO NÃO PERTENCE A ESTA CONTA",
+    "Saia da conta atual e entre com a mesma conta e o mesmo e-mail usados no pagamento para acessar este Projeto Pronto."
+  );
+}
+
+function abrirPaginaProjetos(parametros = {}) {
   const partes = [];
 
-  if (parametros?.checkoutId) {
+  if (parametros.checkoutId) {
     partes.push(
       `checkout_id=${encodeURIComponent(parametros.checkoutId)}`
     );
   }
 
-  if (parametros?.token) {
+  if (parametros.token) {
     partes.push(
       `token=${encodeURIComponent(parametros.token)}`
     );
   }
 
-  if (parametros?.via) {
+  if (parametros.via) {
     partes.push(
       `via=${encodeURIComponent(parametros.via)}`
     );
   }
 
   const destino = partes.length
-    ? `${PAGINA_CENTRAL}?${partes.join("&")}`
-    : PAGINA_CENTRAL;
+    ? `${PAGINA_PROJETOS}?${partes.join("&")}`
+    : PAGINA_PROJETOS;
 
   wixLocation.to(destino);
 }
 
-async function validarCodigoDoEmail(codigoProjeto) {
-  if (!codigoProjeto) {
-    return null;
-  }
-
+async function validarLinkDireto(parametros) {
   try {
-    return await buscarSegundaViaProjetoPronto({
-      codigoProjeto
+    const resultado = await buscarEntregaProjetoPronto({
+      checkoutId: parametros.checkoutId,
+      token: parametros.token
     });
+
+    if (resultado?.ok) {
+      abrirPaginaProjetos({
+        ...parametros,
+        via: parametros.via || "email"
+      });
+      return;
+    }
+
+    if (resultado?.error === "LOGIN_NECESSARIO") {
+      mostrarNaoLogado(parametros);
+      return;
+    }
+
+    if (resultado?.error === "COMPRA_DE_OUTRA_CONTA") {
+      mostrarContaErrada();
+      return;
+    }
+
+    if (resultado?.error === "EMAIL_DA_COMPRA_AUSENTE") {
+      definirMensagem(
+        "NÃO FOI POSSÍVEL VALIDAR A COMPRA",
+        "Não conseguimos validar o titular desta compra. Entre em contato com o suporte."
+      );
+      return;
+    }
+
+    if (resultado?.error === "SESSAO_NAO_ENCONTRADA") {
+      definirMensagem(
+        "LINK DE COMPRA NÃO ENCONTRADO",
+        "Este link não corresponde a uma compra disponível."
+      );
+      return;
+    }
+
+    definirMensagem(
+      "NÃO FOI POSSÍVEL ABRIR ESTE PROJETO",
+      "Não conseguimos validar este acesso agora. Atualize a página em instantes."
+    );
   } catch (erro) {
     console.error(
-      "Falha ao validar projeto do e-mail:",
+      "Falha ao validar link direto:",
       erro?.message || erro
     );
 
-    return {
-      ok: false,
-      error: "ERRO_CONSULTA"
-    };
+    definirMensagem(
+      "NÃO FOI POSSÍVEL CONSULTAR",
+      "Não conseguimos validar este acesso agora. Atualize a página em instantes."
+    );
+  }
+}
+
+async function validarLinkAntigo(codigoProjeto) {
+  try {
+    const resultado = await buscarSegundaViaProjetoPronto({
+      codigoProjeto
+    });
+
+    if (resultado?.ok && resultado?.approved) {
+      wixLocation.to(PAGINA_PROJETOS);
+      return;
+    }
+
+    if (resultado?.error === "LOGIN_NECESSARIO") {
+      mostrarNaoLogado({
+        codigoProjeto,
+        via: "email"
+      });
+      return;
+    }
+
+    if (resultado?.error === "COMPRA_NAO_ENCONTRADA") {
+      mostrarContaErrada();
+      return;
+    }
+
+    if (resultado?.error === "PROJETO_NAO_ENCONTRADO") {
+      definirMensagem(
+        "PROJETO NÃO ENCONTRADO",
+        "A compra foi localizada, mas o projeto não está disponível neste momento."
+      );
+      return;
+    }
+
+    definirMensagem(
+      "NÃO FOI POSSÍVEL ABRIR ESTE PROJETO",
+      "Não conseguimos validar este acesso agora. Atualize a página em instantes."
+    );
+  } catch (erro) {
+    console.error(
+      "Falha ao validar link antigo:",
+      erro?.message || erro
+    );
+
+    definirMensagem(
+      "NÃO FOI POSSÍVEL CONSULTAR",
+      "Não conseguimos validar este acesso agora. Atualize a página em instantes."
+    );
   }
 }
 
@@ -187,133 +264,57 @@ async function resolverAcesso() {
   verificacaoEmAndamento = true;
 
   try {
-    const parametros =
-      parametrosDaUrl();
+    const parametros = parametrosDaUrl();
+    const membro = await membroAtual();
+
+    if (!membro) {
+      mostrarNaoLogado(parametros);
+      return;
+    }
+
+    if (parametros.checkoutId || parametros.token) {
+      await validarLinkDireto(parametros);
+      return;
+    }
+
+    if (parametros.codigoProjeto) {
+      await validarLinkAntigo(parametros.codigoProjeto);
+      return;
+    }
 
     definirMensagem(
       "VERIFICANDO SUA CONTA",
       "Estamos localizando seus Projetos Prontos..."
     );
 
-    let membro =
-      await membroAtual();
-
-    if (!membro) {
-      const entrou =
-        await pedirLogin();
-
-      if (!entrou) {
-        return;
-      }
-
-      membro =
-        await membroAtual();
-
-      if (!membro) {
-        definirMensagem(
-          "LOGIN NECESSÁRIO",
-          "Não foi possível confirmar sua conta. Entre novamente usando o e-mail da compra."
-        );
-
-        return;
-      }
-    }
-
-    // Link protegido vindo do e-mail ou do checkout.
-    // A página de entrega fará a conferência final do e-mail da compra.
-    if (
-      parametros.checkoutId ||
-      parametros.token
-    ) {
-      abrirCentralComCompra({
-        ...parametros,
-        via: parametros.via || "email"
-      });
-
-      return;
-    }
-
-    // Compatibilidade com links antigos que tragam somente o código do projeto.
-    if (parametros.codigoProjeto) {
-      const resultadoCodigo =
-        await validarCodigoDoEmail(
-          parametros.codigoProjeto
-        );
-
-      if (
-        resultadoCodigo?.ok === true &&
-        resultadoCodigo?.approved === true
-      ) {
-        wixLocation.to(PAGINA_CENTRAL);
-        return;
-      }
-
-      if (
-        resultadoCodigo?.error ===
-        "COMPRA_NAO_ENCONTRADA"
-      ) {
-        definirMensagem(
-          "ESTE PRODUTO NÃO ESTÁ NESTA CONTA",
-          "Entre com o mesmo e-mail utilizado na compra para acessar este Projeto Pronto."
-        );
-
-        return;
-      }
-
-      if (
-        resultadoCodigo?.error ===
-        "PROJETO_NAO_ENCONTRADO"
-      ) {
-        definirMensagem(
-          "PROJETO NÃO ENCONTRADO",
-          "A compra foi localizada, mas o projeto não está disponível neste momento."
-        );
-
-        return;
-      }
-    }
-
-    const resultado =
-      await listarProjetosProntosDoMembroAtual();
+    const resultado = await listarProjetosProntosDoMembroAtual();
 
     if (!resultado?.ok) {
-      if (
-        resultado?.error ===
-        "LOGIN_NECESSARIO"
-      ) {
-        definirMensagem(
-          "ENTRE NA SUA CONTA",
-          "Faça login para consultar seus Projetos Prontos."
-        );
+      if (resultado?.error === "LOGIN_NECESSARIO") {
+        mostrarNaoLogado(parametros);
       } else {
         definirMensagem(
           "NÃO FOI POSSÍVEL CONSULTAR",
           "Não conseguimos consultar seus projetos agora. Atualize esta página em instantes."
         );
       }
-
       return;
     }
 
-    const projetos =
-      Array.isArray(resultado.items)
-        ? resultado.items
-        : [];
+    const projetos = Array.isArray(resultado.items)
+      ? resultado.items
+      : [];
 
     if (projetos.length > 0) {
-      wixLocation.to(PAGINA_CENTRAL);
+      wixLocation.to(PAGINA_PROJETOS);
       return;
     }
 
-    definirMensagem(
-      "VOCÊ AINDA NÃO TEM PROJETOS PRONTOS",
-      "Quando você comprar seu primeiro Projeto Pronto, ele aparecerá automaticamente aqui."
-    );
+    mostrarSemProdutos();
   } catch (erro) {
     console.error(
       "Falha ao verificar acesso aos Projetos Prontos:",
-      erro?.message || erro,
-      erro
+      erro?.message || erro
     );
 
     definirMensagem(

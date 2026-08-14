@@ -4,204 +4,157 @@ const FILE = "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js";
 let code = fs.readFileSync(FILE, "utf8");
 let changed = false;
 
-function replaceOnce(from, to, label) {
+function replaceRequired(from, to, label) {
   if (code.includes(to)) return;
   if (!code.includes(from)) throw new Error(`${label}: trecho não encontrado.`);
   code = code.replace(from, to);
   changed = true;
 }
 
-replaceOnce(
-`const PAGINA_MANUTENCAO =
-  "/projetos-prontos-manutencao";`,
-`const PAGINA_MANUTENCAO =
-  "/projetos-prontos-manutencao";
-
-const SLUG_LOGIN_SOCIAL =
-  "checkoutprojetosprontos";`,
-"Constante do slug exclusivo"
-);
-
-if (!code.includes("function paginaLoginSocialAtiva()")) {
-  const marker = `function safe(value) {
-  return String(
-    value ?? ""
-  ).trim();
-}
-`;
-
-  const helper = `function safe(value) {
-  return String(
-    value ?? ""
-  ).trim();
-}
-
-function paginaLoginSocialAtiva() {
-  return (
-    safe(
-      wixLocation.path?.[0]
-    ).toLowerCase() ===
-    SLUG_LOGIN_SOCIAL
-  );
-}
-`;
-
-  if (!code.includes(marker)) throw new Error("Helper safe não encontrado.");
-  code = code.replace(marker, helper);
+function insertBefore(marker, text, label) {
+  if (code.includes(text.trim())) return;
+  if (!code.includes(marker)) throw new Error(`${label}: âncora não encontrada.`);
+  code = code.replace(marker, text + marker);
   changed = true;
 }
 
-replaceOnce(
-`  if (
-    identificado ||
-    popupAberto ||
-    !projeto
-  ) {`,
-`  if (
-    !paginaLoginSocialAtiva() ||
-    identificado ||
-    popupAberto ||
-    !projeto
-  ) {`,
-"Guarda do reagendamento antigo"
+/*
+  REGRA DE LOGIN SOCIAL:
+  - nunca abrir fora de /checkoutprojetosprontos;
+  - desktop mantém o comportamento atual;
+  - no mobile, primeiro renderiza o checkout e só depois abre Google/Facebook.
+  Isso evita que o modal apareça visualmente sobre a página anterior durante
+  a transição do Wix.
+*/
+
+if (!code.includes('const SLUG_LOGIN_SOCIAL =\n  "checkoutprojetosprontos";')) {
+  throw new Error("Slug exclusivo do login social não encontrado.");
+}
+
+replaceRequired(
+`const SLUG_LOGIN_SOCIAL =
+  "checkoutprojetosprontos";`,
+`const SLUG_LOGIN_SOCIAL =
+  "checkoutprojetosprontos";
+
+const MOBILE_LOGIN_AFTER_RENDER_DELAY =
+  350;`,
+"Atraso de renderização do mobile"
 );
 
-replaceOnce(
-`  if (identificado) {
-    return;
-  }
-
-  popupAgendado = setTimeout(`,
-`  if (
-    !paginaLoginSocialAtiva() ||
-    identificado
-  ) {
-    return;
-  }
-
-  popupAgendado = setTimeout(`,
-"Guarda do retorno social"
+replaceRequired(
+`async function iniciarPagina() {
+  if (!paginaLoginSocialAtiva()) {`,
+`async function iniciarPagina({
+  identificarSocial = true
+} = {}) {
+  if (!paginaLoginSocialAtiva()) {`,
+"Inicialização parametrizada"
 );
 
-replaceOnce(
-`      if (identificado || popupAberto) {
-        return;
-      }
-`,
-`      if (
+replaceRequired(
+`  await mostrarProjetoCompleto();
+
+  await identificarMembroSocial();
+
+}`,
+`  await mostrarProjetoCompleto();
+
+  if (identificarSocial) {
+    await identificarMembroSocial();
+  }
+
+}`,
+"Identificação somente após renderização quando solicitado"
+);
+
+const mobileBoot = `function iniciarMobileDepoisDeRender() {
+  iniciarPagina({
+    identificarSocial: false
+  })
+    .then(() => {
+      if (
         !paginaLoginSocialAtiva() ||
         identificado ||
-        popupAberto
+        popupAberto ||
+        !projeto
       ) {
         return;
       }
-`,
-"Guarda interna do timer social"
+
+      setTimeout(() => {
+        if (
+          !paginaLoginSocialAtiva() ||
+          identificado ||
+          popupAberto ||
+          !projeto
+        ) {
+          return;
+        }
+
+        abrirPopupWhatsapp()
+          .catch(console.error);
+      }, MOBILE_LOGIN_AFTER_RENDER_DELAY);
+    })
+    .catch(
+      (error) => {
+        console.error(
+          "Erro ao preparar checkout mobile:",
+          error?.message || error,
+          error
+        );
+      }
+    );
+}
+
+
+`;
+
+insertBefore(
+`// ======================================================
+// ON READY
+// ======================================================`,
+mobileBoot,
+"Boot mobile depois da renderização"
 );
 
-replaceOnce(
-`async function abrirPopupWhatsapp() {
-  if (
-    popupAberto ||
-    !projeto
-  ) {`,
-`async function abrirPopupWhatsapp() {
-  if (
-    !paginaLoginSocialAtiva() ||
-    popupAberto ||
-    !projeto
-  ) {`,
-"Guarda ao abrir login"
-);
-
-replaceOnce(
-`async function iniciarPagina() {
-  /*`,
-`async function iniciarPagina() {
-  if (!paginaLoginSocialAtiva()) {
-    cancelarPopupAgendado();
-    return;
-  }
-
-  /*`,
-"Guarda no início da página"
-);
-
-replaceOnce(
-`async function solicitarLoginSocial() {
-  try {`,
-`async function solicitarLoginSocial() {
-  if (!paginaLoginSocialAtiva()) {
-    cancelarPopupAgendado();
-    return;
-  }
-
-  try {`,
-"Guarda antes do promptLogin"
-);
-
-replaceOnce(
-`  let membro = null;
-  try {
-    membro = await currentMember.getMember();`,
-`  if (!paginaLoginSocialAtiva()) {
-    cancelarPopupAgendado();
-    return;
-  }
-
-  let membro = null;
-  try {
-    membro = await currentMember.getMember();`,
-"Guarda após fechamento do modal"
-);
-
-replaceOnce(
-`function iniciarComLoginSocial() {
-  currentMember`,
-`function iniciarComLoginSocial() {
-  if (!paginaLoginSocialAtiva()) {
-    cancelarPopupAgendado();
-    return;
-  }
-
-  currentMember`,
-"Guarda do boot social"
-);
-
-replaceOnce(
-`$w.onReady(
-  function () {
-    if (
+replaceRequired(
+`    if (
       aplicarBloqueioManutencao()
     ) {
       return;
     }
 
-    iniciarComLoginSocial();
-  }
-);`,
-`$w.onReady(
-  function () {
-    if (!paginaLoginSocialAtiva()) {
-      cancelarPopupAgendado();
-      return;
-    }
-
-    if (
+    iniciarComLoginSocial();`,
+`    if (
       aplicarBloqueioManutencao()
     ) {
       return;
     }
 
-    iniciarComLoginSocial();
-  }
-);`,
-"Guarda final do onReady"
+    if (
+      wixWindowFrontend.formFactor ===
+      "Mobile"
+    ) {
+      iniciarMobileDepoisDeRender();
+      return;
+    }
+
+    iniciarComLoginSocial();`,
+"Separação mobile/desktop no onReady"
 );
+
+if (!code.includes("function paginaLoginSocialAtiva()")) {
+  throw new Error("Proteção de rota do login social ausente.");
+}
+
+if (!code.includes('wixWindowFrontend.formFactor ===\n      "Mobile"')) {
+  throw new Error("Regra específica do mobile não foi aplicada.");
+}
 
 if (changed) {
   fs.writeFileSync(FILE, code, "utf8");
-  console.log("Login social limitado exclusivamente a /checkoutprojetosprontos.");
+  console.log("Login social mobile agora abre somente depois de /checkoutprojetosprontos renderizar. Desktop preservado.");
 } else {
-  console.log("Login social já está limitado ao slug correto.");
+  console.log("Regra mobile de login social já está aplicada.");
 }

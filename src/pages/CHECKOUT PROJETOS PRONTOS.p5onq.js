@@ -74,7 +74,7 @@ const SLUG_LOGIN_SOCIAL =
   "checkoutprojetosprontos";
 
 const MOBILE_LOGIN_AFTER_RENDER_DELAY =
-  350;
+  5000;
 
 const IDS = {
   titulo:

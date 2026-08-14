@@ -1,0 +1,146 @@
+name: Unificar entrega com central apos nova compra
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/unificar-entrega-com-central-apos-compra-2026-08-14.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Mostrar todos os projetos da conta apos nova compra
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js")
+          text = path.read_text(encoding="utf-8")
+
+          old = '''async function renderizarEntrega(dados) {
+  entrega = dados;
+  checkoutEmAndamento = false;
+  indiceGraficoDownload = 0;
+
+  const projeto = dados?.project || {};
+
+  salvarAcessosLocais(
+    projeto?.codigoProjeto,
+    dados?.access || {}
+  );
+
+  await mostrarDadosRepeater([
+    itemRepeaterProjeto(dados, 0)
+  ]);
+}'''
+
+          new = '''async function renderizarEntrega(dados) {
+  entrega = dados;
+  checkoutEmAndamento = false;
+  indiceGraficoDownload = 0;
+
+  const projeto = dados?.project || {};
+
+  salvarAcessosLocais(
+    projeto?.codigoProjeto,
+    dados?.access || {}
+  );
+
+  /*
+    Quando a página é aberta pelo checkout/e-mail, o checkout_id identifica
+    apenas a compra recém-aberta. Isso não deve transformar a central do
+    cliente em uma tela de um único projeto.
+
+    A compra atual entra sempre primeiro, porque ela já foi validada e pode
+    ainda não ter aparecido na listagem agregada. Em seguida carregamos os
+    demais projetos da conta e eliminamos duplicidades pelo código do projeto.
+    Se a central estiver momentaneamente indisponível, a compra atual continua
+    sendo entregue normalmente, sem bloquear o pós-pagamento.
+  */
+  const projetosParaExibir = [dados];
+  const codigoAtual = digits(projeto?.codigoProjeto);
+
+  try {
+    const resultadoCentral = await listarProjetosProntosDoMembroAtual();
+
+    if (resultadoCentral?.ok && Array.isArray(resultadoCentral.items)) {
+      const outrosResumos = resultadoCentral.items.filter((item) => {
+        const codigo = digits(item?.codigoProjeto);
+        return codigo && codigo !== codigoAtual;
+      });
+
+      if (outrosResumos.length) {
+        const outrosDetalhes = await carregarDetalhesDaCentral(outrosResumos);
+        projetosParaExibir.push(...outrosDetalhes);
+      }
+    }
+  } catch (erro) {
+    console.warn(
+      "Falha ao agregar os demais projetos após a nova compra:",
+      erro?.message || erro
+    );
+  }
+
+  const vistos = new Set();
+  const unicos = projetosParaExibir.filter((item) => {
+    const codigo = digits(item?.project?.codigoProjeto);
+    const chave = codigo || safe(item?.project?._id);
+    if (!chave || vistos.has(chave)) {
+      return false;
+    }
+    vistos.add(chave);
+    return true;
+  });
+
+  await mostrarDadosRepeater(
+    unicos.map((item, indice) => itemRepeaterProjeto(item, indice))
+  );
+}'''
+
+          if text.count(old) != 1:
+              raise SystemExit(f"renderizarEntrega esperado 1x; encontrado {text.count(old)}x")
+
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          print("OK: compra atual + demais projetos da conta serão exibidos no mesmo repeater.")
+          print("OK: compra atual fica como fallback caso a central falhe ou ainda esteja sincronizando.")
+          PY
+
+      - name: Validar pagina alterada
+        run: npx eslint "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+
+      - name: Conferir alteracao
+        run: |
+          git diff --check
+          git diff -- "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+
+      - name: Gravar no main
+        run: |
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if ! git diff --cached --quiet; then
+            git commit -m "Exibir todos os projetos apos nova compra"
+            git push origin HEAD:main
+          fi

@@ -10,8 +10,7 @@ import {
 
 const IDS = {
   titulo: "#textomaior",
-  texto: "#textomenor",
-  secaoBanners: "#SESSAO2BANEERDOBOTAO"
+  texto: "#textomenor"
 };
 
 const PAGINA_PROJETOS = "/entregaprojetosprontos";
@@ -32,14 +31,6 @@ function firstValue(...values) {
 function definirMensagem(titulo, texto) {
   try { $w(IDS.titulo).text = safe(titulo); } catch (_) {}
   try { $w(IDS.texto).text = safe(texto); } catch (_) {}
-}
-
-async function esconderBanners() {
-  try {
-    const secao = $w(IDS.secaoBanners);
-    if (typeof secao.hide === "function") await secao.hide();
-    if (typeof secao.collapse === "function") await secao.collapse();
-  } catch (_) {}
 }
 
 function parametros() {
@@ -153,7 +144,11 @@ async function resolverPagina() {
 }
 
 $w.onReady(function () {
-  esconderBanners().catch(() => {});
+  /*
+    Esta página é apenas de aviso/triagem. As três seções desenhadas no Editor
+    permanecem visíveis: texto, banners dos três botões e aviso importante.
+    Nenhuma impressora ou seção da página de entrega é controlada aqui.
+  */
 
   try {
     authentication.onLogin(() => {

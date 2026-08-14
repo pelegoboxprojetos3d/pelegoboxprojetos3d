@@ -38,6 +38,23 @@ function patchNotify() {
     "  const tituloEmailCorreto = await tituloProjetoParaEmail(session);"
   );
 
+  // TITULO_EMAIL_ALIASES_CANONICOS_V1
+  const aliasesLegacy = [
+    "    produto: tituloEmailCorreto,",
+    "    tituloProjeto: tituloEmailCorreto,"
+  ].join("\n");
+  const aliasesCanonicos = [
+    "    produto: tituloEmailCorreto,",
+    "    titulo: tituloEmailCorreto,",
+    "    tituloProjeto: tituloEmailCorreto,",
+    "    tituloCheckout: tituloEmailCorreto,",
+    "    tituloOriginal: tituloEmailCorreto,",
+    "    nomeProduto: tituloEmailCorreto,"
+  ].join("\n");
+  if (!code.includes("    tituloOriginal: tituloEmailCorreto,") && code.includes(aliasesLegacy)) {
+    code = code.replaceAll(aliasesLegacy, aliasesCanonicos);
+  }
+
   fs.writeFileSync(NOTIFY, code, "utf8");
 }
 

@@ -468,14 +468,508 @@ function codigoPublico(item) {
 }
 
 function tituloProjeto(item) {
-  return decodeText(
-    item?.titulo_video
-  )
-    .split(
-      /\bPELEGO(?:\s*BOX)?\b/i
-    )[0]
+  const original =
+    decodeText(
+      item?.titulo_video
+    );
+
+  /*
+    O código 001–014 pode estar DEPOIS do sufixo PELEGO BOX.
+    Primeiro capturamos o código no título original e só depois removemos
+    a parte institucional. Assim o checkout nunca perde o questionário.
+  */
+  const codigoQuestionario =
+    original.match(
+      /\b(00[1-9]|01[0-4])\b\s*$/i
+    )?.[1] || "";
+
+  const base =
+    original
+      .split(
+        /\bPELEGO(?:\s*BOX)?\b/i
+      )[0]
+      .replace(/\s+/g, " ")
+      .trim();
+
+  if (
+    !codigoQuestionario ||
+    new RegExp(
+      `\\b${codigoQuestionario}\\b\\s*import wixLocation from "wix-location";
+import wixData from "wix-data";
+import wixWindowFrontend from "wix-window-frontend";
+import { authentication, currentMember } from "wix-members-frontend";
+
+import {
+  local,
+  session
+} from "wix-storage-frontend";
+
+import {
+  buscarCliente,
+  buscarClienteDoMembroAtual
+} from "backend/clientes.web";
+
+import {
+  obterAcessosProjeto
+} from "backend/entregaProjetosProntos.jsw";
+
+// ======================================================
+// PÁGINA: CHECKOUT PROJETOS PRONTOS
+// SLUG: /checkoutprojetosprontos
+//
+// R9 — VALIDAPAY TRANSPARENTE
+//
+// - Preserva identificação no navegador.
+// - Não pede WhatsApp novamente ao voltar.
+// - Botão não permanece travado após fechar checkout.
+// - Todas as compras seguem para /checkout-projeto-pronto.
+// - Não cria Mercado Pago nem checkout hospedado.
+// - Mantém manutenção, etapas, valores e downloads.
+// ======================================================
+
+const COLLECTION =
+  "Videosprojetos";
+
+const POPUP_NAME =
+  "pedir whatsapp";
+
+const POPUP_REOPEN_DELAY =
+  3000;
+
+const SESSION_KEY =
+  "pp_identificacao_atual";
+
+const LOCAL_KEY =
+  "pp_identificacao_persistente";
+
+const FIRST_WHATSAPP_SESSION_KEY =
+  "pp_whatsapp_primeiro_estagio";
+
+const FIRST_WHATSAPP_LOCAL_KEY =
+  "pp_whatsapp_primeiro_estagio_persistente";
+
+const CONFIRMACAO_FLUXO_VERSAO =
+  4;
+
+const CHECKOUT_AUTH_KEY =
+  "pp_checkout_autorizado";
+
+const ACTIVE_PIX_SESSION_KEY =
+  "pp_checkout_pix_ativo";
+
+const MANUTENCAO_ATIVA =
+  false;
+
+const CHAVE_MANUTENCAO =
+  "pele2026";
+
+const PAGINA_MANUTENCAO =
+  "/projetos-prontos-manutencao";
+
+const SLUG_LOGIN_SOCIAL =
+  "checkoutprojetosprontos";
+
+const MOBILE_LOGIN_AFTER_RENDER_DELAY =
+  5000;
+
+const IDS = {
+  titulo:
+    "#txtTitulo",
+
+  imagem:
+    "#imageProjeto",
+
+  medidas:
+    "#button1",
+
+  valorMedidas:
+    "#txtValor1",
+
+  graficos:
+    "#button2",
+
+  valorGraficos:
+    "#txtValor2",
+
+  projeto:
+    "#button3",
+
+  valorProjeto:
+    "#txtValor3",
+
+  avisoMedidas:
+    "#box1",
+
+  avisoGraficos:
+    "#box2",
+
+  avisoProjeto:
+    "#box3",
+
+  setaAnterior:
+    "#setaProjetoAnterior",
+
+  setaProximo:
+    "#setaProjetoProximo"
+};
+
+let projeto =
+  null;
+
+let clienteAtual =
+  null;
+
+let identificado =
+  false;
+
+let consultaConcluida =
+  false;
+
+let popupAberto =
+  false;
+
+let popupAgendado =
+  null;
+
+let bloqueioCliqueAte =
+  0;
+
+let eventosLigados =
+  false;
+
+let projetoAnteriorCache =
+  null;
+
+let projetoProximoCache =
+  null;
+
+let navegacaoProjetoEmAndamento =
+  false;
+
+let vizinhosToken =
+  0;
+
+let identificacao = {
+  whatsapp: "",
+  whatsappE164: "",
+  ddi: "55",
+  country: "br",
+  countryName: "Brasil",
+  clienteId: "",
+  nome: "",
+  email: "",
+  cpfCnpj: "",
+  whatsappConfirmado: false,
+  confirmacaoWhatsappVersao: 0,
+  confirmadoEm: ""
+};
+
+let acessos = {
+  medidas: false,
+  graficos: false,
+  projeto: false
+};
+
+let downloads = {
+  medidas: "",
+  graficos: "",
+  projeto: ""
+};
+
+
+// ======================================================
+// HELPERS
+// ======================================================
+
+function safe(value) {
+  return String(
+    value ?? ""
+  ).trim();
+}
+
+function paginaLoginSocialAtiva() {
+  return (
+    safe(
+      wixLocation.path?.[0]
+    ).toLowerCase() ===
+    SLUG_LOGIN_SOCIAL
+  );
+}
+
+function firstValue(
+  ...values
+) {
+  for (
+    const value of
+    values
+  ) {
+    const normalized =
+      safe(value);
+
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
+
+function onlyDigits(value) {
+  return safe(value)
+    .replace(/\D/g, "");
+}
+
+function normalizeEmail(value) {
+  return safe(value)
+    .toLowerCase();
+}
+
+function decodeText(value) {
+  return safe(value)
+    .replace(/&amp;quot;/gi, '"')
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function mediaUrl(value) {
+  if (!value) {
+    return "";
+  }
+
+  if (
+    typeof value ===
+    "string"
+  ) {
+    return value.trim();
+  }
+
+  if (
+    typeof value ===
+    "object"
+  ) {
+    return firstValue(
+      value.src,
+      value.url,
+      value.fileUrl,
+      value.mediaUrl
+    );
+  }
+
+  return "";
+}
+
+function numberValue(
+  ...values
+) {
+  for (
+    const value of
+    values
+  ) {
+    if (
+      value === undefined ||
+      value === null ||
+      safe(value) === ""
+    ) {
+      continue;
+    }
+
+    if (
+      typeof value === "number" &&
+      Number.isFinite(value)
+    ) {
+      return value;
+    }
+
+    let text =
+      safe(value)
+        .replace(
+          /[^\d,.-]/g,
+          ""
+        );
+
+    if (
+      text.includes(",") &&
+      text.includes(".")
+    ) {
+      text =
+        text
+          .replace(/\./g, "")
+          .replace(",", ".");
+
+    } else if (
+      text.includes(",")
+    ) {
+      text =
+        text.replace(",", ".");
+    }
+
+    const number =
+      Number(text);
+
+    if (
+      Number.isFinite(number)
+    ) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
+function formatMoney(value) {
+  const number =
+    numberValue(value);
+
+  if (!(number > 0)) {
+    return "R$ 0,00";
+  }
+
+  return number.toLocaleString(
+    "pt-BR",
+    {
+      style:
+        "currency",
+
+      currency:
+        "BRL"
+    }
+  );
+}
+
+function comTimeout(
+  promise,
+  milliseconds,
+  message
+) {
+  return Promise.race([
+    promise,
+
+    new Promise(
+      (
+        _,
+        reject
+      ) => {
+        setTimeout(
+          () => {
+            reject(
+              new Error(
+                message ||
+                "Tempo limite excedido."
+              )
+            );
+          },
+          milliseconds
+        );
+      }
+    )
+  ]);
+}
+
+function cliqueBloqueado() {
+  return (
+    Date.now() <
+    bloqueioCliqueAte
+  );
+}
+
+function bloquearCliqueTemporariamente() {
+  /*
+    Não usamos mais um booleano permanente.
+
+    O código antigo deixava redirecionando=true
+    e, quando o Wix restaurava a página, o botão
+    podia continuar morto.
+
+    Agora o bloqueio dura somente 1,5 segundo.
+  */
+
+  bloqueioCliqueAte =
+    Date.now() + 1500;
+}
+
+
+// ======================================================
+// MANUTENÇÃO
+// ======================================================
+
+function acessoManutencaoLiberado() {
+  if (!MANUTENCAO_ATIVA) {
+    return true;
+  }
+
+  if (
+    wixWindowFrontend.viewMode ===
+      "Preview" ||
+    wixWindowFrontend.viewMode ===
+      "Editor"
+  ) {
+    return true;
+  }
+
+  return (
+    safe(
+      wixLocation.query.acesso
+    ) ===
+    CHAVE_MANUTENCAO
+  );
+}
+
+function aplicarBloqueioManutencao() {
+  if (
+    acessoManutencaoLiberado()
+  ) {
+    return false;
+  }
+
+  cancelarPopupAgendado();
+
+  wixLocation.to(
+    PAGINA_MANUTENCAO
+  );
+
+  return true;
+}
+
+
+// ======================================================
+// DADOS DO PROJETO
+// ======================================================
+
+function codigoPublico(item) {
+  const direto =
+    onlyDigits(
+      item?.ordem_video ||
+      item?.ordemVideo ||
+      item?.codigoProjeto
+    );
+
+  if (direto) {
+    return direto;
+  }
+
+  const match =
+    decodeText(
+      item?.titulo_video
+    ).match(
+      /^\s*#?\s*(\d+)/
+    );
+
+  return (
+    match?.[1] ||
+    ""
+  );
+}
+
+
+    ).test(base)
+  ) {
+    return base;
+  }
+
+  return `${base} ${codigoQuestionario}`.trim();
 }
 
 function tituloSemCodigo(value) {
@@ -554,9 +1048,7 @@ function tituloEtapa(
     "GRAFICOS"
   ) {
     return (
-      `#${codigo} ` +
-      "ANÁLISES GRÁFICAS DO PROJETO PRONTO PARA " +
-      base
+      `#${codigo} Gráficos Projeto Pronto ${base}`
     );
   }
 
@@ -565,16 +1057,12 @@ function tituloEtapa(
     "PROJETO_COMPLETO"
   ) {
     return (
-      `#${codigo} ` +
-      "PROJETO COMPLETO PARA " +
-      base
+      `#${codigo} Projeto Pronto Completo ${base}`
     );
   }
 
   return (
-    `#${codigo} ` +
-    "MEDIDAS DO PROJETO PRONTO PARA " +
-    base
+    `#${codigo} Medidas Projeto Pronto ${base}`
   );
 }
 

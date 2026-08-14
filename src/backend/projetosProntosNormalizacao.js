@@ -44,7 +44,7 @@ const PALAVRAS_MENORES = new Set([
 ]);
 
 const SIGLAS = new Set([
-  "dsp", "eros", "jbl", "kc", "mdf", "pdf", "pix", "rms", "sds"
+  "dsp", "eros", "jbl", "kc", "mdf", "mg", "pdf", "pix", "rms", "sds"
 ]);
 
 function decodificarTitulo(value) {

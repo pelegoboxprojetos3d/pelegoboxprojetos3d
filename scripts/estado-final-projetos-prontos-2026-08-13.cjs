@@ -17,45 +17,13 @@ function replaceOnce(code, from, to, label) {
 }
 
 function patchEmailTitle() {
-  let code = fs.readFileSync(NOTIFY, "utf8");
-
-  code = code.replace('import { normalizarTituloProduto } from "backend/projetosProntosNormalizacao";\n', "");
-  code = code.replace('const PROJECTS = "Videosprojetos";\n', "");
-
-  const asyncSignature = "async function tituloProjetoParaEmail(session) {";
-  const syncSignature = "function tituloProjetoParaEmail(session) {";
-
-  if (code.includes(asyncSignature)) {
-    const start = code.indexOf(asyncSignature);
-    const end = code.indexOf("async function reservarEnvioEmail(checkoutId)", start);
-
-    if (end < 0) {
-      console.log("E-mail Pelego: helper atual não usa mais o formato legado; mantendo versão atual.");
-      return;
-    }
-
-    const helper = `function tituloProjetoParaEmail(session) {\n  /*\n    REGRA FINAL: o e-mail usa exatamente o mesmo título comercial já salvo\n    na sessão do checkout. Não consulta Videosprojetos e não reconstrói a frase.\n  */\n  return safe(session?.tituloCheckout) || safe(session?.produto) || "Projeto Pronto";\n}\n\n`;
-
-    code = code.slice(0, start) + helper + code.slice(end);
-  } else if (!code.includes(syncSignature)) {
-    console.log("E-mail Pelego: helper tituloProjetoParaEmail não localizado; mantendo versão atual sem interromper publicação.");
-    return;
-  }
-
-  code = code.replace(
-    "  const tituloEmailCorreto = await tituloProjetoParaEmail(session);",
-    "  const tituloEmailCorreto = tituloProjetoParaEmail(session);"
-  );
-
-  code = code.replace(
-    '// sobrescreve esse campo com o título canônico vindo de Videosprojetos.',
-    '// sobrescreve esse campo com o título exato já usado no checkout.'
-  );
-
-  fs.writeFileSync(NOTIFY, code, "utf8");
-  console.log("E-mail Pelego: helper de título confirmado no estado atual.");
+  /*
+    O título agora tem uma única regra canônica no backend.
+    Este script antigamente removia essa regra e outro script a recolocava
+    alguns milissegundos depois. A dança foi aposentada.
+  */
+  console.log("E-mail Pelego: regra canônica de título preservada.");
 }
-
 function patchInvoiceFunction(file, sleepCall) {
   let code = fs.readFileSync(file, "utf8");
   const start = code.indexOf("async function reenviarNotificacaoValidaPay(chargeId) {");

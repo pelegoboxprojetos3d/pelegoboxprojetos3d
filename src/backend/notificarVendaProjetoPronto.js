@@ -275,7 +275,11 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     phone: phone(session.whatsapp || session.whatsappE164 || session.whatsApp),
     cpfCnpj: digits(session.cpfCnpj),
     produto: tituloEmailCorreto,
+    titulo: tituloEmailCorreto,
     tituloProjeto: tituloEmailCorreto,
+    tituloCheckout: tituloEmailCorreto,
+    tituloOriginal: tituloEmailCorreto,
+    nomeProduto: tituloEmailCorreto,
     tipoProduto: type(session.tipoProduto),
     codigoProjeto: digits(session.codigoProjeto),
     img: safe(session.img),
@@ -299,7 +303,11 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     // Para não mexer no checkout nem na ValidaPay, somente o payload do e-mail
     // sobrescreve esse campo com o título exato já usado no checkout.
     produto: tituloEmailCorreto,
+    titulo: tituloEmailCorreto,
     tituloProjeto: tituloEmailCorreto,
+    tituloCheckout: tituloEmailCorreto,
+    tituloOriginal: tituloEmailCorreto,
+    nomeProduto: tituloEmailCorreto,
     tituloEmail: tituloEmailCorreto,
     botaoUrl: payload.botaoUrl + "&via=email",
     deliveryUrl: payload.deliveryUrl + "&via=email"

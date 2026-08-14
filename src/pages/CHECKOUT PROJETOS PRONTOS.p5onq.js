@@ -38,7 +38,7 @@ const POPUP_NAME =
   "pedir whatsapp";
 
 const POPUP_REOPEN_DELAY =
-  3000;
+  7000;
 
 const SESSION_KEY =
   "pp_identificacao_atual";
@@ -3307,71 +3307,58 @@ async function solicitarLoginSocial() {
   agendarRetornoLoginSocial();
 }
 
-function iniciarComLoginSocial() {
-  if (!paginaLoginSocialAtiva()) {
-    cancelarPopupAgendado();
-    return;
-  }
-
-  currentMember
-    .getMember()
-    .then(
-      (membro) => {
-        if (membro?._id) {
-          iniciarPaginaComTratamento();
-          return;
-        }
-
-        solicitarLoginSocial();
-      }
-    )
-    .catch(
-      () => {
-        solicitarLoginSocial();
-      }
-    );
-}
-
-
-function iniciarMobileDepoisDeRender() {
+function iniciarDepoisDeRender() {
   iniciarPagina({
     identificarSocial: false
   })
-    .then(() => {
+    .then(async () => {
       if (
         !paginaLoginSocialAtiva() ||
-        identificado ||
-        popupAberto ||
         !projeto
       ) {
+        cancelarPopupAgendado();
         return;
       }
 
-      setTimeout(() => {
-        if (
-          !paginaLoginSocialAtiva() ||
-          identificado ||
-          popupAberto ||
-          !projeto
-        ) {
-          return;
-        }
+      /*
+        REGRA DA PÁGINA PROTEGIDA:
+        - primeiro renderiza título, thumbnail, setas e os três botões;
+        - enquanto estiver deslogado, os valores ficam escondidos;
+        - os três botões permanecem bloqueados;
+        - só depois do conteúdo estar pronto verificamos o membro;
+        - se estiver deslogado, o login abre após 5 segundos;
+        - se fechar o login, ele volta após POPUP_REOPEN_DELAY;
+        - a regra vale igualmente para desktop e mobile.
+      */
+      let membro = null;
 
-        abrirPopupWhatsapp()
-          .catch(console.error);
-      }, MOBILE_LOGIN_AFTER_RENDER_DELAY);
+      try {
+        membro = await currentMember.getMember();
+      } catch (_) {}
+
+      if (membro?._id) {
+        cancelarPopupAgendado();
+        await identificarMembroSocial();
+        return;
+      }
+
+      identificado = false;
+      bloquearSemIdentificacao();
+
+      agendarRetornoLoginSocial(
+        MOBILE_LOGIN_AFTER_RENDER_DELAY
+      );
     })
     .catch(
       (error) => {
         console.error(
-          "Erro ao preparar checkout mobile:",
+          "Erro ao preparar checkout protegido:",
           error?.message || error,
           error
         );
       }
     );
 }
-
 
 // ======================================================
 // ON READY
@@ -3406,14 +3393,6 @@ $w.onReady(
       return;
     }
 
-    if (
-      wixWindowFrontend.formFactor ===
-      "Mobile"
-    ) {
-      iniciarMobileDepoisDeRender();
-      return;
-    }
-
-    iniciarComLoginSocial();
+    iniciarDepoisDeRender();
   }
 );

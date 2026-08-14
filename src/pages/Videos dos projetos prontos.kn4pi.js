@@ -132,10 +132,6 @@ function checkoutDisplayTitle(value, itemData = {}) {
   return decoded
     .split(/\s+/)
     .map((token, index) => {
-      /*
-        Códigos, potências, medidas e modelos ficam intactos:
-        #1818, 1X, 15SWV3.8, 1900W, 3D, 003 etc.
-      */
       if (/\d/.test(token)) {
         return token;
       }
@@ -236,15 +232,6 @@ function buildZeroCheckoutUrl({
   title,
   code
 }) {
-  /*
-    Fluxo exclusivo do botão COMPRAR PROJETO FEITO DO ZERO.
-
-    - título: titulo_video completo, incluindo código do questionário;
-    - imagem: thumbnail da coleção;
-    - preço: soma das três etapas;
-    - SKU: não é enviado;
-    - codigo_checkout: não é usado.
-  */
   const checkoutTitle = checkoutDisplayTitle(
     itemData?.titulo_video || title,
     itemData
@@ -302,15 +289,6 @@ function buildZeroCheckoutUrl({
 function buildReadyCheckoutUrl(
   itemData
 ) {
-  /*
-    Para comprar o projeto pronto, usamos
-    o código público do projeto.
-
-    Exemplo:
-    projeto 1816
-    -> /checkoutprojetosprontos?codigo=1816
-  */
-
   const code =
     projectCode(itemData);
 
@@ -379,10 +357,6 @@ function configureRepeater() {
       $item("#text103").text =
         title;
 
-      // ========================================
-      // BOTÃO AZUL — VÍDEO
-      // ========================================
-
       $item("#checkVideo").checked =
         false;
 
@@ -404,7 +378,7 @@ function configureRepeater() {
 
         $item("#btnProjetos").onClick(
           () => {
-            $item("#checkVideo").show();
+            $item("#checkVideo").show("fade");
 
             $item("#checkVideo").checked =
               true;
@@ -413,16 +387,6 @@ function configureRepeater() {
       } else {
         $item("#btnProjetos").disable();
       }
-
-      // ========================================
-      // BOTÃO VERDE — PROJETO FEITO DO ZERO
-      // ID: #btnOrcamento
-      //
-      // título = titulo_video completo da coleção
-      // imagem = thumbnail
-      // preço = soma dos valores configurados
-      // sem SKU / sem codigo_checkout
-      // ========================================
 
       const zeroCheckoutUrl =
         buildZeroCheckoutUrl({
@@ -445,11 +409,6 @@ function configureRepeater() {
         $item("#btnOrcamento").disable();
         $item("#btnOrcamento").link = "";
       }
-
-      // ========================================
-      // BOTÃO ROXO — PROJETO PRONTO
-      // ID: #buttonCOMPRAR
-      // ========================================
 
       const readyCheckoutUrl =
         buildReadyCheckoutUrl(

@@ -1,0 +1,49 @@
+name: Suavizar microinteracoes checkout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/suavizar-microinteracoes-checkout-20260814.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  suavizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --ignore-scripts
+
+      - name: Aplicar microinteracoes suaves
+        run: node scripts/suavizar-microinteracoes-checkout-20260814.cjs
+
+      - name: Validar
+        run: npm run lint
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add "src/public/custom-elements/pelego-checkout-pronto.js"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Suavizar microinteracoes visuais do checkout"
+          git pull --rebase origin main
+          git push origin HEAD:main

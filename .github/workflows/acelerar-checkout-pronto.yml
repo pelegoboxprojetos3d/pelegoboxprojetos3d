@@ -1,0 +1,68 @@
+name: Acelerar checkout projeto pronto
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/acelerar-bootstrap-checkout-pronto-2026-08-14.cjs"
+      - ".github/workflows/acelerar-checkout-pronto.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wix-hotfix-checkout-rapido
+  cancel-in-progress: true
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Aplicar bootstrap rápido
+        run: node scripts/acelerar-bootstrap-checkout-pronto-2026-08-14.cjs
+
+      - name: Validar arquivo do checkout
+        run: node --check src/public/custom-elements/pelego-checkout-pronto.js
+
+      - name: Gravar alteração
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Sem alteração pendente."
+            exit 0
+          fi
+          git config user.name 'PELEGO BOX Automacao'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/public/custom-elements/pelego-checkout-pronto.js
+          git commit -m 'Acelerar abertura do checkout projeto pronto'
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/wix.json --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          cat /tmp/wix.json || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

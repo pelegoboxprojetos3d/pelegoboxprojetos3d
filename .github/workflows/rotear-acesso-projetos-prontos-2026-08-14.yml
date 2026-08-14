@@ -1,5 +1,6 @@
 name: Rotear acesso aos Projetos Prontos
 
+# Aplicação única do novo gateway de avisos.
 on:
   push:
     branches:

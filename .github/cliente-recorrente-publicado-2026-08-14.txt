@@ -1,0 +1,1 @@
+Correção do cliente recorrente: reutilizar dados já registrados na compra anterior para o mesmo membro Wix autenticado.

@@ -747,9 +747,19 @@ function validEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email(v))}
 function stageDisplayTitle(value,type,projectCode){
  var original=decodeEntities(value);
  if(!original)return "Projeto Pronto";
+
+ /*
+   O 001–014 já pertence ao título da coleção. Capturamos o único código
+   final da fonte, limpamos qualquer repetição herdada e só então montamos
+   o título visual da etapa. Assim 002 002 nunca volta a aparecer.
+ */
  var qm=original.match(/\b(00[1-9]|01[0-4])\b\s*$/i);
  var q=qm?qm[1]:"";
- var cut=original.replace(/\s*\bPELEGO\s+BOX\b[\s\S]*$/i,"").replace(/\s+/g," ").trim();
+ var cut=original
+   .replace(/\s*\bPELEGO\s+BOX\b[\s\S]*$/i,"")
+   .replace(/(?:\s+(?:00[1-9]|01[0-4]))+\s*$/i,"")
+   .replace(/\s+/g," ")
+   .trim();
  cut=prettyTitle(cut);
  var found=cut.match(/^\s*#?\s*(\d+)\s+(.*)$/);
  var code=found?found[1]:digits(projectCode);

@@ -125,14 +125,18 @@ export function normalizarTituloProduto(value) {
     extrairCodigoQuestionarioTitulo(original);
 
   /*
-    PELEGO BOX marca o começo do sufixo que não pertence
-    ao nome comercial do projeto. O código 001–014 é lido
-    antes do corte e recolocado no final.
+    A planilha/coleção é a fonte do 001–014. Não acrescentamos um segundo
+    código em cima do que já veio da fonte. Limpamos qualquer repetição final,
+    removemos o sufixo institucional e recolocamos exatamente um código.
   */
   const antesDaMarca =
     original
       .replace(
         /\s*\bPELEGO\s+BOX\b[\s\S]*$/i,
+        ""
+      )
+      .replace(
+        /(?:\s+(?:00[1-9]|01[0-4]))+\s*$/i,
         ""
       )
       .replace(/\s+/g, " ")
@@ -146,19 +150,14 @@ export function normalizarTituloProduto(value) {
       .join(" ")
       .trim();
 
-  if (!codigoQuestionario) {
-    return natural;
-  }
-
-  if (
-    new RegExp(
-      `\\b${codigoQuestionario}\\b\\s*$`
-    ).test(natural)
-  ) {
-    return natural;
-  }
-
-  return `${natural} ${codigoQuestionario}`.trim();
+  return [
+    natural,
+    codigoQuestionario
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizarTipoProduto(value) {

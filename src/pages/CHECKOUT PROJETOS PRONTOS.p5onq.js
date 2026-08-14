@@ -474,9 +474,10 @@ function tituloProjeto(item) {
     );
 
   /*
-    O código 001–014 pode estar DEPOIS do sufixo PELEGO BOX.
-    Primeiro capturamos o código no título original e só depois removemos
-    a parte institucional. Assim o checkout nunca perde o questionário.
+    A coleção já traz o código de questionário 001–014 no título.
+    Ele é tratado como dado da fonte, nunca como texto para ser somado.
+    Mesmo que um título antigo chegue com o código repetido, removemos todos
+    os códigos finais e recolocamos apenas o único código da fonte.
   */
   const codigoQuestionario =
     original.match(
@@ -488,19 +489,21 @@ function tituloProjeto(item) {
       .split(
         /\bPELEGO(?:\s*BOX)?\b/i
       )[0]
+      .replace(
+        /(?:\s+(?:00[1-9]|01[0-4]))+\s*$/i,
+        ""
+      )
       .replace(/\s+/g, " ")
       .trim();
 
-  if (
-    !codigoQuestionario ||
-    new RegExp(
-      `\\b${codigoQuestionario}\\b\\s*$`
-    ).test(base)
-  ) {
-    return base;
-  }
-
-  return `${base} ${codigoQuestionario}`.trim();
+  return [
+    base,
+    codigoQuestionario
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function tituloSemCodigo(value) {

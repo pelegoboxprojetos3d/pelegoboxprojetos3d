@@ -22,25 +22,36 @@ function insertBefore(marker, text, label) {
   REGRA DE LOGIN SOCIAL:
   - nunca abrir fora de /checkoutprojetosprontos;
   - desktop mantém o comportamento atual;
-  - no mobile, primeiro renderiza o checkout e só depois abre Google/Facebook.
+  - no mobile, primeiro renderiza o checkout e espera 5 segundos;
+  - só então abre Google/Facebook.
   Isso evita que o modal apareça visualmente sobre a página anterior durante
-  a transição do Wix.
+  a transição do Wix e dá tempo para o visitante entender onde chegou.
 */
 
 if (!code.includes('const SLUG_LOGIN_SOCIAL =\n  "checkoutprojetosprontos";')) {
   throw new Error("Slug exclusivo do login social não encontrado.");
 }
 
-replaceRequired(
+if (!code.includes("const MOBILE_LOGIN_AFTER_RENDER_DELAY =")) {
+  replaceRequired(
 `const SLUG_LOGIN_SOCIAL =
   "checkoutprojetosprontos";`,
 `const SLUG_LOGIN_SOCIAL =
   "checkoutprojetosprontos";
 
 const MOBILE_LOGIN_AFTER_RENDER_DELAY =
-  350;`,
+  5000;`,
 "Atraso de renderização do mobile"
-);
+  );
+} else {
+  replaceRequired(
+`const MOBILE_LOGIN_AFTER_RENDER_DELAY =
+  350;`,
+`const MOBILE_LOGIN_AFTER_RENDER_DELAY =
+  5000;`,
+"Timer do login mobile em 5 segundos"
+  );
+}
 
 replaceRequired(
 `async function iniciarPagina() {
@@ -152,9 +163,13 @@ if (!code.includes('wixWindowFrontend.formFactor ===\n      "Mobile"')) {
   throw new Error("Regra específica do mobile não foi aplicada.");
 }
 
+if (!code.includes("const MOBILE_LOGIN_AFTER_RENDER_DELAY =\n  5000;")) {
+  throw new Error("Timer de 5 segundos do login mobile não foi aplicado.");
+}
+
 if (changed) {
   fs.writeFileSync(FILE, code, "utf8");
-  console.log("Login social mobile agora abre somente depois de /checkoutprojetosprontos renderizar. Desktop preservado.");
+  console.log("Login social mobile: checkout renderiza e aguarda 5 segundos antes do popup. Desktop preservado.");
 } else {
-  console.log("Regra mobile de login social já está aplicada.");
+  console.log("Regra mobile de login social já está aplicada com 5 segundos.");
 }

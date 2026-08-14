@@ -70,7 +70,7 @@ jobs:
         run: node scripts/pente-fino-email-fatura-2026-08-13.cjs
 
       - name: Restaurar cartão salvo tokenizado
-        run: node scripts/restaurar-cartao-salvo-tokenizado-v3-2026-08-14.cjs
+        run: node scripts/restaurar-cartao-salvo-tokenizado-v4-2026-08-14.cjs
 
       - name: Validar código
         run: npm run lint
@@ -78,21 +78,23 @@ jobs:
       - name: Gravar ajuste no repositório
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo "Nenhuma alteração pendente para gravar."
+          paths=(
+            "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
+            "src/pages/checkout-projeto-pronto.i9aj1.js"
+            "src/public/custom-elements/pelego-checkout-pronto.js"
+            "src/backend/clientes.js"
+            "src/backend/clientes.web.js"
+            "src/backend/validaPayPixProjetosProntosCore.jsw"
+            "src/backend/validaPayCartaoProjetosProntos.jsw"
+            "src/backend/notificarVendaProjetoPronto.js"
+            "src/backend/http-functions.js"
+          )
+          if git diff --quiet -- "${paths[@]}"; then
+            echo "Nenhuma alteração de produção pendente para gravar."
           else
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
-            git add \
-              "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js" \
-              "src/pages/checkout-projeto-pronto.i9aj1.js" \
-              "src/public/custom-elements/pelego-checkout-pronto.js" \
-              "src/backend/clientes.js" \
-              "src/backend/clientes.web.js" \
-              "src/backend/validaPayPixProjetosProntosCore.jsw" \
-              "src/backend/validaPayCartaoProjetosProntos.jsw" \
-              "src/backend/notificarVendaProjetoPronto.js" \
-              "src/backend/http-functions.js"
+            git add -- "${paths[@]}"
             git commit -m "Automação: validar login, cadastro e pós-pagamento"
             git push origin HEAD:main
           fi

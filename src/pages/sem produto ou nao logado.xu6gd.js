@@ -72,6 +72,13 @@ function mostrarAvisoLogin() {
   );
 }
 
+function mostrarAvisoContaErrada() {
+  definirMensagem(
+    "ESTA COMPRA PERTENCE A OUTRA CONTA",
+    "Saia da conta atual e entre com o mesmo e-mail utilizado no pagamento para acessar este Projeto Pronto."
+  );
+}
+
 function mostrarAvisoSemProdutos() {
   definirMensagem(
     "VOCÊ AINDA NÃO TEM PROJETOS PRONTOS",
@@ -103,6 +110,11 @@ async function resolverPagina() {
 
     if (!member) {
       mostrarAvisoLogin();
+      return;
+    }
+
+    if (p.motivo === "conta_errada") {
+      mostrarAvisoContaErrada();
       return;
     }
 

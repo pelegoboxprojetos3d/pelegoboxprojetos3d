@@ -41,89 +41,20 @@ jobs:
           const fs = require('fs');
           const file = 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js';
           let s = fs.readFileSync(file, 'utf8');
-
+          const replacement = Buffer.from('ZnVuY3Rpb24gaW5pY2lhckRlcG9pc0RlUmVuZGVyKCkgewogIGluaWNpYXJQYWdpbmEoewogICAgaWRlbnRpZmljYXJTb2NpYWw6IGZhbHNlCiAgfSkKICAgIC50aGVuKGFzeW5jICgpID0+IHsKICAgICAgaWYgKAogICAgICAgICFwYWdpbmFMb2dpblNvY2lhbEF0aXZhKCkgfHwKICAgICAgICAhcHJvamV0bwogICAgICApIHsKICAgICAgICBjYW5jZWxhclBvcHVwQWdlbmRhZG8oKTsKICAgICAgICByZXR1cm47CiAgICAgIH0KCiAgICAgIC8qCiAgICAgICAgUkVHUkEgREEgUMOBR0lOQSBQUk9URUdJREE6CiAgICAgICAgLSBwcmltZWlybyByZW5kZXJpemEgdMOtdHVsbywgdGh1bWJuYWlsLCBzZXRhcyBlIG9zIHRyw6pzIGJvdMO1ZXM7CiAgICAgICAgLSBlbnF1YW50byBlc3RpdmVyIGRlc2xvZ2Fkbywgb3MgdmFsb3JlcyBmaWNhbSBlc2NvbmRpZG9zOwogICAgICAgIC0gb3MgdHLDqnMgYm90w7VlcyBwZXJtYW5lY2VtIGJsb3F1ZWFkb3M7CiAgICAgICAgLSBzw7MgZGVwb2lzIGRvIGNvbnRlw7pkbyBlc3RhciBwcm9udG8gdmVyaWZpY2Ftb3MgbyBtZW1icm87CiAgICAgICAgLSBzZSBlc3RpdmVyIGRlc2xvZ2FkbywgbyBsb2dpbiBhYnJlIGFww7NzIDUgc2VndW5kb3M7CiAgICAgICAgLSBzZSBmZWNoYXIgbyBsb2dpbiwgZWxlIHZvbHRhIGFww7NzIFBPUFVQX1JFT1BFTl9ERUxBWTsKICAgICAgICAtIGEgcmVncmEgdmFsZSBpZ3VhbG1lbnRlIHBhcmEgZGVza3RvcCBlIG1vYmlsZS4KICAgICAgKi8KICAgICAgbGV0IG1lbWJybyA9IG51bGw7CgogICAgICB0cnkgewogICAgICAgIG1lbWJybyA9IGF3YWl0IGN1cnJlbnRNZW1iZXIuZ2V0TWVtYmVyKCk7CiAgICAgIH0gY2F0Y2ggKF8pIHt9CgogICAgICBpZiAobWVtYnJvPy5faWQpIHsKICAgICAgICBjYW5jZWxhclBvcHVwQWdlbmRhZG8oKTsKICAgICAgICBhd2FpdCBpZGVudGlmaWNhck1lbWJyb1NvY2lhbCgpOwogICAgICAgIHJldHVybjsKICAgICAgfQoKICAgICAgaWRlbnRpZmljYWRvID0gZmFsc2U7CiAgICAgIGJsb3F1ZWFyU2VtSWRlbnRpZmljYWNhbygpOwoKICAgICAgYWdlbmRhclJldG9ybm9Mb2dpblNvY2lhbCgKICAgICAgICBNT0JJTEVfTE9HSU5fQUZURVJfUkVOREVSX0RFTEFZCiAgICAgICk7CiAgICB9KQogICAgLmNhdGNoKAogICAgICAoZXJyb3IpID0+IHsKICAgICAgICBjb25zb2xlLmVycm9yKAogICAgICAgICAgIkVycm8gYW8gcHJlcGFyYXIgY2hlY2tvdXQgcHJvdGVnaWRvOiIsCiAgICAgICAgICBlcnJvcj8ubWVzc2FnZSB8fCBlcnJvciwKICAgICAgICAgIGVycm9yCiAgICAgICAgKTsKICAgICAgfQogICAgKTsKfQ==', 'base64').toString('utf8');
           function replaceOnce(from, to, label) {
             if (!s.includes(from)) throw new Error(`${label}: trecho não encontrado`);
             s = s.replace(from, to);
           }
-
-          function replaceBetween(start, end, replacement, label) {
+          function replaceBetween(start, end, value, label) {
             const i = s.indexOf(start);
             const j = s.indexOf(end, i + start.length);
             if (i < 0 || j < 0) throw new Error(`${label}: trecho não encontrado`);
-            s = s.slice(0, i) + replacement + '\n\n' + s.slice(j);
+            s = s.slice(0, i) + value + '\n\n' + s.slice(j);
           }
-
-          replaceOnce(
-            'const POPUP_REOPEN_DELAY =\n  3000;',
-            'const POPUP_REOPEN_DELAY =\n  7000;',
-            'tempo de reabertura'
-          );
-
-          replaceBetween(
-            'function iniciarComLoginSocial() {',
-            '// ======================================================\n// ON READY',
-            `function iniciarDepoisDeRender() {
-  iniciarPagina({
-    identificarSocial: false
-  })
-    .then(async () => {
-      if (
-        !paginaLoginSocialAtiva() ||
-        !projeto
-      ) {
-        cancelarPopupAgendado();
-        return;
-      }
-
-      /*
-        REGRA DA PÁGINA PROTEGIDA:
-        - primeiro renderiza título, thumbnail, setas e os três botões;
-        - enquanto estiver deslogado, os valores ficam escondidos;
-        - os três botões permanecem bloqueados;
-        - só depois do conteúdo estar pronto verificamos o membro;
-        - se estiver deslogado, o login abre após 5 segundos;
-        - se fechar o login, ele volta após POPUP_REOPEN_DELAY;
-        - a regra vale igualmente para desktop e mobile.
-      */
-      let membro = null;
-
-      try {
-        membro = await currentMember.getMember();
-      } catch (_) {}
-
-      if (membro?._id) {
-        cancelarPopupAgendado();
-        await identificarMembroSocial();
-        return;
-      }
-
-      identificado = false;
-      bloquearSemIdentificacao();
-
-      agendarRetornoLoginSocial(
-        MOBILE_LOGIN_AFTER_RENDER_DELAY
-      );
-    })
-    .catch(
-      (error) => {
-        console.error(
-          "Erro ao preparar checkout protegido:",
-          error?.message || error,
-          error
-        );
-      }
-    );
-}`,
-            'fluxo de abertura protegido'
-          );
-
-          replaceOnce(
-            `    if (\n      wixWindowFrontend.formFactor ===\n      "Mobile"\n    ) {\n      iniciarMobileDepoisDeRender();\n      return;\n    }\n\n    iniciarComLoginSocial();`,
-            `    iniciarDepoisDeRender();`,
-            'onReady unificado'
-          );
-
+          replaceOnce('const POPUP_REOPEN_DELAY =\n  3000;', 'const POPUP_REOPEN_DELAY =\n  7000;', 'tempo de reabertura');
+          replaceBetween('function iniciarComLoginSocial() {', '// ======================================================\n// ON READY', replacement, 'fluxo de abertura protegido');
+          replaceOnce('    if (\n      wixWindowFrontend.formFactor ===\n      "Mobile"\n    ) {\n      iniciarMobileDepoisDeRender();\n      return;\n    }\n\n    iniciarComLoginSocial();', '    iniciarDepoisDeRender();', 'onReady unificado');
           fs.writeFileSync(file, s, 'utf8');
           console.log('Checkout protegido ajustado: conteúdo primeiro, login depois.');
           NODE

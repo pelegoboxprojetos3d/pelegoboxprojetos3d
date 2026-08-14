@@ -181,6 +181,9 @@ const MIN_PROCESSAMENTO_VISIVEL =
 const EMAIL_PROCESSAMENTO_MS =
   5000;
 
+const PAGINA_ACESSO_PROJETOS =
+  "/semprodutonaologao";
+
 
 
 
@@ -298,6 +301,41 @@ function firstValue(
   }
 
   return "";
+}
+
+function urlPaginaAcessoProjetos({
+  checkoutId = "",
+  token = "",
+  via = "",
+  motivo = ""
+} = {}) {
+  const partes = [];
+
+  if (safe(checkoutId)) {
+    partes.push(`checkout_id=${encodeURIComponent(safe(checkoutId))}`);
+  }
+
+  if (safe(token)) {
+    partes.push(`token=${encodeURIComponent(safe(token))}`);
+  }
+
+  if (safe(via)) {
+    partes.push(`via=${encodeURIComponent(safe(via))}`);
+  }
+
+  if (safe(motivo)) {
+    partes.push(`motivo=${encodeURIComponent(safe(motivo))}`);
+  }
+
+  return partes.length
+    ? `${PAGINA_ACESSO_PROJETOS}?${partes.join("&")}`
+    : PAGINA_ACESSO_PROJETOS;
+}
+
+function redirecionarPaginaAcessoProjetos(dados = {}) {
+  wixLocation.to(
+    urlPaginaAcessoProjetos(dados)
+  );
 }
 
 
@@ -2914,12 +2952,17 @@ async function carregarCentralSegundasVias() {
       projetos: Array.isArray(resultado?.items) ? resultado.items.map((item) => item.codigoProjeto) : []
     });
     if (!resultado?.ok) {
+      if (resultado?.error === "LOGIN_NECESSARIO") {
+        redirecionarPaginaAcessoProjetos({
+          motivo: "login"
+        });
+        return;
+      }
+
       await mostrarDadosRepeater([
         itemRepeaterMensagem(
           "SEUS PROJETOS PRONTOS",
-          resultado?.error === "LOGIN_NECESSARIO"
-            ? "Entre na sua conta para consultar seus Projetos Prontos."
-            : "Não foi possível consultar seus projetos agora."
+          "Não foi possível consultar seus projetos agora."
         )
       ]);
       return;
@@ -2930,12 +2973,9 @@ async function carregarCentralSegundasVias() {
       : [];
 
     if (!projetosSegundaVia.length) {
-      await mostrarDadosRepeater([
-        itemRepeaterMensagem(
-          "SEUS PROJETOS PRONTOS",
-          "Nenhum Projeto Pronto comprado foi encontrado nesta conta."
-        )
-      ]);
+      redirecionarPaginaAcessoProjetos({
+        motivo: "sem_produtos"
+      });
       return;
     }
 
@@ -3120,12 +3160,12 @@ async function carregarEntrega() {
           resultado?.error ===
           "LOGIN_NECESSARIO"
         ) {
-          await encerrarProcessamentoPendente(
-            "ACESSO PROTEGIDO",
-            "Entre na sua conta usando o mesmo e-mail informado na compra para acessar este produto."
-          );
-
-          solicitarLoginDaCompra();
+          redirecionarPaginaAcessoProjetos({
+            checkoutId,
+            token,
+            via: origemViaEmail ? "email" : "",
+            motivo: "login_compra"
+          });
           return;
         }
 
@@ -3133,11 +3173,12 @@ async function carregarEntrega() {
           resultado?.error ===
           "COMPRA_DE_OUTRA_CONTA"
         ) {
-          await encerrarProcessamentoPendente(
-            "ACESSO PROTEGIDO",
-            "Esta compra pertence a outra conta. Saia da conta atual e entre com o mesmo e-mail usado no pagamento."
-          );
-
+          redirecionarPaginaAcessoProjetos({
+            checkoutId,
+            token,
+            via: origemViaEmail ? "email" : "",
+            motivo: "conta_errada"
+          });
           return;
         }
 

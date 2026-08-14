@@ -292,8 +292,8 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
       : type(session.tipoProduto) === "PROJETO_COMPLETO"
         ? "BAIXAR PROJETO COMPLETO"
         : "BAIXAR MEDIDAS",
-    botaoUrl: SITE_BASE + "/entregaprojetosprontos?checkout_id=" + encodeURIComponent(safe(session.checkoutId)),
-    deliveryUrl: `${SITE_BASE}/entregaprojetosprontos?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`,
+    botaoUrl: SITE_BASE + "/semprodutonaologao?checkout_id=" + encodeURIComponent(safe(session.checkoutId)),
+    deliveryUrl: `${SITE_BASE}/semprodutonaologao?checkout_id=${encodeURIComponent(safe(session.checkoutId))}`,
     codigoCompra: safe(historico?.codigoCompra)
   };
 

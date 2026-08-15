@@ -445,6 +445,9 @@ async function prepararSecoesEntrega() {
 async function liberarSecoesPosRepeater() {
   const mobile = wixWindowFrontend.formFactor === "Mobile";
 
+  // A seção 1 entra primeiro. A seção 2 chega um instante depois, suavemente.
+  await esperar(280);
+
   try {
     const banners = $w(SECOES_ENTREGA.banners);
     if (typeof banners.expand === "function") await banners.expand();
@@ -3443,13 +3446,14 @@ function blindarPreflightEntrega() {
     if (typeof processando.collapse === "function") processando.collapse();
   } catch (_) {}
 
-  // PB_PREFLIGHT_MANTER_ALTURA_V5
-  // A seção principal fica invisível, mas mantém sua altura durante a decisão.
-  // Assim o rodapé não sobe para o topo enquanto consultamos a coleção.
+  // PB_SESSAO1_ANTES_SESSAO2_V6
+  // Mantém somente a seção 1 aberta durante a decisão.
+  // Repeater e impressora continuam escondidos até a regra confirmar o acesso.
+  // Assim o rodapé não sobe e a seção 2 não aparece antes da hora.
   try {
     const principal = $w(SECOES_ENTREGA.principal);
     if (typeof principal.expand === "function") principal.expand();
-    if (typeof principal.hide === "function") principal.hide();
+    if (typeof principal.show === "function") principal.show();
   } catch (_) {}
 
   // As seções inferiores continuam totalmente recolhidas.

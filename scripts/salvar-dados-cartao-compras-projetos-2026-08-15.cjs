@@ -1,13 +1,14 @@
 const fs = require("fs");
 
 const FILE = "src/backend/validaPayCartaoProjetosProntos.jsw";
+const NOTIFY = "src/backend/notificarVendaProjetoPronto.js";
 
-function read() {
-  return fs.readFileSync(FILE, "utf8");
+function read(file) {
+  return fs.readFileSync(file, "utf8");
 }
 
-function write(code) {
-  fs.writeFileSync(FILE, code, "utf8");
+function write(file, code) {
+  fs.writeFileSync(file, code, "utf8");
 }
 
 function replaceRequired(code, from, to, label) {
@@ -22,7 +23,7 @@ function replaceRequired(code, from, to, label) {
   return code.replace(from, to);
 }
 
-let code = read();
+let code = read(FILE);
 
 const helperAnchor = `async function triggerMake({ session, purchase, paymentId }) {`;
 const helperBlock = `function resumoCartaoCompra(session = {}) {
@@ -122,5 +123,36 @@ if (/card\.number.*ComprasProjetos|cvv.*ComprasProjetos/i.test(code)) {
   throw new Error("Proteção PCI: tentativa de persistir PAN/CVV detectada.");
 }
 
-write(code);
-console.log("OK: ComprasProjetos passa a receber método, bandeira, final, parcelas e valor da parcela. PAN completo e CVV continuam fora da coleção.");
+write(FILE, code);
+
+let notify = read(NOTIFY);
+const oldNotifyPayment = `    paymentMethod: safe(paymentMethod || session.paymentMethod).toUpperCase(),
+    status: "approved",`;
+const newNotifyPayment = `    paymentMethod: safe(paymentMethod || session.paymentMethod).toUpperCase(),
+    cardBrand: safe(session.pendingCardBrand),
+    cardLastFour: digits(session.pendingCardLastFour).slice(-4),
+    installments: Math.max(0, Number(session.pendingCardInstallments || 0)),
+    installmentAmount: Math.max(0, Number(session.pendingCardInstallments || 0)) > 0
+      ? Number((amount / Math.max(1, Number(session.pendingCardInstallments || 1))).toFixed(2))
+      : 0,
+    status: "approved",`;
+notify = replaceRequired(
+  notify,
+  oldNotifyPayment,
+  newNotifyPayment,
+  "Webhook de venda com resumo seguro do cartão"
+);
+
+for (const marker of [
+  'cardBrand: safe(session.pendingCardBrand)',
+  'cardLastFour: digits(session.pendingCardLastFour).slice(-4)',
+  'installments: Math.max(0, Number(session.pendingCardInstallments || 0))',
+  'installmentAmount:'
+]) {
+  if (!notify.includes(marker)) {
+    throw new Error(`Validação do webhook de venda falhou: ${marker}`);
+  }
+}
+
+write(NOTIFY, notify);
+console.log("OK: ComprasProjetos e os webhooks passam a receber o resumo seguro do cartão. PAN completo e CVV continuam fora da coleção e dos webhooks.");

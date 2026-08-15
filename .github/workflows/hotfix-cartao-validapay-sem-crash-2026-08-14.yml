@@ -1,0 +1,77 @@
+name: Hotfix cartão ValidaPay sem crash
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/hotfix-cartao-validapay-sem-crash-2026-08-14.yml
+      - scripts/hotfix-cartao-validapay-sem-crash-2026-08-14.cjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hotfix-cartao-validapay-sem-crash
+  cancel-in-progress: true
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Aplicar hotfix do cartão
+        run: node scripts/hotfix-cartao-validapay-sem-crash-2026-08-14.cjs
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Nenhuma alteração necessária."
+            exit 0
+          fi
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/validaPayCartaoProjetosProntos.jsw
+          git commit -m "Corrigir crash do cartão ValidaPay"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar Wix receber o código
+        run: sleep 55
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          cat "$response_file" || true
+          echo
+          echo "Wix Site Publisher HTTP $status"
+          test "$status" -ge 200 -a "$status" -lt 300

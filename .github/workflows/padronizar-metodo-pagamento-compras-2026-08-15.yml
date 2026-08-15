@@ -1,0 +1,90 @@
+name: Padronizar método de pagamento das compras
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/padronizar-metodo-pagamento-compras-2026-08-15.cjs"
+      - ".github/workflows/padronizar-metodo-pagamento-compras-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: padronizar-metodo-pagamento-compras
+  cancel-in-progress: false
+
+jobs:
+  corrigir-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Atualizar main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Aplicar padronização
+        run: |
+          set -euo pipefail
+          node --check scripts/padronizar-metodo-pagamento-compras-2026-08-15.cjs
+          node scripts/padronizar-metodo-pagamento-compras-2026-08-15.cjs
+          cp src/backend/entregaProjetosProntos.jsw /tmp/entregaProjetosProntos.mjs
+          node --check /tmp/entregaProjetosProntos.mjs
+          grep -q 'METODO_PAGAMENTO_CANONICO_V1' src/backend/entregaProjetosProntos.jsw
+          grep -q 'metodoPagamento: safe(session?.paymentMethod).toUpperCase()' src/backend/entregaProjetosProntos.jsw
+          git diff --check
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git add -- src/backend/entregaProjetosProntos.jsw
+          if ! git diff --cached --quiet; then
+            git commit -m "Padronizar método de pagamento em ComprasProjetos"
+          else
+            echo "Padronização já estava aplicada."
+          fi
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+          echo "Publicado: método de pagamento canônico nas compras."

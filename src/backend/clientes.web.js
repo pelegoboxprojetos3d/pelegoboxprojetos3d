@@ -1148,3 +1148,111 @@ export const obterOuCriarCliente =
       return null;
     }
   );
+
+
+// AUTORIZACAO_CARTAO_NO_CLIENTES_V1
+// Reutiliza o mesmo módulo de membro que já alimenta o checkout corretamente.
+// A autorização é vinculada ao checkoutId e nunca depende de e-mail vindo do HTML.
+export const autorizarPagamentoCartaoMembro =
+  webMethod(
+    Permissions.SiteMember,
+
+    async (input = {}) => {
+      try {
+        const checkoutId =
+          safe(input?.checkoutId);
+
+        if (!checkoutId) {
+          return {
+            ok: false,
+            error: "Checkout inválido. Atualize a página e tente novamente."
+          };
+        }
+
+        const membro =
+          await currentMemberBackend.getMember();
+
+        const memberId =
+          safe(membro?._id);
+
+        const emailsContato =
+          Array.isArray(
+            membro?.contactDetails?.emails
+          )
+            ? membro.contactDetails.emails
+            : [];
+
+        const memberEmail =
+          limparEmail(
+            membro?.loginEmail ||
+            emailsContato[0] ||
+            membro?.contactDetails?.email
+          );
+
+        if (!memberId || !memberEmail) {
+          return {
+            ok: false,
+            error: "Não foi possível confirmar a conta Wix ativa."
+          };
+        }
+
+        const resultado =
+          await wixData
+            .query(SESSIONS_COLLECTION)
+            .eq("checkoutId", checkoutId)
+            .limit(1)
+            .find({
+              ...DB_OPTS,
+              consistentRead: true
+            });
+
+        const agora = new Date();
+
+        if (resultado.items.length) {
+          const sessao = {
+            ...resultado.items[0],
+            memberId,
+            email: memberEmail,
+            updatedAtDate: agora
+          };
+
+          delete sessao.whatsApp;
+          delete sessao.whatsappE164;
+
+          await wixData.update(
+            SESSIONS_COLLECTION,
+            sessao,
+            DB_OPTS
+          );
+        } else {
+          await wixData.insert(
+            SESSIONS_COLLECTION,
+            {
+              checkoutId,
+              memberId,
+              email: memberEmail,
+              status: "pending_auth",
+              updatedAtDate: agora
+            },
+            DB_OPTS
+          );
+        }
+
+        return {
+          ok: true,
+          memberId,
+          email: memberEmail
+        };
+      } catch (error) {
+        console.error(
+          "AUTORIZACAO CARTAO MEMBRO:",
+          error?.message || error
+        );
+
+        return {
+          ok: false,
+          error: "Não foi possível confirmar a conta Wix ativa."
+        };
+      }
+    }
+  );

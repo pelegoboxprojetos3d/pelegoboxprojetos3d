@@ -427,12 +427,22 @@ async function esconderSecao(id) {
 async function mostrarSecao(id) {
   try { const e=$w(id); if(typeof e.expand==='function') await e.expand(); if(typeof e.show==='function') await e.show(); } catch (_) {}
 }
-async function prepararSecoesEntrega() {
-  await esconderSecao(SECOES_ENTREGA.banners);
-  await esconderSecao(SECOES_ENTREGA.final);
 
-  // A área de processamento só é liberada DEPOIS que a rota foi validada.
-  // Isso vale tanto para acesso pelo avatar quanto para link de compra/e-mail.
+async function esconderSecaoMantendoEspaco(id) {
+  try {
+    const e = $w(id);
+    if (typeof e.expand === 'function') await e.expand();
+    if (typeof e.hide === 'function') await e.hide();
+  } catch (_) {}
+}
+async function prepararSecoesEntrega() {
+  // PB_PREFLIGHT_PRESERVA_LAYOUT_V7
+  // Banners e aviso ficam invisíveis, mas continuam ocupando espaço.
+  // Assim o rodapé não sobe enquanto a impressora/repeater estão carregando.
+  await esconderSecaoMantendoEspaco(SECOES_ENTREGA.banners);
+  await esconderSecaoMantendoEspaco(SECOES_ENTREGA.final);
+
+  // A seção 1 e o espaçador permanecem abertos.
   for (const id of [SECOES_ENTREGA.principal, SECOES_ENTREGA.vazia]) {
     try {
       const secao = $w(id);
@@ -3424,49 +3434,39 @@ function redirecionarHomeAoDeslogar() {
 // ======================================================
 
 // PB_ROTEAMENTO_AVATAR_PREFLIGHT_V4
-function blindarPreflightEntrega() {
-  /*
-    REGRA DE ROTEAMENTO:
-    - Avatar sem parâmetros: consulta primeiro a coleção do membro.
-    - Link de compra/e-mail: valida primeiro login e titularidade.
-    Enquanto essa decisão não terminou, a página de entrega fica 100% fechada.
-  */
+async function blindarPreflightEntrega() {
+  // PB_PREFLIGHT_PRESERVA_LAYOUT_V7
+  // Regra visual: seção 1 primeiro; seções 2/3/4 ficam escondidas, mas NÃO recolhidas.
+  // Isso preserva o corpo da página e impede o rodapé de saltar para o topo.
   processamentoVisivelDesde = 0;
   processamentoVisualEncerrado = false;
 
   try {
     const repetidor = $w(IDS.repetidor);
     repetidor.data = [];
-    if (typeof repetidor.hide === "function") repetidor.hide();
+    if (typeof repetidor.hide === 'function') await repetidor.hide();
   } catch (_) {}
 
   try {
     const processando = $w(IDS.processando);
-    if (typeof processando.hide === "function") processando.hide();
-    if (typeof processando.collapse === "function") processando.collapse();
+    if (typeof processando.hide === 'function') await processando.hide();
+    if (typeof processando.collapse === 'function') await processando.collapse();
   } catch (_) {}
 
-  // PB_SESSAO1_ANTES_SESSAO2_V6
-  // Mantém somente a seção 1 aberta durante a decisão.
-  // Repeater e impressora continuam escondidos até a regra confirmar o acesso.
-  // Assim o rodapé não sobe e a seção 2 não aparece antes da hora.
+  // Seção 1 aberta de verdade ANTES de consultar a coleção.
   try {
     const principal = $w(SECOES_ENTREGA.principal);
-    if (typeof principal.expand === "function") principal.expand();
-    if (typeof principal.show === "function") principal.show();
+    if (typeof principal.expand === 'function') await principal.expand();
+    if (typeof principal.show === 'function') await principal.show();
   } catch (_) {}
 
-  // As seções inferiores continuam totalmente recolhidas.
+  // Seção 2 e demais: invisíveis, porém expandidas para preservar o layout.
   for (const id of [
     SECOES_ENTREGA.banners,
     SECOES_ENTREGA.final,
     SECOES_ENTREGA.vazia
   ]) {
-    try {
-      const secao = $w(id);
-      if (typeof secao.hide === "function") secao.hide();
-      if (typeof secao.collapse === "function") secao.collapse();
-    } catch (_) {}
+    await esconderSecaoMantendoEspaco(id);
   }
 
   blindarGaleriaPadrao();
@@ -3491,11 +3491,7 @@ function blindarAberturaEntrega() {
   } catch (_) {}
 
   for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {
-    try {
-      const secao = $w(id);
-      if (typeof secao.hide === "function") secao.hide();
-      if (typeof secao.collapse === "function") secao.collapse();
-    } catch (_) {}
+    esconderSecaoMantendoEspaco(id).catch(() => {});
   }
 
   try {
@@ -3515,8 +3511,8 @@ $w.onReady(async function () {
   checkoutEmAndamento = false;
   redirecionarHomeAoDeslogar();
 
-  // PRIMEIRO PASSO, sem exceção: nada da entrega pode aparecer antes da decisão.
-  blindarPreflightEntrega();
+  // PRIMEIRO PASSO: abre a seção 1 e preserva o layout antes de consultar a coleção.
+  await blindarPreflightEntrega();
 
   const checkoutIdInicial = safe(
     wixLocation.query.checkout_id ||

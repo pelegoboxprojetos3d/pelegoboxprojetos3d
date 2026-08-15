@@ -75,6 +75,9 @@ jobs:
       - name: Restaurar cartão salvo tokenizado
         run: node scripts/restaurar-cartao-salvo-tokenizado-v4-2026-08-14.cjs
 
+      - name: Corrigir impressora da central de projetos
+        run: node scripts/corrigir-impressora-central-projetos-2026-08-14.cjs
+
       - name: Validar código
         run: npm run lint
 
@@ -84,6 +87,7 @@ jobs:
           paths=(
             "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
             "src/pages/checkout-projeto-pronto.i9aj1.js"
+            "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
             "src/public/custom-elements/pelego-checkout-pronto.js"
             "src/backend/projetosProntosNormalizacao.js"
             "src/backend/clientes.js"

@@ -100,7 +100,10 @@ const SECOES_ENTREGA = {
   banners: '#SESSAODOISBANERSBOTAO',
 
   // Seção 3: aviso IMPORTANTE. Fica desligada enquanto a impressora roda.
-  final: '#SESSAO3AVISOIMPORTANTE'
+  final: '#SESSAO3AVISOIMPORTANTE',
+
+  // Seção 4: espaçador visual. Sai suavemente junto com a impressora.
+  vazia: '#SESSAO4VAZIA'
 };
 
 const PAGINA_AVISO_PROJETOS_PRONTOS =
@@ -616,12 +619,31 @@ async function esconderProcessamento() {
 
     const processando = $w(IDS.processando);
 
+    // PB: saída suave da seção vazia junto com a impressora.
+    // Primeiro ambas desaparecem em fade; só depois o espaço é recolhido.
+    let secaoVazia = null;
+    try {
+      secaoVazia = $w(SECOES_ENTREGA.vazia);
+    } catch (_) {}
+
+    const transicoesSaida = [];
+
     if (typeof processando.hide === "function") {
-      await processando.hide("fade");
+      transicoesSaida.push(processando.hide("fade", { duration: 650 }));
     }
+
+    if (secaoVazia && typeof secaoVazia.hide === "function") {
+      transicoesSaida.push(secaoVazia.hide("fade", { duration: 650 }));
+    }
+
+    await Promise.allSettled(transicoesSaida);
 
     if (typeof processando.collapse === "function") {
       await processando.collapse();
+    }
+
+    if (secaoVazia && typeof secaoVazia.collapse === "function") {
+      await secaoVazia.collapse();
     }
 
     processamentoVisivelDesde = 0;

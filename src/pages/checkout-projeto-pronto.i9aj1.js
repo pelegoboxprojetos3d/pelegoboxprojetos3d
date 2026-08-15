@@ -3,6 +3,7 @@ import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
 import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual, autorizarPagamentoCartaoMembro } from "backend/clientes.web";
 import { buscarMetodoPagamentoDoMembroAtual } from "backend/metodosPagamentoProjetosProntos.web";
+import { salvarCartaoAprovadoDoMembroAtual } from "backend/salvarCartaoValidaPay.web";
 import { autorizarPagamentoCartao } from "backend/validaPayCartaoAuth.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
@@ -39,6 +40,8 @@ let polling = false;
 let cardPollTimer = null;
 let cardPolling = false;
 let savedCardPayload = null;
+let cartaoPendenteParaTokenizar = null; // somente memória, nunca storage
+let salvamentoCartaoEmAndamento = false;
 
 const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
@@ -773,6 +776,7 @@ async function pollCardDelivery(n=1) {
         imediatamente em vez de esperar Make/OneDrive terminar os arquivos.
       */
       stopCardPoll();
+      salvarCartaoAprovadoSemBloquearVenda(chargeId).catch(console.error);
       post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
       abrirEntregaComFallback(1900);
       return;
@@ -849,6 +853,7 @@ async function createCard(data={}) {
   if(polling) return post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:"Existe um Pix aguardando pagamento nesta tentativa. Volte e gere um novo checkout para pagar com cartão."});
   cardRequestBusy=true;
   stopCardPoll();
+  memorizarCartaoSomenteNestaPagina(data);
   post({type:"CARD_LOADING",checkoutId,message:"Processando cartão com segurança..."});
   try {
     // CARTAO_AUTH_CONSOLIDADA_V2
@@ -884,6 +889,7 @@ async function createCard(data={}) {
     const accepted=cardWasAccepted(r);
     const paymentApproved=r?.approved===true;
     if(paymentApproved) {
+      salvarCartaoAprovadoSemBloquearVenda(chargeId).catch(console.error);
       post({
         type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,
         processing:false,checkoutId,chargeId,status:safe(r?.status)||"paid",
@@ -1001,6 +1007,55 @@ async function carregarContextoClienteAutenticado() {
   }
 }
 
+function memorizarCartaoSomenteNestaPagina(data = {}) {
+  if (data.useSavedPaymentMethod === true) {
+    cartaoPendenteParaTokenizar = null;
+    return;
+  }
+  const card = data.card || {};
+  cartaoPendenteParaTokenizar = {
+    card: {
+      number: digits(card.number),
+      cvv: digits(card.cvv),
+      month: digits(card.month),
+      year: digits(card.year),
+      name: safe(card.name)
+    },
+    cardDocument: digits(data.cardDocument || ctx.cpfCnpj)
+  };
+}
+
+async function salvarCartaoAprovadoSemBloquearVenda(paymentId) {
+  if (salvamentoCartaoEmAndamento || !cartaoPendenteParaTokenizar) return;
+  const charge = safe(paymentId);
+  if (!checkoutId || !charge) return;
+  salvamentoCartaoEmAndamento = true;
+  const payload = cartaoPendenteParaTokenizar;
+  try {
+    const result = await waitTimeout(
+      salvarCartaoAprovadoDoMembroAtual({
+        checkoutId,
+        chargeId: charge,
+        card: payload.card,
+        cardDocument: payload.cardDocument
+      }),
+      7000,
+      ""
+    );
+    if (result?.saved === true && result?.metodo) {
+      savedCardPayload = { type:"SAVED_CARD", existe:true, ...result.metodo };
+      if (checkoutUiReady) post(savedCardPayload);
+      cartaoPendenteParaTokenizar = null;
+    } else {
+      console.warn("Cartão aprovado, mas token reutilizável não foi salvo:", result?.reason || "sem motivo");
+    }
+  } catch (error) {
+    console.warn("Salvamento isolado do cartão não bloqueou a venda:", error?.message || error);
+  } finally {
+    salvamentoCartaoEmAndamento = false;
+  }
+}
+
 async function carregarMetodoPagamentoSalvo() {
   try {
     const result = await waitTimeout(buscarMetodoPagamentoDoMembroAtual(), 5000, "");
@@ -1071,7 +1126,12 @@ $w.onReady(function(){
   const contextoAutenticadoPromise = carregarContextoClienteAutenticado();
   contextoAutenticadoPromise.catch(() => {});
 
+  // CARTAO_SALVO_RELEITURA_POS_AUTH_V1
+  // Tentativa rápida + releitura autoritativa depois que o login Wix estabilizar.
   carregarMetodoPagamentoSalvo().catch(console.error);
+  contextoAutenticadoPromise
+    .then(() => carregarMetodoPagamentoSalvo())
+    .catch(() => {});
 
   completarContextoPelaColecao()
     .then(() => {

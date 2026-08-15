@@ -41,6 +41,8 @@ jobs:
           grep -q "#SESSAO1REPETIDOREIMPRESSORA" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
           grep -q "#SESSAODOISBANERSBOTAO" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
           grep -q "#SESSAO3AVISOIMPORTANTE" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q "#SESSAO4VAZIA" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q "PB: saída suave da seção vazia junto com a impressora" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
           if grep -q "principal: '#imagensdoprodutobotao1e2'" "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"; then
             echo "ERRO: ID antigo da seção principal ainda presente."
             exit 1
@@ -55,7 +57,7 @@ jobs:
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
             git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-            git commit -m "Usar IDs atuais das seções na entrega"
+            git commit -m "Suavizar saída da seção vazia na entrega"
             git push origin HEAD:main
           fi
 

@@ -3,6 +3,7 @@ import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
 import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual } from "backend/clientes.web";
 import { buscarMetodoPagamentoDoMembroAtual } from "backend/metodosPagamentoProjetosProntos.web";
+import { autorizarPagamentoCartao } from "backend/validaPayCartaoAuth.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
@@ -829,6 +830,12 @@ async function createCard(data={}) {
   stopCardPoll();
   post({type:"CARD_LOADING",checkoutId,message:"Processando cartão com segurança..."});
   try {
+    const auth=await waitTimeout(autorizarPagamentoCartao({checkoutId}),7000,"Não foi possível confirmar sua conta Wix.");
+    if(!auth?.ok){
+      return post({type:"CARD_RESULT",ok:false,approved:false,accepted:false,error:safe(auth?.error)||"Faça login novamente para pagar com cartão."});
+    }
+    if(auth?.email){ctx.email=email(auth.email);saveIdentity({email:ctx.email});}
+
     const r=await waitTimeout(criarCobrancaCartaoTransparente({
       ...basePayload(data),
       card:data.card||{},

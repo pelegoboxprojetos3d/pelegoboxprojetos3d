@@ -27,12 +27,32 @@ const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
 
 
-async function identidadeMembroAtualCartao() {
-  const membro = await currentMemberBackend.getMember();
-  const emails = Array.isArray(membro?.contactDetails?.emails) ? membro.contactDetails.emails : [];
-  const memberId = safe(membro?._id);
-  const email = safe(membro?.loginEmail || emails[0] || membro?.contactDetails?.email).toLowerCase();
-  return { memberId, email };
+async function identidadeMembroAtualCartao(checkoutId = "") {
+  try {
+    const membro = await currentMemberBackend.getMember();
+    const emails = Array.isArray(membro?.contactDetails?.emails) ? membro.contactDetails.emails : [];
+    const memberId = safe(membro?._id);
+    const email = safe(membro?.loginEmail || emails[0] || membro?.contactDetails?.email).toLowerCase();
+    if (memberId && email) return { memberId, email };
+  } catch (_) {}
+
+  const id = safe(checkoutId);
+  if (!id) return { memberId: "", email: "" };
+
+  try {
+    const sessao = await findSession(id);
+    const memberId = safe(sessao?.memberId);
+    const email = safe(sessao?.email).toLowerCase();
+    const timestamp = new Date(sessao?.updatedAtDate || sessao?._updatedDate || 0).getTime();
+    const age = Date.now() - timestamp;
+    const autorizacaoRecente = Number.isFinite(age) && age >= 0 && age <= 2 * 60 * 1000;
+
+    if (memberId && email && autorizacaoRecente) {
+      return { memberId, email };
+    }
+  } catch (_) {}
+
+  return { memberId: "", email: "" };
 }
 
 function campoProfundoCartao(root, nomes, depth = 0, seen = new Set()) {
@@ -624,7 +644,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     const clienteId = safe(input.clienteId || ctx.clienteId);
     const nome = safe(input.nome || input.nomeCliente || ctx.nome || ctx.nomeCliente);
     const emailInformado = safe(input.email || ctx.email).toLowerCase();
-    const identidadeMembro = await identidadeMembroAtualCartao();
+    const identidadeMembro = await identidadeMembroAtualCartao(checkoutId);
     if (!identidadeMembro.memberId || !identidadeMembro.email) return { ok:false, error:"Faça login novamente para pagar com cartão." };
     if (emailInformado && emailInformado !== identidadeMembro.email) return { ok:false, error:"O e-mail do checkout não corresponde ao login atual." };
     const email = identidadeMembro.email;

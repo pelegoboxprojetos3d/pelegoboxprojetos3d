@@ -28,9 +28,32 @@ function firstValue(...values) {
   return "";
 }
 
+function ocultarMensagemInicial() {
+  /*
+    Evita que os textos-padrão do Editor ("Cabeçalho 1" / "Cabeçalho 2")
+    apareçam enquanto a página ainda está conferindo login/compra.
+    Hide preserva o espaço e não mexe no desenho das seções.
+  */
+  for (const id of [IDS.titulo, IDS.texto]) {
+    try {
+      const elemento = $w(id);
+      if (typeof elemento.hide === "function") elemento.hide();
+    } catch (_) {}
+  }
+}
+
 function definirMensagem(titulo, texto) {
-  try { $w(IDS.titulo).text = safe(titulo); } catch (_) {}
-  try { $w(IDS.texto).text = safe(texto); } catch (_) {}
+  try {
+    const elemento = $w(IDS.titulo);
+    elemento.text = safe(titulo);
+    if (typeof elemento.show === "function") elemento.show();
+  } catch (_) {}
+
+  try {
+    const elemento = $w(IDS.texto);
+    elemento.text = safe(texto);
+    if (typeof elemento.show === "function") elemento.show();
+  } catch (_) {}
 }
 
 function parametros() {
@@ -161,6 +184,11 @@ $w.onReady(function () {
     permanecem visíveis: texto, banners dos três botões e aviso importante.
     Nenhuma impressora ou seção da página de entrega é controlada aqui.
   */
+
+  // PB_AVISO_SEM_FLASH_CABECALHO_V1
+  // Primeiro escondemos apenas os dois textos-padrão do Editor. Nenhuma seção,
+  // banner, rodapé, altura ou estrutura visual é recolhida/modificada.
+  ocultarMensagemInicial();
 
   try {
     authentication.onLogin(() => {

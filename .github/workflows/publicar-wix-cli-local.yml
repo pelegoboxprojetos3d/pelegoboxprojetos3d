@@ -1,0 +1,32 @@
+name: Publicar Wix via CLI local
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publicar-wix-cli-local.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Autenticar Wix CLI
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npx wix login --api-key "$WIX_API_KEY"
+          npx wix whoami
+      - name: Publicar exatamente o código deste commit
+        run: npx wix publish --source local -y

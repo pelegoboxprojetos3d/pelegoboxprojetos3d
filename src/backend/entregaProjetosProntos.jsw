@@ -1159,6 +1159,7 @@ async function garantirProcessamentoAtual(session, purchases, client, project) {
     valor: Number(session?.valor || processingPurchase?.valor || 0),
     pagamento: "approved",
     statusCompra: "approved",
+    metodoPagamento: safe(session?.paymentMethod).toUpperCase(),
     idPagamento: paymentId,
     checkoutId: safe(session?.checkoutId),
     tokenDeEntrega: sessionToken(session),
@@ -1454,6 +1455,15 @@ async function repairCurrentPurchase(
   setCanonical(
     "chaveCompra",
     purchaseKey
+  );
+
+  // METODO_PAGAMENTO_CANONICO_V1
+  // A sessão sabe se a etapa aprovada foi PIX ou CARD. Mantemos essa
+  // informação também em ComprasProjetos para a planilha mãe ter uma
+  // fonte única e não precisar deduzir o método pelo ID da cobrança.
+  setCanonical(
+    "metodoPagamento",
+    safe(session?.paymentMethod).toUpperCase()
   );
 
   if (

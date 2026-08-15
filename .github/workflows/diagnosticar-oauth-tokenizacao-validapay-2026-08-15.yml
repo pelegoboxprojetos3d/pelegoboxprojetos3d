@@ -1,0 +1,61 @@
+name: Diagnosticar OAuth tokenização ValidaPay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/diagnosticar-oauth-tokenizacao-validapay-2026-08-15.cjs"
+      - ".github/workflows/diagnosticar-oauth-tokenizacao-validapay-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnosticar-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Aplicar diagnóstico temporário
+        run: node scripts/diagnosticar-oauth-tokenizacao-validapay-2026-08-15.cjs
+      - name: Validar sintaxe e segurança
+        run: |
+          set -euo pipefail
+          node --check src/backend/http-functions.js
+          grep -q 'TEMP_DIAG_TOKENIZACAO_VALIDAPAY_V1' src/backend/http-functions.js
+          grep -q 'payment.methods/write' src/backend/http-functions.js
+          if grep -A80 'TEMP_DIAG_TOKENIZACAO_VALIDAPAY_V1' src/backend/http-functions.js | grep -q 'access_token:'; then
+            echo 'ERRO: endpoint não pode retornar access_token'
+            exit 1
+          fi
+      - name: Commitar diagnóstico
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/backend/http-functions.js
+          git commit -m 'Adicionar diagnóstico temporário OAuth ValidaPay'
+          git push
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          f="$(mktemp)"
+          s="$(curl --silent --show-error --output "$f" --write-out "%{http_code}" --request POST \
+            'https://www.wixapis.com/site-publisher/v1/site/publish' \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header 'Content-Type: application/json' \
+            --data '{}')"
+          cat "$f"
+          echo
+          echo "HTTP $s"
+          test "$s" -ge 200 && test "$s" -lt 300

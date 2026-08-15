@@ -1,0 +1,88 @@
+name: HOTFIX restaurar cartão estável
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/hotfix-restaurar-cartao-estavel-2026-08-15.yml"
+      - "scripts/hotfix-restaurar-cartao-estavel-2026-08-15.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hotfix-cartao-estavel-2026-08-15
+  cancel-in-progress: false
+
+jobs:
+  corrigir-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar código atual
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Instalar dependências atuais
+        run: npm ci --ignore-scripts
+
+      - name: Remover tokenização regressiva e restaurar cartão
+        run: |
+          set -euo pipefail
+          node scripts/hotfix-restaurar-cartao-estavel-2026-08-15.cjs
+          npm uninstall @validapay/tokenize --save --ignore-scripts
+
+      - name: Validar backend antes de publicar
+        run: |
+          set -euo pipefail
+          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
+          node --check /tmp/validaPayCartaoProjetosProntos.mjs
+          ! grep -q '@validapay/tokenize' src/backend/validaPayCartaoProjetosProntos.jsw
+          ! grep -q 'tokenizarCartaoParaUsoFuturo' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'chargePayload.card = {' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'if (useSavedPaymentMethod)' src/backend/validaPayCartaoProjetosProntos.jsw
+          echo "OK: fluxo estável de cartão validado."
+
+      - name: Gravar hotfix no main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/validaPayCartaoProjetosProntos.jsw package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração pendente."
+          else
+            git commit -m "HOTFIX restaurar pagamento estável por cartão"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/wix.json --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" --data '{}')"
+          cat /tmp/wix.json || true
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "Falha ao publicar no Wix: HTTP $status"
+            exit 1
+          fi
+          echo "Publicado: checkout de cartão restaurado para fluxo estável."

@@ -1,6 +1,7 @@
 import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
+import { tokenize as tokenizeValidaPayCard } from "@validapay/tokenize";
 import { currentMember as currentMemberBackend } from "wix-members-backend";
 import { buscarMetodoPagamentoPrivadoPorEmail, salvarMetodoPagamentoAprovado } from "backend/metodosPagamentoProjetosProntos";
 import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
@@ -25,6 +26,47 @@ let tokenExpiresAt = 0;
 
 const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
+
+// CARTAO_SALVO_TOKENIZADO_V1
+// Regra: nunca persistir PAN completo nem CVV. O cartão novo é tokenizado
+// antes da cobrança; depois de aprovado salvamos somente paymentMethodId e
+// metadados seguros, ligados ao e-mail autenticado do membro Wix.
+async function tokenizarCartaoParaUsoFuturo({
+  number, holder, cvv, month, year, customerName, customerDocument, customerEmail
+} = {}) {
+  const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+  const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+  if (!clientId || !clientSecret) throw new Error("Credenciais da ValidaPay não encontradas para tokenização.");
+
+  const result = await tokenizeValidaPayCard({
+    clientId,
+    clientSecret,
+    card: {
+      number: digits(number),
+      cardHolderName: safe(holder).replace(/\s+/g, " ").toUpperCase(),
+      cvv: digits(cvv),
+      expiration: digits(month).padStart(2, "0").slice(-2) + "/" + digits(year).slice(-4)
+    },
+    customer: {
+      name: safe(customerName),
+      document: digits(customerDocument),
+      email: safe(customerEmail).toLowerCase()
+    }
+  });
+
+  const paymentMethodId = safe(result?.paymentMethodId);
+  if (!paymentMethodId) throw new Error("A ValidaPay não retornou o identificador seguro do cartão.");
+
+  return {
+    paymentMethodId,
+    customerId: safe(result?.customerId),
+    cardBrand: safe(result?.cardBrand).toUpperCase(),
+    cardLastFour: digits(result?.cardLastFour).slice(-4),
+    cardExpirationMonth: digits(result?.cardExpirationMonth).padStart(2, "0").slice(-2),
+    cardExpirationYear: digits(result?.cardExpirationYear).slice(-4),
+    cardHolderName: safe(result?.cardHolderName || holder).replace(/\s+/g, " ").toUpperCase()
+  };
+}
 
 
 async function identidadeMembroAtualCartao(checkoutId = "") {
@@ -114,7 +156,8 @@ async function recuperarTokenDaCobranca(session, chargeId) {
 async function persistirMetodoPagamentoAprovado(session, chargeId) {
   const paymentMethodId = safe(session?.pendingPaymentMethodId);
   const email = safe(session?.email).toLowerCase();
-  if (!paymentMethodId || !email) return null;
+  // METADADOS_CARTAO_APROVADO_V2
+  if (!email) return null;
 
   try {
     return await salvarMetodoPagamentoAprovado({
@@ -790,14 +833,29 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       };
       paymentMethodId = safe(tokenInfo.paymentMethodId);
     } else {
+      // Um cartão digitado pela primeira vez é tokenizado ANTES da cobrança.
+      // Assim, se o pagamento aprovar, esse mesmo token pode ser reutilizado
+      // nas próximas compras sem guardar o número completo ou o CVV no Wix.
+      const tokenized = await tokenizarCartaoParaUsoFuturo({
+        number,
+        holder,
+        cvv,
+        month,
+        year,
+        customerName: nome,
+        customerDocument: cardDocument,
+        customerEmail: email
+      });
       tokenInfo = {
-        cardBrand: brand(number),
-        cardLastFour: number.slice(-4),
-        cardExpirationMonth: month,
-        cardExpirationYear: year,
-        cardHolderName: holder,
+        ...tokenized,
+        cardBrand: safe(tokenized.cardBrand) || brand(number),
+        cardLastFour: safe(tokenized.cardLastFour) || number.slice(-4),
+        cardExpirationMonth: safe(tokenized.cardExpirationMonth) || month,
+        cardExpirationYear: safe(tokenized.cardExpirationYear) || year,
+        cardHolderName: safe(tokenized.cardHolderName) || holder,
         cardDocument
       };
+      paymentMethodId = safe(tokenInfo.paymentMethodId);
     }
 
     await saveSession(checkoutId, {
@@ -859,16 +917,12 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       }
     };
 
-    if (useSavedPaymentMethod) {
-      chargePayload.paymentMethodId = paymentMethodId;
-    } else {
-      chargePayload.card = {
-        number,
-        cvv,
-        name: holder,
-        expiration: month + "/" + year
-      };
+    if (!paymentMethodId) {
+      return { ok:false, error:"Não foi possível preparar o cartão de forma segura para pagamento." };
     }
+    // Tanto o cartão recém-digitado quanto o cartão salvo pagam por token.
+    // O objeto card bruto não é mais enviado para /v1/charges.
+    chargePayload.paymentMethodId = paymentMethodId;
 
     chargePayload.items = [{ priceId, quantity: 1 }];
 
@@ -915,6 +969,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
 
     const id = extractChargeId(response.data || {});
     const status = extractChargeStatus(response.data || {});
+    const customerIdRetornado = campoProfundoCartao(response.data || {}, ["customerId"]);
     const approved = response.data?.success !== false && isApprovedCardStatus(status);
     const tokenRetornadoNaCriacao = campoProfundoCartao(response.data || {}, ["paymentMethodId", "tokenId"]);
     if (tokenRetornadoNaCriacao && !paymentMethodId) {
@@ -927,6 +982,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       paymentId: id,
       paymentMethod: "CARD",
       pendingPaymentMethodId: paymentMethodId || safe(previousSession?.pendingPaymentMethodId),
+      pendingValidaPayCustomerId: customerIdRetornado || safe(tokenInfo?.customerId) || safe(previousSession?.pendingValidaPayCustomerId),
       cardAttempt,
       status: approved ? "approved" : (status || "pending"),
       updatedAtDate: new Date()

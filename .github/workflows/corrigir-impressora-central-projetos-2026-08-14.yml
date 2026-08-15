@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - .github/workflows/corrigir-impressora-central-projetos-2026-08-14.yml
+      - scripts/corrigir-impressora-central-projetos-2026-08-14.cjs
   workflow_dispatch:
 
 permissions:
@@ -35,6 +36,7 @@ jobs:
           cp "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" /tmp/entrega.mjs
           node --check /tmp/entrega.mjs
           grep -q 'IMPRESSORA_CENTRAL_COM_PROJETOS_V1' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'IMPRESSORA_CENTRAL_IMEDIATA_V2' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
 
       - name: Gravar no main
         run: |
@@ -45,7 +47,7 @@ jobs:
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
             git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-            git commit -m "Mostrar impressora antes de carregar central de projetos"
+            git commit -m "Eliminar flash do rodapé antes da impressora"
             git push origin HEAD:main
           fi
 

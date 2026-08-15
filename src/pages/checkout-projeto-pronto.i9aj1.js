@@ -43,6 +43,24 @@ const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
 const email = v => safe(v).toLowerCase();
 const waitTimeout = (p, ms, m) => Promise.race([p, new Promise((_,r)=>setTimeout(()=>r(new Error(m)),ms))]);
+const waitMs = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// LOGIN_MEMBRO_RETRY_MOBILE_V4
+// No celular, logo depois do login social, o cabeçalho pode mostrar o membro
+// antes de o webMethod receber o contexto autenticado. Repetimos a leitura
+// por poucos segundos e só aceitamos o perfil quando vier com memberId+email.
+async function buscarPerfilMembroAutenticadoComRetry() {
+  let ultimo = null;
+  for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
+    try {
+      const perfil = await waitTimeout(buscarClienteDoMembroAtual(), 1800, "");
+      if (perfil && typeof perfil === "object") ultimo = perfil;
+      if (safe(perfil?.memberId) && email(perfil?.email)) return perfil;
+    } catch (_) {}
+    if (tentativa < 5) await waitMs(220);
+  }
+  return ultimo;
+}
 
 function phone(v, ddi = "55") {
   let n = digits(v);
@@ -566,8 +584,8 @@ async function saveCustomer(data={}) {
     */
     const perfil =
       await waitTimeout(
-        buscarClienteDoMembroAtual(),
-        7000,
+        buscarPerfilMembroAutenticadoComRetry(),
+        11000,
         "Não foi possível confirmar sua conta Wix."
       );
 
@@ -876,7 +894,7 @@ async function createCard(data={}) {
 
 async function carregarContextoClienteAutenticado() {
   try {
-    const perfil = await waitTimeout(buscarClienteDoMembroAtual(), AUTH_CONTEXT_PREFLIGHT_MAX, "");
+    const perfil = await waitTimeout(buscarPerfilMembroAutenticadoComRetry(), AUTH_CONTEXT_PREFLIGHT_MAX, "");
     const cliente = perfil?.cliente && typeof perfil.cliente === "object" ? perfil.cliente : null;
     const mail = email(perfil?.email || cliente?.email || ctx.email);
     const ddi = "55";

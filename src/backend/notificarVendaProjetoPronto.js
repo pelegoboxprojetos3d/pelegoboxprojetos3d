@@ -263,6 +263,12 @@ export async function notificarVendaProjetoProntoAprovada({ checkoutId, chargeId
     origem: "PELEGO_BOX_PROJETOS_PRONTOS",
     provider: "VALIDAPAY",
     paymentMethod: safe(paymentMethod || session.paymentMethod).toUpperCase(),
+    cardBrand: safe(session.pendingCardBrand),
+    cardLastFour: digits(session.pendingCardLastFour).slice(-4),
+    installments: Math.max(0, Number(session.pendingCardInstallments || 0)),
+    installmentAmount: Math.max(0, Number(session.pendingCardInstallments || 0)) > 0
+      ? Number((amount / Math.max(1, Number(session.pendingCardInstallments || 1))).toFixed(2))
+      : 0,
     status: "approved",
     dataISO: new Date().toISOString(),
     checkoutId: safe(session.checkoutId),

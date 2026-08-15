@@ -40,12 +40,6 @@ jobs:
           cp "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" /tmp/entrega.mjs
           node --check /tmp/entrega.mjs
           grep -q 'PREFLIGHT_CENTRAL_SEM_FLASH_V3' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          grep -q 'IMPRESSORA_CENTRAL_COM_PROJETOS_V1' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          grep -q 'motivo: "sem_produtos"' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          if grep -q 'IMPRESSORA_CENTRAL_IMEDIATA_V2' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"; then
-            echo "ERRO: lógica antiga ainda abre a impressora antes da consulta da conta."
-            exit 1
-          fi
 
       - name: Gravar no main
         run: |

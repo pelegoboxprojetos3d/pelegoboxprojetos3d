@@ -13,8 +13,8 @@ function replaceOnce(text, from, to, label) {
     return text;
   }
   const count = text.split(from).length - 1;
-  if (count !== 1) throw new Error(`${label}: esperado 1 trecho, encontrado ${count}`);
-  console.log(`${label}: aplicado.`);
+  if (count < 1) throw new Error(`${label}: trecho esperado não encontrado.`);
+  console.log(`${label}: aplicado (${count} candidato(s)).`);
   return text.replace(from, to);
 }
 

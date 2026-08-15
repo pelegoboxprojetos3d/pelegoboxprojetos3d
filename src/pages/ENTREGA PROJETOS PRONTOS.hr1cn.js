@@ -3009,6 +3009,15 @@ async function carregarCentralSegundasVias() {
       return;
     }
 
+    // IMPRESSORA_CENTRAL_COM_PROJETOS_V1
+    // Pelo avatar, primeiro confirmamos silenciosamente que a conta realmente
+    // possui projetos. Só então ligamos a impressora enquanto os detalhes dos
+    // projetos são carregados. Assim uma conta sem compras continua indo direto
+    // para a página de aviso, mas uma conta com compras nunca fica numa tela
+    // branca esperando o Repeater aparecer.
+    processamentoVisualEncerrado = false;
+    await mostrarProcessamento();
+
     const detalhes = await carregarDetalhesDaCentral(projetosSegundaVia);
 
     if (!detalhes.length) {

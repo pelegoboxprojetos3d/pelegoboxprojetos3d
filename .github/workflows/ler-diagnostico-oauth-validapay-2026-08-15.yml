@@ -14,9 +14,17 @@ jobs:
   ler:
     runs-on: ubuntu-latest
     steps:
-      - name: Consultar diagnóstico seguro
+      - name: Comparar rotas HTTP functions
         run: |
-          set -euo pipefail
-          curl --silent --show-error --fail-with-body \
-            'https://www.pelegobox.com.br/_functions/diagnosticoTokenizacaoValidaPay'
-          echo
+          set -u
+          for base in 'https://www.pelegobox.com.br' 'https://pelegobox.com.br'; do
+            for path in '/_functions/diagnosticoTokenizacaoValidaPay' '/_functions/checkAbandon'; do
+              echo "=== $base$path ==="
+              body="$(mktemp)"
+              code="$(curl --silent --show-error --location --output "$body" --write-out '%{http_code}' "$base$path" || true)"
+              echo "HTTP $code"
+              head -c 1200 "$body" || true
+              echo
+              rm -f "$body"
+            done
+          done

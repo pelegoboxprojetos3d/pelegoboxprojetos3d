@@ -1,83 +1,13 @@
-name: Publicar cartão salvo tokenizado
+name: Cartão salvo tokenizado - DESATIVADO
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/cartao-tokenizado-salvo.yml"
-      - "src/backend/validaPayCartaoProjetosProntos.jsw"
-      - "src/backend/metodosPagamentoProjetosProntos.js"
-      - "src/backend/metodosPagamentoProjetosProntos.web.js"
-      - "src/pages/checkout-projeto-pronto.i9aj1.js"
-      - "src/public/custom-elements/pelego-checkout-pronto.js"
-      - "package.json"
-      - "package-lock.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: wix-cartao-tokenizado
-  cancel-in-progress: false
-
 jobs:
-  validar-e-publicar:
+  desativado:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Baixar código
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Configurar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-
-      - name: Instalar dependências
-        run: npm ci --ignore-scripts
-
-      - name: Validar regra do cartão salvo
-        run: |
-          set -euo pipefail
-          node --check src/backend/metodosPagamentoProjetosProntos.js
-          node --check src/backend/metodosPagamentoProjetosProntos.web.js
-          node --check src/pages/checkout-projeto-pronto.i9aj1.js
-          node --check src/public/custom-elements/pelego-checkout-pronto.js
-          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
-          node --check /tmp/validaPayCartaoProjetosProntos.mjs
-          grep -q '@validapay/tokenize' package.json
-          grep -q 'tokenizarCartaoParaUsoFuturo' src/backend/validaPayCartaoProjetosProntos.jsw
-          grep -q 'paymentMethodId' src/backend/validaPayCartaoProjetosProntos.jsw
-          grep -q 'persistirMetodoPagamentoAprovado' src/backend/validaPayCartaoProjetosProntos.jsw
-          grep -q 'buscarMetodoPagamentoDoMembroAtual' src/pages/checkout-projeto-pronto.i9aj1.js
-          grep -q 'type: "SAVED_CARD"' src/pages/checkout-projeto-pronto.i9aj1.js
-          grep -q 'useSavedPaymentMethod=true' src/public/custom-elements/pelego-checkout-pronto.js
-          grep -q 'Trocar cartão' src/public/custom-elements/pelego-checkout-pronto.js
-          grep -q 'Pagar com cartão salvo' src/public/custom-elements/pelego-checkout-pronto.js
-          echo "OK: cartão novo tokeniza e sobrescreve o cartão salvo após aprovação; retorno usa token por e-mail Wix."
-
-      - name: Aguardar sincronização GitHub para Wix
-        run: sleep 90
-
-      - name: Publicar no Wix
-        env:
-          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
-          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
-        run: |
-          set -euo pipefail
-          status="$(curl --silent --show-error --output /tmp/wix.json --write-out "%{http_code}" \
-            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
-            --header "Authorization: $WIX_API_KEY" \
-            --header "wix-site-id: $WIX_SITE_ID" \
-            --header "Content-Type: application/json" --data '{}')"
-          cat /tmp/wix.json || true
-          echo
-          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-            echo "Falha ao publicar no Wix: HTTP $status"
-            exit 1
-          fi
-          echo "Publicado: cartão salvo tokenizado."
+      - run: echo "Fluxo tokenizado desativado após regressão no checkout."

@@ -43,11 +43,15 @@ async function identidadeMembroAtualCartao(checkoutId = "") {
     const sessao = await findSession(id);
     const memberId = safe(sessao?.memberId);
     const email = safe(sessao?.email).toLowerCase();
-    const timestamp = new Date(sessao?.updatedAtDate || sessao?._updatedDate || 0).getTime();
+    const autenticacaoConfirmada = sessao?.authMemberVerified === true;
+    const timestamp = new Date(sessao?.authVerifiedAt || 0).getTime();
     const age = Date.now() - timestamp;
-    const autorizacaoRecente = Number.isFinite(age) && age >= 0 && age <= 2 * 60 * 1000;
+    const autorizacaoRecente =
+      Number.isFinite(age) &&
+      age >= 0 &&
+      age <= 30 * 60 * 1000;
 
-    if (memberId && email && autorizacaoRecente) {
+    if (memberId && email && autenticacaoConfirmada && autorizacaoRecente) {
       return { memberId, email };
     }
   } catch (_) {}

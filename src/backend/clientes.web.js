@@ -775,7 +775,7 @@ export const buscarClienteDoMembroAtual =
   webMethod(
     Permissions.SiteMember,
 
-    async () => {
+    async (input = {}) => {
       const membro =
         await currentMemberBackend.getMember();
 
@@ -815,6 +815,53 @@ export const buscarClienteDoMembroAtual =
           cliente: null,
           ambiguo: false
         };
+      }
+
+      // CHECKOUT_MEMBRO_VERIFICADO_V1
+      // Este método exige SiteMember. Quando ele consegue ler a conta, grava
+      // no checkout uma prova curta de que memberId + e-mail vieram do Wix,
+      // permitindo que o cartão continue no mobile mesmo se uma chamada
+      // posterior do currentMemberBackend perder momentaneamente o contexto.
+      const checkoutIdAutenticado = safe(input?.checkoutId);
+      if (checkoutIdAutenticado) {
+        try {
+          const agoraAutenticacao = new Date();
+          const existenteSessao = await wixData
+            .query(SESSIONS_COLLECTION)
+            .eq("checkoutId", checkoutIdAutenticado)
+            .limit(1)
+            .find({ ...DB_OPTS, consistentRead: true });
+
+          if (existenteSessao.items.length) {
+            const sessao = {
+              ...existenteSessao.items[0],
+              checkoutId: checkoutIdAutenticado,
+              memberId,
+              email: memberEmail,
+              authMemberVerified: true,
+              authVerifiedAt: agoraAutenticacao,
+              updatedAtDate: agoraAutenticacao
+            };
+            delete sessao.whatsApp;
+            delete sessao.whatsappE164;
+            await wixData.update(SESSIONS_COLLECTION, sessao, DB_OPTS);
+          } else {
+            await wixData.insert(SESSIONS_COLLECTION, {
+              checkoutId: checkoutIdAutenticado,
+              memberId,
+              email: memberEmail,
+              authMemberVerified: true,
+              authVerifiedAt: agoraAutenticacao,
+              status: "identified",
+              updatedAtDate: agoraAutenticacao
+            }, DB_OPTS);
+          }
+        } catch (erroSessao) {
+          console.warn(
+            "Não foi possível vincular checkout ao membro autenticado:",
+            erroSessao?.message || erroSessao
+          );
+        }
       }
 
       const encontrados = [];

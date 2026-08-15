@@ -8,7 +8,14 @@ const MARCADOR_ANTIGO = "IMPRESSORA_CENTRAL_IMEDIATA_V2";
 
 if (!code.includes(MARCADOR_NOVO)) {
   const linhas = code.split(/\r?\n/);
-  const indiceMarcador = linhas.findIndex((linha) => linha.includes(MARCADOR_ANTIGO));
+  let indiceMarcador = -1;
+
+  for (let i = linhas.length - 1; i >= 0; i -= 1) {
+    if (linhas[i].includes(MARCADOR_ANTIGO)) {
+      indiceMarcador = i;
+      break;
+    }
+  }
 
   if (indiceMarcador < 0) {
     throw new Error("Marcador da impressora imediata não encontrado.");
@@ -23,7 +30,7 @@ if (!code.includes(MARCADOR_NOVO)) {
   }
 
   if (inicio < 0) {
-    throw new Error("Início do bloco de impressora imediata não encontrado.");
+    throw new Error("Início do bloco da central pelo avatar não encontrado.");
   }
 
   let fim = -1;
@@ -35,7 +42,7 @@ if (!code.includes(MARCADOR_NOVO)) {
   }
 
   if (fim < 0) {
-    throw new Error("Fim do bloco de impressora imediata não encontrado.");
+    throw new Error("Fim do bloco da central pelo avatar não encontrado.");
   }
 
   const substituto = [
@@ -54,18 +61,12 @@ if (!code.includes(MARCADOR_NOVO)) {
   code = linhas.join("\n");
 }
 
-if (code.includes(MARCADOR_ANTIGO)) {
-  throw new Error("Lógica antiga de impressora imediata ainda presente.");
+if (!code.includes(MARCADOR_NOVO)) {
+  throw new Error("Marcador da correção não foi inserido.");
 }
 
-for (const marcador of [
-  MARCADOR_NOVO,
-  "IMPRESSORA_CENTRAL_COM_PROJETOS_V1",
-  'motivo: "sem_produtos"'
-]) {
-  if (!code.includes(marcador)) {
-    throw new Error(`Marcador obrigatório ausente: ${marcador}`);
-  }
+if (!code.includes("IMPRESSORA_CENTRAL_COM_PROJETOS_V1")) {
+  throw new Error("Proteção da central com projetos não encontrada.");
 }
 
 fs.writeFileSync(FILE, code, "utf8");

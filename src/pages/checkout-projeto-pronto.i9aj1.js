@@ -766,12 +766,14 @@ async function pollCardDelivery(n=1) {
   cardPollTimer=setTimeout(()=>pollCardDelivery(n+1).catch(console.error),CARD_DELIVERY_INTERVAL);
 }
 
+// PIX_QR_ACCEPTS_PROVIDER_IMAGE_V2
+// Aceita tanto EMV quanto imagem/base64 de QR devolvida pela ValidaPay.
 async function pollPix(n=1) {
   if(!polling) return;
   try {
     const r=await waitTimeout(consultarCobrancaPix({checkoutId,chargeId}),PIX_READ_TIMEOUT,"");
     if(r?.chargeId) chargeId=safe(r.chargeId);
-    if(r?.ok && r?.chargeId && r?.emv) {
+    if(r?.ok && r?.chargeId && (r?.emv || r?.qrCode)) {
       post({type:"PIX_RESULT",ok:true,checkoutId,chargeId,status:r.status||"pending",
         approved:r.approved===true,amount:Number(r.amount||ctx.valor),emv:r.emv,qrCode:r.qrCode||"",deliveryUrl:deliveryUrl()});
     } else {
@@ -796,7 +798,7 @@ async function createPix(data={}) {
   try {
     const r=await waitTimeout(criarCobrancaPixTransparente(basePayload(data)),PIX_CREATE_TIMEOUT,"A ValidaPay ainda está finalizando o Pix.");
     if(r?.chargeId) chargeId=safe(r.chargeId);
-    if(r?.ok && r?.chargeId && r?.emv) {
+    if(r?.ok && r?.chargeId && (r?.emv || r?.qrCode)) {
       post({type:"PIX_RESULT",ok:true,checkoutId,chargeId,status:r.status||"pending",
         approved:r.approved===true,amount:Number(r.amount||ctx.valor),emv:r.emv,qrCode:r.qrCode||"",deliveryUrl:deliveryUrl()});
     } else if(!(r?.recoverable || r?.processing)) {

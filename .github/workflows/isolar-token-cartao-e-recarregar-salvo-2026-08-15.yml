@@ -38,8 +38,8 @@ jobs:
           git config user.email "pelegobox82@gmail.com"
           git pull --rebase origin main
 
-      - name: Instalar dependências
-        run: npm ci
+      - name: Instalar dependências sem postinstall interativo
+        run: npm ci --ignore-scripts
 
       - name: Aplicar correção isolada
         run: |

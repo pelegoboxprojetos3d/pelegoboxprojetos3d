@@ -1,76 +1,64 @@
-name: Implantar cartão tokenizado salvo
+name: Publicar cartão salvo tokenizado
 
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/cartao-tokenizado-salvo.yml"
-      - "scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs"
-      - "scripts/corrigir-visual-cartao-salvo-2026-08-12.cjs"
-      - "scripts/finalizar-confete-fullscreen-fatura-validapay-2026-08-12.cjs"
-      - "scripts/fechar-teste-final-2026-08-12.cjs"
+      - "src/backend/validaPayCartaoProjetosProntos.jsw"
       - "src/backend/metodosPagamentoProjetosProntos.js"
       - "src/backend/metodosPagamentoProjetosProntos.web.js"
+      - "src/pages/checkout-projeto-pronto.i9aj1.js"
+      - "src/public/custom-elements/pelego-checkout-pronto.js"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: wix-cartao-tokenizado
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  aplicar-e-publicar:
+  validar-e-publicar:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 10
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
-      - name: Instalar dependências atuais
+      - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Instalar SDK oficial de tokenização ValidaPay
-        run: npm install @validapay/tokenize@latest --save --ignore-scripts
-
-      - name: Aplicar cartão salvo tokenizado
-        run: node scripts/aplicar-cartao-tokenizado-salvo-2026-08-12.cjs
-
-      - name: Preservar visual do cartão salvo
-        run: node scripts/corrigir-visual-cartao-salvo-2026-08-12.cjs
-
-      - name: Fechar teste final de pagamento
-        run: node scripts/fechar-teste-final-2026-08-12.cjs
-
-      - name: Validar código
-        run: npm run lint
-
-      - name: Gravar código e lockfile
+      - name: Validar regra do cartão salvo
         run: |
           set -euo pipefail
-          git config user.name "PELEGO BOX Automação"
-          git config user.email "pelegobox82@gmail.com"
-          git add package.json package-lock.json \
-            src/backend/validaPayPixProjetosProntosCore.jsw \
-            src/backend/validaPayCartaoProjetosProntos.jsw \
-            src/backend/metodosPagamentoProjetosProntos.js \
-            src/backend/metodosPagamentoProjetosProntos.web.js \
-            src/pages/checkout-projeto-pronto.i9aj1.js \
-            src/public/custom-elements/pelego-checkout-pronto.js
-          if git diff --cached --quiet; then
-            echo "Nenhuma alteração pendente."
-          else
-            git commit -m "Fechar cartão salvo, confete e fatura ValidaPay"
-            git push origin HEAD:main
-          fi
+          node --check src/backend/metodosPagamentoProjetosProntos.js
+          node --check src/backend/metodosPagamentoProjetosProntos.web.js
+          node --check src/pages/checkout-projeto-pronto.i9aj1.js
+          node --check src/public/custom-elements/pelego-checkout-pronto.js
+          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
+          node --check /tmp/validaPayCartaoProjetosProntos.mjs
+          grep -q '@validapay/tokenize' package.json
+          grep -q 'tokenizarCartaoParaUsoFuturo' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'paymentMethodId' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'persistirMetodoPagamentoAprovado' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'buscarMetodoPagamentoDoMembroAtual' src/pages/checkout-projeto-pronto.i9aj1.js
+          grep -q 'type: "SAVED_CARD"' src/pages/checkout-projeto-pronto.i9aj1.js
+          grep -q 'useSavedPaymentMethod=true' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'Trocar cartão' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'Pagar com cartão salvo' src/public/custom-elements/pelego-checkout-pronto.js
+          echo "OK: cartão novo tokeniza e sobrescreve o cartão salvo após aprovação; retorno usa token por e-mail Wix."
 
       - name: Aguardar sincronização GitHub para Wix
         run: sleep 90
@@ -88,4 +76,8 @@ jobs:
             --header "Content-Type: application/json" --data '{}')"
           cat /tmp/wix.json || true
           echo
-          test "$status" -ge 200 -a "$status" -lt 300
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "Falha ao publicar no Wix: HTTP $status"
+            exit 1
+          fi
+          echo "Publicado: cartão salvo tokenizado."

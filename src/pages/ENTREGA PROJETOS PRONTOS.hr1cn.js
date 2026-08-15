@@ -3452,11 +3452,20 @@ $w.onReady(async function () {
     if (typeof repetidor.hide === "function") repetidor.hide();
   } catch (_) {}
 
-  try {
-    const processando = $w(IDS.processando);
-    if (typeof processando.hide === "function") processando.hide();
-    if (typeof processando.collapse === "function") processando.collapse();
-  } catch (_) {}
+  if (acessoDireto) {
+    // Link de e-mail/checkout: mantém a impressora fechada até validar a conta.
+    try {
+      const processando = $w(IDS.processando);
+      if (typeof processando.hide === "function") processando.hide();
+      if (typeof processando.collapse === "function") processando.collapse();
+    } catch (_) {}
+  } else {
+    // IMPRESSORA_CENTRAL_IMEDIATA_V2
+    // Central pelo avatar: abre a impressora antes de qualquer consulta remota,
+    // eliminando o quadro intermediário em que aparecia somente o rodapé.
+    processamentoVisualEncerrado = false;
+    blindarAberturaEntrega();
+  }
 
   for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {
     try {
@@ -3534,11 +3543,10 @@ $w.onReady(async function () {
     });
   } else {
     /*
-      Entrada pelo avatar: não existe produto específico sendo entregue.
-      Portanto não existe motivo para mostrar a impressora enquanto a central
-      consulta se o membro possui projetos.
+      A central já abriu a impressora imediatamente no começo do onReady.
+      Ela permanece visível enquanto os projetos são consultados e renderizados.
     */
-    processamentoVisualEncerrado = true;
+    processamentoVisualEncerrado = false;
   }
 
   carregarEntrega().catch((erro) => {

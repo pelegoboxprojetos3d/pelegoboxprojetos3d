@@ -1,0 +1,50 @@
+name: Publicar tokenização via wix-fetch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publicar-tokenizacao-wix-fetch-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validar hotfix
+        run: |
+          set -euo pipefail
+          node --check src/backend/salvarCartaoValidaPay.web.js
+          grep -q 'CARTAO_TOKEN_WIX_FETCH_V2' src/backend/salvarCartaoValidaPay.web.js
+          grep -q 'https://api.validapay.com.br/v1/payment-methods/tokenize' src/backend/salvarCartaoValidaPay.web.js
+          grep -q 'payment.methods/write' src/backend/salvarCartaoValidaPay.web.js
+          if grep -q '@validapay/tokenize' src/backend/salvarCartaoValidaPay.web.js; then
+            echo 'ERRO: módulo isolado ainda depende do fetch global do SDK.'
+            exit 1
+          fi
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          f="$(mktemp)"
+          s="$(curl --silent --show-error --output "$f" --write-out "%{http_code}" --request POST \
+            'https://www.wixapis.com/site-publisher/v1/site/publish' \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header 'Content-Type: application/json' \
+            --data '{}')"
+          cat "$f"
+          echo
+          echo "HTTP $s"
+          test "$s" -ge 200 && test "$s" -lt 300

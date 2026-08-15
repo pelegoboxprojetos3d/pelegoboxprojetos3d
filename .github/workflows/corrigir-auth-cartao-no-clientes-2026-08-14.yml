@@ -1,0 +1,206 @@
+name: Corrigir auth cartão no clientes
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/corrigir-auth-cartao-no-clientes-2026-08-14.yml
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar correção
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          clientes = Path('src/backend/clientes.web.js')
+          c = clientes.read_text(encoding='utf-8')
+
+          marker = 'AUTORIZACAO_CARTAO_NO_CLIENTES_V1'
+          if marker not in c:
+              c += r'''
+
+// AUTORIZACAO_CARTAO_NO_CLIENTES_V1
+// Reutiliza o mesmo módulo de membro que já alimenta o checkout corretamente.
+// A autorização é vinculada ao checkoutId e nunca depende de e-mail vindo do HTML.
+export const autorizarPagamentoCartaoMembro =
+  webMethod(
+    Permissions.SiteMember,
+
+    async (input = {}) => {
+      try {
+        const checkoutId =
+          safe(input?.checkoutId);
+
+        if (!checkoutId) {
+          return {
+            ok: false,
+            error: "Checkout inválido. Atualize a página e tente novamente."
+          };
+        }
+
+        const membro =
+          await currentMemberBackend.getMember();
+
+        const memberId =
+          safe(membro?._id);
+
+        const emailsContato =
+          Array.isArray(
+            membro?.contactDetails?.emails
+          )
+            ? membro.contactDetails.emails
+            : [];
+
+        const memberEmail =
+          limparEmail(
+            membro?.loginEmail ||
+            emailsContato[0] ||
+            membro?.contactDetails?.email
+          );
+
+        if (!memberId || !memberEmail) {
+          return {
+            ok: false,
+            error: "Não foi possível confirmar a conta Wix ativa."
+          };
+        }
+
+        const resultado =
+          await wixData
+            .query(SESSIONS_COLLECTION)
+            .eq("checkoutId", checkoutId)
+            .limit(1)
+            .find({
+              ...DB_OPTS,
+              consistentRead: true
+            });
+
+        const agora = new Date();
+
+        if (resultado.items.length) {
+          const sessao = {
+            ...resultado.items[0],
+            memberId,
+            email: memberEmail,
+            updatedAtDate: agora
+          };
+
+          delete sessao.whatsApp;
+          delete sessao.whatsappE164;
+
+          await wixData.update(
+            SESSIONS_COLLECTION,
+            sessao,
+            DB_OPTS
+          );
+        } else {
+          await wixData.insert(
+            SESSIONS_COLLECTION,
+            {
+              checkoutId,
+              memberId,
+              email: memberEmail,
+              status: "pending_auth",
+              updatedAtDate: agora
+            },
+            DB_OPTS
+          );
+        }
+
+        return {
+          ok: true,
+          memberId,
+          email: memberEmail
+        };
+      } catch (error) {
+        console.error(
+          "AUTORIZACAO CARTAO MEMBRO:",
+          error?.message || error
+        );
+
+        return {
+          ok: false,
+          error: "Não foi possível confirmar a conta Wix ativa."
+        };
+      }
+    }
+  );
+'''
+              clientes.write_text(c, encoding='utf-8')
+
+          page = Path('src/pages/checkout-projeto-pronto.i9aj1.js')
+          p = page.read_text(encoding='utf-8')
+
+          old_import = 'import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual } from "backend/clientes.web";'
+          new_import = 'import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual, autorizarPagamentoCartaoMembro } from "backend/clientes.web";'
+          if old_import in p:
+              p = p.replace(old_import, new_import, 1)
+          elif new_import not in p:
+              raise SystemExit('Import de clientes.web não encontrado')
+
+          p = p.replace('import { autorizarPagamentoCartao } from "backend/validaPayCartaoAuth.web";\n', '')
+
+          old_call = 'autorizarPagamentoCartao({checkoutId})'
+          new_call = 'autorizarPagamentoCartaoMembro({checkoutId})'
+          if old_call in p:
+              p = p.replace(old_call, new_call, 1)
+          elif new_call not in p:
+              raise SystemExit('Chamada de autorização do cartão não encontrada')
+
+          page.write_text(p, encoding='utf-8')
+          PY
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        shell: bash
+        run: |
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/clientes.web.js src/pages/checkout-projeto-pronto.i9aj1.js
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+          else
+            git commit -m "Usar autenticação já estável do membro no cartão"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar Wix receber o código
+        run: sleep 45
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          cat "$response_file"
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

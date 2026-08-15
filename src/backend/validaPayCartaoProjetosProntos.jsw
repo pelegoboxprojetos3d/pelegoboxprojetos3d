@@ -26,6 +26,116 @@ let tokenExpiresAt = 0;
 const safe = v => String(v ?? "").trim();
 const digits = v => safe(v).replace(/\D/g, "");
 
+// CARTAO_SALVO_POS_COBRANCA_ISOLADO_V1
+// REGRA DE SEGURANCA DA VENDA:
+// 1) a cobranca normal com card bruto acontece primeiro e continua intocada;
+// 2) somente DEPOIS de a ValidaPay aceitar/criar a cobranca tentamos tokenizar;
+// 3) qualquer falha de tokenizacao vira apenas log e nunca altera ok/approved da venda;
+// 4) PAN e CVV nunca sao persistidos no Wix. Somente paymentMethodId e metadados.
+async function tentarSalvarCartaoDepoisDaCobranca({
+  checkoutId, chargeId, approved, email, memberId, clienteId, customerId,
+  number, cvv, month, year, holder, customerName, cardDocument
+} = {}) {
+  try {
+    const modulo = await import("@validapay/tokenize");
+    const tokenize = modulo?.tokenize || modulo?.default?.tokenize || modulo?.default;
+    if (typeof tokenize !== "function") {
+      return { ok: false, saved: false, reason: "sdk_tokenize_indisponivel" };
+    }
+
+    const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+    const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+    if (!clientId || !clientSecret) {
+      return { ok: false, saved: false, reason: "credenciais_tokenizacao_ausentes" };
+    }
+
+    const tokenPromise = tokenize({
+      clientId,
+      clientSecret,
+      card: {
+        number: digits(number),
+        cardHolderName: safe(holder).replace(/\s+/g, " ").toUpperCase(),
+        cvv: digits(cvv),
+        expiration: digits(month).padStart(2, "0").slice(-2) + "/" + digits(year).slice(-4)
+      },
+      customer: {
+        name: safe(customerName),
+        document: digits(cardDocument),
+        email: safe(email).toLowerCase()
+      }
+    });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("TOKENIZE_TIMEOUT_5000MS")), 5000)
+    );
+    const result = await Promise.race([tokenPromise, timeoutPromise]);
+    const paymentMethodId = safe(result?.paymentMethodId);
+    if (!paymentMethodId) {
+      return { ok: false, saved: false, reason: "payment_method_id_ausente" };
+    }
+
+    const metadata = {
+      paymentMethodId,
+      validaPayCustomerId: safe(result?.customerId || customerId),
+      cardBrand: safe(result?.cardBrand).toUpperCase() || brand(number),
+      cardLastFour: digits(result?.cardLastFour).slice(-4) || digits(number).slice(-4),
+      cardExpirationMonth: digits(result?.cardExpirationMonth).padStart(2, "0").slice(-2) || digits(month).padStart(2, "0").slice(-2),
+      cardExpirationYear: digits(result?.cardExpirationYear).slice(-4) || digits(year).slice(-4),
+      cardHolderName: safe(result?.cardHolderName || holder).replace(/\s+/g, " ").toUpperCase(),
+      cardDocument: digits(cardDocument)
+    };
+
+    // A sessao guarda apenas o token/metadados seguros. Se a cobranca estiver
+    // pending, o finalize posterior conseguira salvar o mesmo cartao ao aprovar.
+    await saveSession(checkoutId, {
+      pendingPaymentMethodId: metadata.paymentMethodId,
+      pendingValidaPayCustomerId: metadata.validaPayCustomerId,
+      pendingCardBrand: metadata.cardBrand,
+      pendingCardLastFour: metadata.cardLastFour,
+      pendingCardExpirationMonth: metadata.cardExpirationMonth,
+      pendingCardExpirationYear: metadata.cardExpirationYear,
+      pendingCardHolderName: metadata.cardHolderName,
+      pendingCardDocument: metadata.cardDocument,
+      updatedAtDate: new Date()
+    });
+
+    // Se ja aprovou, atualiza imediatamente o cartao salvo do e-mail Wix.
+    // Se ainda esta pending, persistirMetodoPagamentoAprovado fara isso depois.
+    if (approved === true) {
+      await salvarMetodoPagamentoAprovado({
+        email: safe(email).toLowerCase(),
+        memberId: safe(memberId),
+        clienteId: safe(clienteId),
+        paymentMethodId: metadata.paymentMethodId,
+        validaPayCustomerId: metadata.validaPayCustomerId,
+        cardBrand: metadata.cardBrand,
+        cardLastFour: metadata.cardLastFour,
+        cardExpirationMonth: metadata.cardExpirationMonth,
+        cardExpirationYear: metadata.cardExpirationYear,
+        cardHolderName: metadata.cardHolderName,
+        cardDocument: metadata.cardDocument,
+        ultimoPagamentoId: safe(chargeId)
+      });
+    }
+
+    return {
+      ok: true,
+      saved: approved === true,
+      tokenReady: true,
+      cardBrand: metadata.cardBrand,
+      cardLastFour: metadata.cardLastFour
+    };
+  } catch (error) {
+    // ABSOLUTAMENTE NADA daqui pode transformar uma venda aprovada em erro.
+    console.warn("Cartao salvo pos-cobranca ignorado:", error?.message || error);
+    return {
+      ok: false,
+      saved: false,
+      reason: "tokenizacao_pos_cobranca_falhou"
+    };
+  }
+}
+
 async function identidadeMembroAtualCartao(checkoutId = "") {
   try {
     const membro = await currentMemberBackend.getMember();
@@ -942,6 +1052,29 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       finalization = await finalizeApprovedCard({ checkoutId, chargeId: id });
     }
 
+    // CARTAO_SALVO_NAO_BLOQUEIA_VENDA_V1
+    // A cobranca e toda a finalizacao critica ja aconteceram. Somente agora
+    // tentamos gerar o token reutilizavel. O resultado nunca muda ok/approved.
+    let cartaoSalvo = { ok: true, saved: false, skipped: true };
+    if (!useSavedPaymentMethod) {
+      cartaoSalvo = await tentarSalvarCartaoDepoisDaCobranca({
+        checkoutId,
+        chargeId: id,
+        approved,
+        email,
+        memberId,
+        clienteId,
+        customerId: customerIdRetornado,
+        number,
+        cvv,
+        month,
+        year,
+        holder,
+        customerName: nome,
+        cardDocument
+      });
+    }
+
     return {
       ok: response.data?.success !== false,
       approved,
@@ -957,7 +1090,13 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       compraRegistrada: finalization.compraRegistrada === true,
       purchaseId: safe(finalization.purchaseId),
       tokenEntrega: safe(finalization.tokenEntrega),
-      make: finalization.make
+      make: finalization.make,
+      cartaoSalvo: {
+        ok: cartaoSalvo?.ok === true,
+        saved: cartaoSalvo?.saved === true,
+        tokenReady: cartaoSalvo?.tokenReady === true,
+        reason: safe(cartaoSalvo?.reason)
+      }
     };
   } catch (error) {
     console.error("ERRO CARTAO VALIDAPAY:", error?.message || error);

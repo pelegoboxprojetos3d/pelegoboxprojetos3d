@@ -1,0 +1,98 @@
+name: Gravar cartão aprovado para compras futuras
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/gravar-metadados-cartao-aprovado-2026-08-15.cjs"
+      - ".github/workflows/gravar-metadados-cartao-aprovado-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gravar-cartao-aprovado-projetos-prontos
+  cancel-in-progress: false
+
+jobs:
+  corrigir-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Atualizar main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Instalar dependências
+        run: npm install --ignore-scripts
+
+      - name: Aplicar regra do cartão salvo
+        run: |
+          set -euo pipefail
+          node --check scripts/gravar-metadados-cartao-aprovado-2026-08-15.cjs
+          node scripts/gravar-metadados-cartao-aprovado-2026-08-15.cjs
+          node --check src/backend/metodosPagamentoProjetosProntos.js
+          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
+          node --check /tmp/validaPayCartaoProjetosProntos.mjs
+          grep -q 'CARTAO_SALVO_TOKENIZADO_V1' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'tokenizeValidaPayCard' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'chargePayload.paymentMethodId = paymentMethodId' src/backend/validaPayCartaoProjetosProntos.jsw
+          grep -q 'SEM_TOKEN:' src/backend/metodosPagamentoProjetosProntos.js
+          git diff --check
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git add -- \
+            src/backend/validaPayCartaoProjetosProntos.jsw \
+            src/backend/metodosPagamentoProjetosProntos.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Salvar cartão tokenizado por membro Wix"
+          else
+            echo "Regra já estava aplicada."
+          fi
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+          echo "Publicado: cartão tokenizado salvo por e-mail do membro Wix."

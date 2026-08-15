@@ -1,0 +1,101 @@
+name: Corrigir autenticação cartão mobile
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/corrigir-cartao-auth-sessao-verificada-2026-08-15.cjs"
+      - ".github/workflows/corrigir-cartao-auth-sessao-verificada-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-cartao-auth-sessao-verificada
+  cancel-in-progress: false
+
+jobs:
+  corrigir-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Atualizar base antes do hotfix
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Aplicar correção cirúrgica
+        run: |
+          set -euo pipefail
+          node scripts/corrigir-cartao-auth-sessao-verificada-2026-08-15.cjs
+          node --check src/backend/clientes.web.js
+          node --check src/pages/checkout-projeto-pronto.i9aj1.js
+          node --check src/backend/validaPayCartaoProjetosProntos.jsw
+          git diff --check
+
+      - name: Validar regra
+        run: |
+          set -euo pipefail
+          grep -q "CHECKOUT_MEMBRO_VERIFICADO_V1" src/backend/clientes.web.js
+          grep -q "CARTAO_SESSAO_MEMBRO_VERIFICADA_V1" src/pages/checkout-projeto-pronto.i9aj1.js
+          grep -q "authMemberVerified === true" src/backend/validaPayCartaoProjetosProntos.jsw
+          if grep -q "autorizarPagamentoCartaoMembro" src/pages/checkout-projeto-pronto.i9aj1.js; then
+            echo "Autorização redundante ainda está na página"
+            exit 1
+          fi
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git add -- \
+            src/backend/clientes.web.js \
+            src/pages/checkout-projeto-pronto.i9aj1.js \
+            src/backend/validaPayCartaoProjetosProntos.jsw
+          if ! git diff --cached --quiet; then
+            git commit -m "Corrigir autenticação do cartão no mobile"
+          else
+            echo "Nenhuma alteração adicional para gravar."
+          fi
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

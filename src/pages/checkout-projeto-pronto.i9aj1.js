@@ -1,8 +1,9 @@
 import wixLocation from "wix-location";
 import wixData from "wix-data";
 import { local, session } from "wix-storage-frontend";
-import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual } from "backend/clientes.web";
+import { criarCliente, buscarClienteCadastrado, buscarClienteDoMembroAtual, autorizarPagamentoCartaoMembro } from "backend/clientes.web";
 import { buscarMetodoPagamentoDoMembroAtual } from "backend/metodosPagamentoProjetosProntos.web";
+import { autorizarPagamentoCartao } from "backend/validaPayCartaoAuth.web";
 import { criarCobrancaPixTransparente, consultarCobrancaPix } from "backend/validaPayPixProjetosProntos.jsw";
 import { criarCobrancaCartaoTransparente, consultarCobrancaCartaoTransparente } from "backend/validaPayCartaoProjetosProntosSeguro.jsw";
 import { obterAcessosProjeto, buscarEntregaProjetoPronto } from "backend/entregaProjetosProntos.jsw";
@@ -850,10 +851,28 @@ async function createCard(data={}) {
   stopCardPoll();
   post({type:"CARD_LOADING",checkoutId,message:"Processando cartão com segurança..."});
   try {
-    // CARTAO_SESSAO_MEMBRO_VERIFICADA_V1
-    // A identidade já foi confirmada no preflight SiteMember e vinculada ao
-    // checkout. A cobrança faz a validação final no backend; não repetimos
-    // aqui uma chamada de membro que no Chrome mobile pode perder o contexto.
+    // CARTAO_AUTH_CONSOLIDADA_V2
+    // O preflight melhora a UX, mas não é mais pré-requisito para pagar.
+    // No clique, renovamos a prova da conta Wix. Primeiro usamos a rota
+    // SiteMember que estava funcionando na compra aprovada #1796; se ela
+    // falhar por contexto transitório, tentamos a API de Members v2.
+    let authResult = null;
+    try {
+      authResult = await waitTimeout(autorizarPagamentoCartaoMembro({ checkoutId }), 4500, "");
+    } catch (_) {}
+    if (!authResult?.ok) {
+      try {
+        authResult = await waitTimeout(autorizarPagamentoCartao({ checkoutId }), 4500, "");
+      } catch (_) {}
+    }
+    if (authResult?.ok && authResult?.email) {
+      ctx.email = email(authResult.email);
+      saveIdentity({ email: ctx.email });
+    }
+
+    // A cobrança continua sendo a autoridade final. Se as duas renovações
+    // acima falharem, ela ainda pode aceitar o membro atual ou uma prova
+    // recente já gravada, evitando falso "faça login novamente".
     const r=await waitTimeout(criarCobrancaCartaoTransparente({
       ...basePayload(data),
       card:data.card||{},
@@ -1006,6 +1025,10 @@ function back() {
 $w.onReady(function(){
   checkoutId=safe(wixLocation.query?.checkoutId) || `ckpro_${Date.now().toString(36)}_${Math.random().toString(16).slice(2,10)}`;
   ctx=contextFromUrl();
+  // CHECKOUT_FAST_BOOT_SEM_LOGIN_V4
+  // Título, produto e formulário podem abrir imediatamente. A leitura do
+  // membro segue em paralelo e atualiza os dados assim que responder.
+  contextReady=true;
   configurarBannersPagamento(ctx.tipoProduto).catch(error => {
     console.error("Falha ao configurar banners do checkout de pagamento:", error?.message || error);
   });
@@ -1041,24 +1064,12 @@ $w.onReady(function(){
     O contexto da URL + storage é enviado imediatamente e as consultas
     complementares continuam em paralelo, sem bloquear a renderização.
   */
-  // BOOT_CLIENTE_RECORRENTE_V2
-  // Depois de limpar histórico ou trocar de aparelho não existe storage local.
-  // Antes de mostrar Nome/CPF/WhatsApp, aguardamos a consulta da conta Wix
-  // autenticada. O próprio backend tem timeout de 5 s, então este preflight
-  // apenas impede o formulário errado de aparecer antes da resposta.
-  const contextoAutenticadoPromise =
-    carregarContextoClienteAutenticado();
-
-  // LOGIN_COLECOES_SEM_CORRIDA_V3
-  // Não libera o formulário por cronômetro. Primeiro deixa a conta Wix
-  // autenticada terminar a leitura das coleções. A própria consulta possui
-  // limite de segurança, portanto o checkout não fica preso indefinidamente.
-  contextoAutenticadoPromise
-    .catch(() => {})
-    .finally(() => {
-      contextReady = true;
-      sendInit(true);
-    });
+  // BOOT_CLIENTE_RECORRENTE_V3
+  // A conta Wix e as coleções são carregadas em segundo plano. Elas podem
+  // completar o contexto do comprador, mas nunca mais seguram o INIT do
+  // checkout nem deixam a tela presa em "Carregando checkout...".
+  const contextoAutenticadoPromise = carregarContextoClienteAutenticado();
+  contextoAutenticadoPromise.catch(() => {});
 
   carregarMetodoPagamentoSalvo().catch(console.error);
 

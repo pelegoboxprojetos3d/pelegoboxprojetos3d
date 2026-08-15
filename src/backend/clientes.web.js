@@ -1390,6 +1390,11 @@ export const autorizarPagamentoCartaoMembro =
             ...resultado.items[0],
             memberId,
             email: memberEmail,
+            authMemberVerified: true,
+            authVerifiedAt: agora,
+            cardAuthMemberId: memberId,
+            cardAuthEmail: memberEmail,
+            cardAuthAt: agora,
             updatedAtDate: agora
           };
 
@@ -1408,6 +1413,11 @@ export const autorizarPagamentoCartaoMembro =
               checkoutId,
               memberId,
               email: memberEmail,
+              authMemberVerified: true,
+              authVerifiedAt: agora,
+              cardAuthMemberId: memberId,
+              cardAuthEmail: memberEmail,
+              cardAuthAt: agora,
               status: "pending_auth",
               updatedAtDate: agora
             },

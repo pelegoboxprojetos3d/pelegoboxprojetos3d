@@ -43,15 +43,25 @@ async function identidadeMembroAtualCartao(checkoutId = "") {
     const sessao = await findSession(id);
     const memberId = safe(sessao?.memberId);
     const email = safe(sessao?.email).toLowerCase();
-    const autenticacaoConfirmada = sessao?.authMemberVerified === true;
-    const timestamp = new Date(sessao?.authVerifiedAt || 0).getTime();
-    const age = Date.now() - timestamp;
-    const autorizacaoRecente =
-      Number.isFinite(age) &&
-      age >= 0 &&
-      age <= 30 * 60 * 1000;
 
-    if (memberId && email && autenticacaoConfirmada && autorizacaoRecente) {
+    const authTimestamp = new Date(sessao?.authVerifiedAt || 0).getTime();
+    const authAge = Date.now() - authTimestamp;
+    const provaCanonicaRecente =
+      sessao?.authMemberVerified === true &&
+      Number.isFinite(authAge) &&
+      authAge >= 0 &&
+      authAge <= 30 * 60 * 1000;
+
+    const cardAuthTimestamp = new Date(sessao?.cardAuthAt || 0).getTime();
+    const cardAuthAge = Date.now() - cardAuthTimestamp;
+    const provaCartaoRecente =
+      safe(sessao?.cardAuthMemberId) === memberId &&
+      safe(sessao?.cardAuthEmail).toLowerCase() === email &&
+      Number.isFinite(cardAuthAge) &&
+      cardAuthAge >= 0 &&
+      cardAuthAge <= 30 * 60 * 1000;
+
+    if (memberId && email && (provaCanonicaRecente || provaCartaoRecente)) {
       return { memberId, email };
     }
   } catch (_) {}

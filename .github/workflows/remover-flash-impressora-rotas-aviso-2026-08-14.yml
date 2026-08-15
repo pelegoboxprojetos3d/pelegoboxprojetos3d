@@ -38,8 +38,13 @@ jobs:
           set -euo pipefail
           cp "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js" /tmp/entrega.mjs
           node --check /tmp/entrega.mjs
-          grep -q 'ROTA_SEM_FLASH_V1' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-          grep -q 'Pré-validação da entrega' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'PREFLIGHT_CENTRAL_SEM_FLASH_V3' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'IMPRESSORA_CENTRAL_COM_PROJETOS_V1' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          grep -q 'motivo: "sem_produtos"' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if grep -q 'IMPRESSORA_CENTRAL_IMEDIATA_V2' "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"; then
+            echo "ERRO: lógica antiga ainda abre a impressora antes da consulta da conta."
+            exit 1
+          fi
 
       - name: Gravar no main
         run: |
@@ -50,7 +55,7 @@ jobs:
             git config user.name "PELEGO BOX Automação"
             git config user.email "pelegobox82@gmail.com"
             git add "src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
-            git commit -m "Remover flash da impressora antes dos avisos"
+            git commit -m "Evitar flash da impressora para conta sem projetos"
             git pull --rebase origin main
             git push origin HEAD:main
           fi

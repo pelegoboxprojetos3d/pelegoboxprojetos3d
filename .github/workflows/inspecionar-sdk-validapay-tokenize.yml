@@ -23,3 +23,35 @@ jobs:
           tar -xzf "$tarball"
           echo '=== INDEX.JS COMPLETO ==='
           cat package/index.js
+      - name: Testar OAuth se credenciais também existirem no GitHub
+        env:
+          CID: ${{ secrets.VALIDAPAY_CLIENT_ID }}
+          CSEC: ${{ secrets.VALIDAPAY_CLIENT_SECRET }}
+        run: |
+          set -u
+          if [ -z "${CID:-}" ] || [ -z "${CSEC:-}" ]; then
+            echo 'GITHUB_VALIDAPAY_SECRETS=ABSENT'
+            exit 0
+          fi
+          body="$(mktemp)"
+          code="$(curl --silent --show-error --output "$body" --write-out '%{http_code}' \
+            -X POST 'https://oauth2.validapay.com.br/auth/token' \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=client_credentials' \
+            --data-urlencode "client_id=$CID" \
+            --data-urlencode "client_secret=$CSEC" \
+            --data-urlencode 'scope=payment.methods/write' || true)"
+          echo "OAUTH_HTTP=$code"
+          python - "$body" <<'PY'
+          import json,sys
+          p=sys.argv[1]
+          try:
+              d=json.load(open(p))
+          except Exception:
+              print('OAUTH_BODY=NON_JSON')
+              raise SystemExit
+          print('TOKEN_RECEIVED=' + ('YES' if bool(d.get('access_token')) else 'NO'))
+          print('GRANTED_SCOPE=' + str(d.get('scope','')))
+          err=d.get('error_description') or d.get('message') or d.get('error') or d.get('code') or ''
+          print('ERROR=' + str(err)[:300])
+          PY

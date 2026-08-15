@@ -21,7 +21,7 @@ const PIX_INTERVAL = 2000;
 const PIX_MAX = 300;
 const CARD_DELIVERY_INTERVAL = 1500;
 const CARD_DELIVERY_MAX = 80;
-const AUTH_CONTEXT_PREFLIGHT_MAX = 5200; // LOGIN_LIMPO_REAPROVEITA_CADASTRO_V2
+const AUTH_CONTEXT_PREFLIGHT_MAX = 12000; // LOGIN_COLECOES_SEM_CORRIDA_V3
 
 let ctx = {};
 let checkoutId = "";
@@ -876,7 +876,7 @@ async function createCard(data={}) {
 
 async function carregarContextoClienteAutenticado() {
   try {
-    const perfil = await waitTimeout(buscarClienteDoMembroAtual(), 5000, "");
+    const perfil = await waitTimeout(buscarClienteDoMembroAtual(), AUTH_CONTEXT_PREFLIGHT_MAX, "");
     const cliente = perfil?.cliente && typeof perfil.cliente === "object" ? perfil.cliente : null;
     const mail = email(perfil?.email || cliente?.email || ctx.email);
     const ddi = "55";
@@ -1033,10 +1033,11 @@ $w.onReady(function(){
   const contextoAutenticadoPromise =
     carregarContextoClienteAutenticado();
 
-  Promise.race([
-    contextoAutenticadoPromise,
-    new Promise((resolve) => setTimeout(resolve, AUTH_CONTEXT_PREFLIGHT_MAX))
-  ])
+  // LOGIN_COLECOES_SEM_CORRIDA_V3
+  // Não libera o formulário por cronômetro. Primeiro deixa a conta Wix
+  // autenticada terminar a leitura das coleções. A própria consulta possui
+  // limite de segurança, portanto o checkout não fica preso indefinidamente.
+  contextoAutenticadoPromise
     .catch(() => {})
     .finally(() => {
       contextReady = true;

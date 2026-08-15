@@ -781,7 +781,17 @@ function hydrate(ctx){
  var wantedDdi=digits(S.ctx.ddi||"55")||"55",wantedCountry=safe(S.ctx.country||"br").toLowerCase();if(E.country)E.country.value=wantedDdi+"|"+wantedCountry;if(E.countryConfirm)E.countryConfirm.value=wantedDdi+"|"+wantedCountry;if(itiPhone)setItiCountry(itiPhone,wantedCountry);if(itiPhoneConfirm)setItiCountry(itiPhoneConfirm,wantedCountry);var ci=countryInfo(E.country),p=phoneLocal(S.ctx.whatsappE164||S.ctx.whatsapp,ci.ddi);if(p)E.phone.value=formatPhone(p,ci.ddi);if(E.phoneConfirm)E.phoneConfirm.value="";
  if(S.ctx.nome)E.name.value=safe(S.ctx.nome);
  if(S.ctx.cpfCnpj)E.cpf.value=formatCpf(S.ctx.cpfCnpj);
- if(S.ctx.email){E.email.value=email(S.ctx.email);E.email2.value=email(S.ctx.email)}
+ if(S.ctx.email){
+   var lockedMail=email(S.ctx.email);
+   E.email.value=lockedMail;E.email2.value=lockedMail;
+   [E.email,E.email2].forEach(function(node){
+     if(!node)return;
+     node.readOnly=true;
+     node.setAttribute("readonly","readonly");
+     node.setAttribute("aria-readonly","true");
+     node.autocomplete="email";
+   });
+ }
  hydrateCardIdentity(S.ctx);
  fillInstallments();
  syncIdentityButton();
@@ -1172,7 +1182,19 @@ window.addEventListener("message",function(event){
 if(type==="SAVED_CARD"){S.savedCard=d.existe===true?{...d,existe:true}:null;if(!E.cardMode.classList.contains("hidden"))applySavedCardMode(Boolean(S.savedCard));return}
 if(type==="INIT"){S.checkoutId=safe(d.checkoutId);hydrate(d.ctx||{});var boot=$("checkoutBoot"),main=$("checkoutMain");if(boot)boot.classList.add("hidden");if(main)main.style.display="block";document.body.style.visibility="visible";setStep(1);if(d.skipIdentity===true){S.paymentReady=false;showPayment()}else{layoutMode("INITIAL")}return}
  if(type==="CUSTOMER_CONTEXT"){
-   if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);if(d.nome)S.ctx.nome=safe(d.nome);if(d.email)S.ctx.email=email(d.email);if(d.cpfCnpj)S.ctx.cpfCnpj=digits(d.cpfCnpj);hydrateCardIdentity(d);return
+   if(d.clienteId)S.ctx.clienteId=safe(d.clienteId);
+   if(d.nome)S.ctx.nome=safe(d.nome);
+   if(d.email){
+     S.ctx.email=email(d.email);
+     E.email.value=S.ctx.email;E.email2.value=S.ctx.email;
+     [E.email,E.email2].forEach(function(node){if(node){node.readOnly=true;node.setAttribute("readonly","readonly");node.setAttribute("aria-readonly","true")}});
+   }
+   if(d.cpfCnpj){S.ctx.cpfCnpj=digits(d.cpfCnpj);E.cpf.value=formatCpf(S.ctx.cpfCnpj)}
+   if(d.whatsapp||d.whatsappE164){
+     var ciCtx=countryInfo(E.country),pCtx=phoneLocal(d.whatsappE164||d.whatsapp,ciCtx.ddi);
+     if(pCtx){S.ctx.whatsapp=pCtx;S.ctx.whatsappE164="+"+ciCtx.ddi+pCtx;E.phone.value=formatPhone(pCtx,ciCtx.ddi)}
+   }
+   hydrateCardIdentity(d);syncIdentityButton();return
  }
  if(["CUSTOMER_READY","DATA_SAVED","PAYMENT_READY","SHOW_PAYMENT"].indexOf(type)>=0){
    if(d.ok===false){S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"error",safe(d.error)||"Não foi possível salvar os dados.");return}

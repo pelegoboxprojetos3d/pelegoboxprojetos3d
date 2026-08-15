@@ -776,9 +776,12 @@ async function pollCardDelivery(n=1) {
         imediatamente em vez de esperar Make/OneDrive terminar os arquivos.
       */
       stopCardPoll();
-      salvarCartaoAprovadoSemBloquearVenda(chargeId).catch(console.error);
       post({type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,processing:false,checkoutId,chargeId,status:cardStatus || "paid",deliveryUrl:deliveryUrl()});
-      abrirEntregaComFallback(1900);
+      // CARTAO_SALVO_AGUARDA_TOKEN_ANTES_REDIRECT_V1
+      // A venda já está aprovada e visível. Mantemos a página viva só até o
+      // webMethod concluir a tokenização, evitando que a navegação cancele a chamada.
+      await salvarCartaoAprovadoSemBloquearVenda(chargeId);
+      abrirEntregaComFallback(250);
       return;
     }
   } catch(_) {}
@@ -889,14 +892,15 @@ async function createCard(data={}) {
     const accepted=cardWasAccepted(r);
     const paymentApproved=r?.approved===true;
     if(paymentApproved) {
-      salvarCartaoAprovadoSemBloquearVenda(chargeId).catch(console.error);
       post({
         type:"CARD_RESULT",ok:true,accepted:true,approved:true,paymentApproved:true,
         processing:false,checkoutId,chargeId,status:safe(r?.status)||"paid",
         cardBrand:safe(r?.cardBrand),cardLastFour:safe(r?.cardLastFour),deliveryUrl:deliveryUrl(),
         error:"Pagamento aprovado. Abrindo sua entrega..."
       });
-      abrirEntregaComFallback(1900);
+      // CARTAO_SALVO_AGUARDA_TOKEN_ANTES_REDIRECT_V1
+      await salvarCartaoAprovadoSemBloquearVenda(chargeId);
+      abrirEntregaComFallback(250);
       return;
     }
 
@@ -1046,11 +1050,13 @@ async function salvarCartaoAprovadoSemBloquearVenda(paymentId) {
       savedCardPayload = { type:"SAVED_CARD", existe:true, ...result.metodo };
       if (checkoutUiReady) post(savedCardPayload);
       cartaoPendenteParaTokenizar = null;
-    } else {
-      console.warn("Cartão aprovado, mas token reutilizável não foi salvo:", result?.reason || "sem motivo");
+      return result;
     }
+    console.warn("Cartão aprovado, mas token reutilizável não foi salvo:", result?.reason || "sem motivo");
+    return result || { ok:false, saved:false, reason:"sem_resposta" };
   } catch (error) {
     console.warn("Salvamento isolado do cartão não bloqueou a venda:", error?.message || error);
+    return { ok:false, saved:false, reason:error?.message || "falha_tokenizacao" };
   } finally {
     salvamentoCartaoEmAndamento = false;
   }

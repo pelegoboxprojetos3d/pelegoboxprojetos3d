@@ -56,16 +56,41 @@ export const salvarCartaoAprovadoDoMembroAtual = webMethod(
     const paymentId = safe(chargeId);
     if (!id || !paymentId) return { ok:false, saved:false, reason:"checkout_ou_pagamento_ausente" };
 
-    const membro = await currentMemberBackend.getMember();
-    const memberId = safe(membro?._id);
-    const email = emailDoMembro(membro);
-    if (!memberId || !email) return { ok:false, saved:false, reason:"membro_nao_autenticado" };
+    let memberId = "";
+    let email = "";
+    try {
+      const membro = await currentMemberBackend.getMember();
+      memberId = safe(membro?._id);
+      email = emailDoMembro(membro);
+    } catch (_) {}
 
     const session = await sessaoPorCheckout(id);
     if (!session) return { ok:false, saved:false, reason:"sessao_nao_encontrada" };
 
     const sessionEmail = mail(session.email);
     const sessionMemberId = safe(session.memberId || session.cardAuthMemberId);
+
+    // CARTAO_TOKEN_FALLBACK_SESSAO_AUTENTICADA_V1
+    // O pagamento já validou a conta Wix. Se currentMember oscilar no instante
+    // pós-aprovação, usamos somente a prova autenticada e recente da própria sessão.
+    if (!memberId || !email) {
+      const authAt = new Date(session.cardAuthAt || session.authVerifiedAt || 0).getTime();
+      const authAge = Date.now() - authAt;
+      const provaRecente =
+        session.authMemberVerified === true &&
+        sessionMemberId &&
+        sessionEmail &&
+        Number.isFinite(authAge) &&
+        authAge >= 0 &&
+        authAge <= 30 * 60 * 1000;
+
+      if (provaRecente) {
+        memberId = sessionMemberId;
+        email = sessionEmail;
+      }
+    }
+
+    if (!memberId || !email) return { ok:false, saved:false, reason:"membro_nao_autenticado" };
     const sessionPaymentId = safe(session.validaPayChargeId || session.paymentId);
     const status = safe(session.status).toLowerCase();
     const method = safe(session.paymentMethod).toUpperCase();

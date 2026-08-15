@@ -3443,8 +3443,17 @@ function blindarPreflightEntrega() {
     if (typeof processando.collapse === "function") processando.collapse();
   } catch (_) {}
 
+  // PB_PREFLIGHT_MANTER_ALTURA_V5
+  // A seção principal fica invisível, mas mantém sua altura durante a decisão.
+  // Assim o rodapé não sobe para o topo enquanto consultamos a coleção.
+  try {
+    const principal = $w(SECOES_ENTREGA.principal);
+    if (typeof principal.expand === "function") principal.expand();
+    if (typeof principal.hide === "function") principal.hide();
+  } catch (_) {}
+
+  // As seções inferiores continuam totalmente recolhidas.
   for (const id of [
-    SECOES_ENTREGA.principal,
     SECOES_ENTREGA.banners,
     SECOES_ENTREGA.final,
     SECOES_ENTREGA.vazia

@@ -26,9 +26,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # ==============================================================
-          # 1) ENTREGA PROJETOS PRONTOS
-          # ==============================================================
           entrega = Path('src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js')
           e = entrega.read_text(encoding='utf-8')
 
@@ -108,9 +105,6 @@ jobs:
 
           entrega.write_text(e, encoding='utf-8')
 
-          # ==============================================================
-          # 2) SEM PRODUTO OU NÃO LOGADO
-          # ==============================================================
           aviso = Path('src/pages/sem produto ou nao logado.xu6gd.js')
           a = aviso.read_text(encoding='utf-8')
 
@@ -118,14 +112,12 @@ jobs:
   titulo: "#textomaior",
   texto: "#textomenor"
 };'''
-
           replacement = '''const IDS = {
   titulo: "#textomaior",
   texto: "#textomenor"
 };
 
 const SESSAO_VAZIA = "#SESSAO4VAZIA";'''
-
           if 'const SESSAO_VAZIA = "#SESSAO4VAZIA";' not in a:
               if anchor not in a:
                   raise SystemExit('Âncora IDS da página de aviso não encontrada')
@@ -135,19 +127,12 @@ const SESSAO_VAZIA = "#SESSAO4VAZIA";'''
           helper = '''async function garantirSessaoVaziaVisivel() {
   try {
     const secao = $w(SESSAO_VAZIA);
-
-    if (typeof secao.expand === "function") {
-      await secao.expand();
-    }
-
-    if (typeof secao.show === "function") {
-      await secao.show();
-    }
+    if (typeof secao.expand === "function") await secao.expand();
+    if (typeof secao.show === "function") await secao.show();
   } catch (_) {}
 }
 
 '''
-
           if 'async function garantirSessaoVaziaVisivel()' not in a:
               if helper_anchor not in a:
                   raise SystemExit('Âncora do helper da página de aviso não encontrada')
@@ -159,7 +144,6 @@ const SESSAO_VAZIA = "#SESSAO4VAZIA";'''
     permanecem visíveis: texto, banners dos três botões e aviso importante.
     Nenhuma impressora ou seção da página de entrega é controlada aqui.
   */'''
-
           new_ready = '''$w.onReady(function () {
   /*
     Esta página é apenas de aviso/triagem. As seções desenhadas no Editor
@@ -168,7 +152,6 @@ const SESSAO_VAZIA = "#SESSAO4VAZIA";'''
   */
 
   garantirSessaoVaziaVisivel().catch(() => {});'''
-
           if old_ready in a:
               a = a.replace(old_ready, new_ready, 1)
           elif 'garantirSessaoVaziaVisivel().catch(() => {});' not in a:

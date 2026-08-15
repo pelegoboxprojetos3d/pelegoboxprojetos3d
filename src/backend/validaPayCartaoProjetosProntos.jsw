@@ -552,6 +552,21 @@ async function setProcessing(purchase, status) {
   return wixData.update(PURCHASES, {...purchase,statusProcessamento:status,dataProcessamento:new Date()},DB);
 }
 
+function resumoCartaoCompra(session = {}) {
+  const parcelas = Math.max(0, Number(session?.pendingCardInstallments || 0));
+  const valorEtapa = Number(session?.valor || 0);
+
+  return {
+    metodoPagamento: "CARD",
+    bandeiraCartao: safe(session?.pendingCardBrand),
+    finalCartao: digits(session?.pendingCardLastFour).slice(-4),
+    parcelasCartao: parcelas,
+    valorParcelaCartao: parcelas > 0
+      ? Number((valorEtapa / parcelas).toFixed(2))
+      : 0
+  };
+}
+
 async function triggerMake({ session, purchase, paymentId }) {
   if (!shouldTriggerMake(purchase)) return { sent:false, skipped:true, reason:"already_processing_or_done" };
   const url = safe(await getSecret(MAKE_SECRET));
@@ -563,6 +578,7 @@ async function triggerMake({ session, purchase, paymentId }) {
     email:safe(session.email).toLowerCase(),whatsapp:phone(session.whatsapp),cpfCnpj:digits(session.cpfCnpj),
     codigoProjeto:digits(session.codigoProjeto),produto:decodeTitle(session.produto),tipoProduto:productType(session.tipoProduto),
     valor:Number(processingPurchase?.valor || session.valor || 0),pagamento:"approved",statusCompra:"approved",
+    ...resumoCartaoCompra(session),
     idPagamento:safe(paymentId),checkoutId:safe(session.checkoutId),tokenDeEntrega:safe(session.tokenEntrega),chaveCompra:safe(processingPurchase?.chaveCompra)
   };
   try {
@@ -586,8 +602,10 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
   const codigoProjeto=digits(session.codigoProjeto),clienteId=safe(session.clienteId),tipoProduto=productType(session.tipoProduto);
   const chaveCompra=`${clienteId}_${codigoProjeto}`;
   const existente=await findPurchase(chaveCompra);
+  const resumoCartao=resumoCartaoCompra(session);
   if (session.compraRegistrada===true && safe(session.status).toLowerCase()==="approved" && existente) {
-    const make=await triggerMake({session,purchase:existente,paymentId:chargeId});
+    const compraComCartao=await wixData.update(PURCHASES,{...existente,...resumoCartao},DB);
+    const make=await triggerMake({session,purchase:compraComCartao,paymentId:chargeId});
     const notificacao=await notificarVendaProjetoProntoAprovada({
       checkoutId,
       chargeId,
@@ -605,6 +623,7 @@ async function finalizeApprovedCard({ checkoutId, chargeId }) {
   const purchase={...(existente||{}),title:`PP-${codigoProjeto} - ${safe(session.nomeCliente)||clienteId}`,chaveCompra,clienteId,codigoProjeto,tipoProduto,
     nomeCliente:safe(session.nomeCliente),email:safe(session.email).toLowerCase(),whatsapp:phone(session.whatsapp),cpfCnpj:digits(session.cpfCnpj),
     checkoutId:safe(session.checkoutId),tokenDeEntrega:safe(session.tokenEntrega),idPagamento:safe(chargeId),pagamento:"approved",statusCompra:"approved",valor:totalValue,
+    ...resumoCartao,
     dataCompra:existente?.dataCompra||now,dataLiberacao:now,downloadMedidas:access.medidas,downloadGraficos:access.graficos,downloadProjeto:access.projeto,
     statusProcessamento:samePayment?(safe(existente?.statusProcessamento)||"PENDENTE"):"PENDENTE",dataProcessamento:now};
   delete purchase.whatsApp;
@@ -793,6 +812,7 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       pendingCardExpirationYear: safe(tokenInfo?.cardExpirationYear) || year,
       pendingCardHolderName: safe(tokenInfo?.cardHolderName) || holder,
       pendingCardDocument: digits(tokenInfo?.cardDocument || cardDocument),
+      pendingCardInstallments: installments,
       updatedAtDate: new Date()
     });
 

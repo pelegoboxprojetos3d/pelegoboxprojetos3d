@@ -44,17 +44,23 @@ jobs:
           grep -q 'finalCartao:' 'src/backend/validaPayCartaoProjetosProntos.jsw'
           grep -q 'parcelasCartao:' 'src/backend/validaPayCartaoProjetosProntos.jsw'
           grep -q 'valorParcelaCartao:' 'src/backend/validaPayCartaoProjetosProntos.jsw'
+          grep -q 'cardBrand: safe(session.pendingCardBrand)' 'src/backend/notificarVendaProjetoPronto.js'
+          grep -q 'cardLastFour: digits(session.pendingCardLastFour).slice(-4)' 'src/backend/notificarVendaProjetoPronto.js'
+          grep -q 'installments:' 'src/backend/notificarVendaProjetoPronto.js'
+          grep -q 'installmentAmount:' 'src/backend/notificarVendaProjetoPronto.js'
 
       - name: Gravar no main
         run: |
           set -euo pipefail
           git config user.name "PELEGO BOX Automacao"
           git config user.email "pelegobox82@gmail.com"
-          git add -- "src/backend/validaPayCartaoProjetosProntos.jsw"
+          git add -- \
+            "src/backend/validaPayCartaoProjetosProntos.jsw" \
+            "src/backend/notificarVendaProjetoPronto.js"
           if ! git diff --cached --quiet; then
-            git commit -m "Salvar dados seguros do cartão em ComprasProjetos"
+            git commit -m "Salvar dados seguros do cartão em ComprasProjetos e webhooks"
           else
-            echo "Backend já estava corrigido."
+            echo "Backends já estavam corrigidos."
           fi
           git pull --rebase origin main
           git push origin HEAD:main
@@ -86,4 +92,4 @@ jobs:
           if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
             exit 1
           fi
-          echo "Publicado: dados seguros do cartão nas compras."
+          echo "Publicado: dados seguros do cartão nas compras e webhooks."

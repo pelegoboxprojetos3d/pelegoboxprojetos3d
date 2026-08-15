@@ -1682,7 +1682,7 @@ function projectPayload(
 }
 
 async function identidadeMembroAtual() {
-  // CENTRAL_MEMBRO_REAL_V2
+  // CENTRAL_MEMBRO_REAL_V3_EMAIL_AUTENTICADO
   let membro = null;
 
   try {
@@ -1700,19 +1700,23 @@ async function identidadeMembroAtual() {
     ? membro.contactDetails.emails
     : [];
 
-  const emailsMembro = new Set();
-  const adicionarEmail = (value) => {
+  const emailsAutenticados = new Set();
+
+  const adicionarEmailAutenticado = (value) => {
     const email = normalizeEmail(
       typeof value === "string"
         ? value
         : firstValue(value?.email, value?.value)
     );
-    if (email) emailsMembro.add(email);
+
+    if (email) {
+      emailsAutenticados.add(email);
+    }
   };
 
-  adicionarEmail(membro?.loginEmail);
-  emailsContato.forEach(adicionarEmail);
-  adicionarEmail(membro?.contactDetails?.email);
+  adicionarEmailAutenticado(membro?.loginEmail);
+  emailsContato.forEach(adicionarEmailAutenticado);
+  adicionarEmailAutenticado(membro?.contactDetails?.email);
 
   const nomeMembro = firstValue(
     membro?.profile?.nickname,
@@ -1727,6 +1731,7 @@ async function identidadeMembroAtual() {
 
   async function coletar(collection, field, value, target, limit = 100) {
     if (!safe(value)) return;
+
     try {
       const result = await wixData
         .query(collection)
@@ -1741,22 +1746,45 @@ async function identidadeMembroAtual() {
     } catch (_) {}
   }
 
-  /*
-    O memberId/_owner é a ponte mais forte quando existe.
-    Depois ampliamos pelos e-mails autenticados do próprio membro.
-  */
   await Promise.all([
     coletar(CLIENTS_COLLECTION, "_owner", memberId, clientes, 100),
     coletar(SESSIONS_COLLECTION, "_owner", memberId, sessoes, 200)
   ]);
 
-  for (const email of [...emailsMembro]) {
+  for (const email of [...emailsAutenticados]) {
     await Promise.all([
       coletar(CLIENTS_COLLECTION, "email", email, clientes, 100),
       coletar(CLIENTS_COLLECTION, "Email", email, clientes, 100),
       coletar(SESSIONS_COLLECTION, "email", email, sessoes, 200),
       coletar(SESSIONS_COLLECTION, "Email", email, sessoes, 200)
     ]);
+  }
+
+  const emailCliente = (item) => normalizeEmail(
+    firstValue(item?.email, item?.Email, item?.["E-mail"])
+  );
+
+  const emailSessao = (item) => normalizeEmail(
+    firstValue(item?.email, item?.Email, item?.["E-mail"])
+  );
+
+  const pertenceAoEmailAutenticado = (email) =>
+    Boolean(email && emailsAutenticados.has(email));
+
+  /*
+    _owner sozinho não concede acesso a compras.
+    Cliente e sessão precisam trazer o mesmo e-mail autenticado da conta.
+  */
+  for (const [id, item] of [...clientes.entries()]) {
+    if (!pertenceAoEmailAutenticado(emailCliente(item))) {
+      clientes.delete(id);
+    }
+  }
+
+  for (const [id, item] of [...sessoes.entries()]) {
+    if (!pertenceAoEmailAutenticado(emailSessao(item))) {
+      sessoes.delete(id);
+    }
   }
 
   const clientIds = new Set();
@@ -1769,13 +1797,13 @@ async function identidadeMembroAtual() {
       item?.["Cliente ID"],
       item?._id
     );
-    if (id) clientIds.add(id);
 
-    adicionarEmail(firstValue(item?.email, item?.Email, item?.["E-mail"]));
+    if (id) clientIds.add(id);
 
     const whats = normalizeWhatsapp(
       firstValue(item?.whatsapp, item?.whatsApp, item?.Whatsapp, item?.WhatsApp)
     );
+
     if (whats) whatsapps.add(whats);
   }
 
@@ -1785,30 +1813,51 @@ async function identidadeMembroAtual() {
       item?.clienteID,
       item?.["Cliente ID"]
     );
-    if (id) clientIds.add(id);
 
-    adicionarEmail(firstValue(item?.email, item?.Email, item?.["E-mail"]));
+    if (id) clientIds.add(id);
 
     const whats = normalizeWhatsapp(sessionWhatsapp(item));
     if (whats) whatsapps.add(whats);
   }
 
-  /*
-    Uma sessão autenticada pode apontar para um cliente criado em outra visita.
-    Carregamos esses clientes por ID para completar o grafo de identidade.
-  */
   for (const id of [...clientIds]) {
     await coletar(CLIENTS_COLLECTION, "clienteId", id, clientes, 20);
+
     try {
       const item = await wixData.get(CLIENTS_COLLECTION, id, READ_OPTS);
-      if (item?._id) clientes.set(safe(item._id), item);
+      if (item?._id) {
+        clientes.set(safe(item._id), item);
+      }
     } catch (_) {}
   }
 
+  for (const [id, item] of [...clientes.entries()]) {
+    if (!pertenceAoEmailAutenticado(emailCliente(item))) {
+      clientes.delete(id);
+    }
+  }
+
+  clientIds.clear();
+
   for (const item of clientes.values()) {
-    const id = firstValue(item?.clienteId, item?.clienteID, item?.["Cliente ID"], item?._id);
+    const id = firstValue(
+      item?.clienteId,
+      item?.clienteID,
+      item?.["Cliente ID"],
+      item?._id
+    );
+
     if (id) clientIds.add(id);
-    adicionarEmail(firstValue(item?.email, item?.Email, item?.["E-mail"]));
+  }
+
+  for (const item of sessoes.values()) {
+    const id = firstValue(
+      item?.clienteId,
+      item?.clienteID,
+      item?.["Cliente ID"]
+    );
+
+    if (id) clientIds.add(id);
   }
 
   const cliente = newestFirst([...clientes.values()])[0] || null;
@@ -1832,9 +1881,9 @@ async function identidadeMembroAtual() {
       sessao?.nome,
       nomeMembro
     ),
-    loginEmail: firstValue(loginEmail, [...emailsMembro][0]),
-    email: firstValue(loginEmail, [...emailsMembro][0], payloadCliente.email),
-    emails: [...emailsMembro],
+    loginEmail: firstValue(loginEmail, [...emailsAutenticados][0]),
+    email: firstValue(loginEmail, [...emailsAutenticados][0], payloadCliente.email),
+    emails: [...emailsAutenticados],
     whatsapp: firstValue(
       payloadCliente.whatsapp,
       sessionWhatsapp(sessao),

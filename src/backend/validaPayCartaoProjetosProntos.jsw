@@ -2,7 +2,6 @@ import wixData from "wix-data";
 import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
 import { currentMember as currentMemberBackend } from "wix-members-backend";
-import { tokenize } from "@validapay/tokenize";
 import { buscarMetodoPagamentoPrivadoPorEmail, salvarMetodoPagamentoAprovado } from "backend/metodosPagamentoProjetosProntos";
 import { tituloEtapaProjetoPronto, normalizarTituloProduto, extrairCodigoQuestionarioTitulo } from "backend/projetosProntosNormalizacao";
 import { notificarVendaProjetoProntoAprovada } from "backend/notificarVendaProjetoPronto";
@@ -36,29 +35,46 @@ async function identidadeMembroAtualCartao() {
   return { memberId, email };
 }
 
-async function tokenizarNovoCartao({ number, cvv, month, year, holder, nome, cpfCnpj, email }) {
-  const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
-  const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
-  if (!clientId || !clientSecret) throw new Error("Credenciais ValidaPay não configuradas para tokenização.");
-
-  const result = await tokenize({
-    clientId,
-    clientSecret,
-    card: {
-      number,
-      cardHolderName: holder,
-      cvv,
-      expiration: month + "/" + year
-    },
-    customer: {
-      name: nome,
-      document: cpfCnpj,
-      email
+function campoProfundoCartao(root, nomes, depth = 0, seen = new Set()) {
+  if (depth > 8 || root == null || typeof root !== "object" || seen.has(root)) return "";
+  seen.add(root);
+  const alvos = new Set(nomes.map(v => String(v).toLowerCase()));
+  for (const [key, value] of Object.entries(root)) {
+    if (alvos.has(String(key).toLowerCase()) && ["string", "number"].includes(typeof value)) {
+      const found = safe(value);
+      if (found) return found;
     }
-  });
+  }
+  for (const value of Object.values(root)) {
+    const found = campoProfundoCartao(value, nomes, depth + 1, seen);
+    if (found) return found;
+  }
+  return "";
+}
 
-  if (!safe(result?.paymentMethodId)) throw new Error("A ValidaPay não retornou o token seguro do cartão.");
-  return result;
+async function recuperarTokenDaCobranca(session, chargeId) {
+  if (safe(session?.pendingPaymentMethodId) || !safe(chargeId)) return session;
+  try {
+    const response = await api("get", `/v1/charges/${encodeURIComponent(chargeId)}`);
+    if (!response.ok) return session;
+    const data = response.data?.data || response.data?.charge || response.data || {};
+    const paymentMethodId = campoProfundoCartao(data, ["paymentMethodId", "tokenId"]);
+    if (!paymentMethodId) return session;
+    return await saveSession(safe(session.checkoutId), {
+      pendingPaymentMethodId: paymentMethodId,
+      pendingValidaPayCustomerId: campoProfundoCartao(data, ["customerId"]),
+      pendingCardBrand: campoProfundoCartao(data, ["cardBrand", "brand"]),
+      pendingCardLastFour: digits(campoProfundoCartao(data, ["cardLastFour", "lastFour", "last4"])).slice(-4),
+      pendingCardExpirationMonth: digits(campoProfundoCartao(data, ["cardExpirationMonth", "expirationMonth", "expMonth"])).padStart(2, "0").slice(-2),
+      pendingCardExpirationYear: digits(campoProfundoCartao(data, ["cardExpirationYear", "expirationYear", "expYear"])).slice(-4),
+      pendingCardHolderName: safe(session?.pendingCardHolderName),
+      pendingCardDocument: digits(session?.pendingCardDocument || session?.cpfCnpj),
+      updatedAtDate: new Date()
+    });
+  } catch (error) {
+    console.warn("Cobrança aprovada sem token reutilizável exposto pela ValidaPay:", error?.message || error);
+    return session;
+  }
 }
 
 async function persistirMetodoPagamentoAprovado(session, chargeId) {
@@ -545,6 +561,7 @@ async function triggerMake({ session, purchase, paymentId }) {
 async function finalizeApprovedCard({ checkoutId, chargeId }) {
   let session = await findSession(checkoutId);
   if (!session) throw new Error("Sessão do cartão não encontrada após aprovação.");
+  session = await recuperarTokenDaCobranca(session, chargeId);
   await persistirMetodoPagamentoAprovado(session, chargeId);
   const codigoProjeto=digits(session.codigoProjeto),clienteId=safe(session.clienteId),tipoProduto=productType(session.tipoProduto);
   const chaveCompra=`${clienteId}_${codigoProjeto}`;
@@ -701,7 +718,8 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       cardAttempt += 1;
     }
 
-    let tokenInfo;
+    let tokenInfo = {};
+    let paymentMethodId = "";
     if (useSavedPaymentMethod) {
       const savedMethod = await buscarMetodoPagamentoPrivadoPorEmail(email);
       if (!savedMethod?.paymentMethodId || savedMethod.ativo === false) {
@@ -717,12 +735,17 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
         cardHolderName: safe(savedMethod.cardHolderName),
         cardDocument: safe(savedMethod.cardDocument || cardDocument)
       };
+      paymentMethodId = safe(tokenInfo.paymentMethodId);
     } else {
-      tokenInfo = await tokenizarNovoCartao({ number, cvv, month, year, holder, nome, cpfCnpj: cardDocument, email });
+      tokenInfo = {
+        cardBrand: brand(number),
+        cardLastFour: number.slice(-4),
+        cardExpirationMonth: month,
+        cardExpirationYear: year,
+        cardHolderName: holder,
+        cardDocument
+      };
     }
-
-    const paymentMethodId = safe(tokenInfo?.paymentMethodId);
-    if (!paymentMethodId) return { ok:false, error:"Não foi possível preparar o cartão com segurança." };
 
     await saveSession(checkoutId, {
       status: "pending",
@@ -783,6 +806,17 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
       }
     };
 
+    if (useSavedPaymentMethod) {
+      chargePayload.paymentMethodId = paymentMethodId;
+    } else {
+      chargePayload.card = {
+        number,
+        cvv,
+        name: holder,
+        expiration: month + "/" + year
+      };
+    }
+
     chargePayload.items = [{ priceId, quantity: 1 }];
 
     const response = await api("post", "/v1/charges", chargePayload);
@@ -829,11 +863,17 @@ export async function criarCobrancaCartaoTransparente(input = {}) {
     const id = extractChargeId(response.data || {});
     const status = extractChargeStatus(response.data || {});
     const approved = response.data?.success !== false && isApprovedCardStatus(status);
+    const tokenRetornadoNaCriacao = campoProfundoCartao(response.data || {}, ["paymentMethodId", "tokenId"]);
+    if (tokenRetornadoNaCriacao && !paymentMethodId) {
+      paymentMethodId = tokenRetornadoNaCriacao;
+      tokenInfo.paymentMethodId = tokenRetornadoNaCriacao;
+    }
 
     await saveSession(checkoutId, {
       validaPayChargeId: id,
       paymentId: id,
       paymentMethod: "CARD",
+      pendingPaymentMethodId: paymentMethodId || safe(previousSession?.pendingPaymentMethodId),
       cardAttempt,
       status: approved ? "approved" : (status || "pending"),
       updatedAtDate: new Date()

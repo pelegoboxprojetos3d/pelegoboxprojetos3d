@@ -32,14 +32,6 @@ function normalizarCpfCnpj(valor) {
 /**
  * Padrão oficial salvo na coleção:
  * +55 + DDD + número
- *
- * Exemplos aceitos:
- * 47988419261
- * 5547988419261
- * +5547988419261
- *
- * Resultado:
- * +5547988419261
  */
 export function normalizarWhatsapp(numero) {
   const original = texto(numero);
@@ -47,20 +39,25 @@ export function normalizarWhatsapp(numero) {
 
   if (!numeros) return "";
 
-  // E164 explícito: preserva qualquer DDI válido.
-  if (original.startsWith("+") && numeros.length >= 7 && numeros.length <= 15) {
+  if (
+    original.startsWith("+") &&
+    numeros.length >= 7 &&
+    numeros.length <= 15
+  ) {
     return `+${numeros}`;
   }
 
-  // Compatibilidade com o Brasil legado.
-  if (numeros.startsWith(DDI_BRASIL) && (numeros.length === 12 || numeros.length === 13)) {
+  if (
+    numeros.startsWith(DDI_BRASIL) &&
+    (numeros.length === 12 || numeros.length === 13)
+  ) {
     return `+${numeros}`;
   }
+
   if (numeros.length === 10 || numeros.length === 11) {
     return `+${DDI_BRASIL}${numeros}`;
   }
 
-  // Número internacional sem o sinal +, já contendo DDI.
   if (numeros.length >= 7 && numeros.length <= 15) {
     return `+${numeros}`;
   }
@@ -85,15 +82,6 @@ function criarVariantesWhatsapp(numero) {
   ];
 }
 
-/**
- * Procura um cliente aceitando registros antigos:
- *
- * +5547988419261
- * 5547988419261
- * 47988419261
- *
- * Quando encontra formato antigo, atualiza para o padrão oficial.
- */
 function primeiroValor(...valores) {
   for (const valor of valores) {
     const resultado = texto(valor);
@@ -104,6 +92,25 @@ function primeiroValor(...valores) {
   }
 
   return "";
+}
+
+function timestampItem(item) {
+  return new Date(
+    item?._updatedDate ||
+    item?._createdDate ||
+    0
+  ).getTime();
+}
+
+function ordenarClientesPreferindoAtivo(a, b) {
+  const ativoA = a?.ativo !== false ? 1 : 0;
+  const ativoB = b?.ativo !== false ? 1 : 0;
+
+  if (ativoA !== ativoB) {
+    return ativoB - ativoA;
+  }
+
+  return timestampItem(b) - timestampItem(a);
 }
 
 async function buscarPorWhatsapp(
@@ -135,23 +142,49 @@ async function buscarPorWhatsapp(
     await Promise.all(consultas)
   ).flat();
 
-  encontrados.sort((a, b) => {
-    const dataA = new Date(
-      a?._updatedDate ||
-      a?._createdDate ||
-      0
-    ).getTime();
-
-    const dataB = new Date(
-      b?._updatedDate ||
-      b?._createdDate ||
-      0
-    ).getTime();
-
-    return dataB - dataA;
-  });
+  encontrados.sort(
+    colecao === COLECAO_CLIENTES
+      ? ordenarClientesPreferindoAtivo
+      : (a, b) => timestampItem(b) - timestampItem(a)
+  );
 
   return encontrados[0] || null;
+}
+
+async function buscarClientePorEmail(email) {
+  const mail = normalizarEmail(email);
+
+  if (!mail) {
+    return null;
+  }
+
+  const encontrados = [];
+
+  for (const campo of ["email", "Email"]) {
+    try {
+      const resultado = await wixData
+        .query(COLECAO_CLIENTES)
+        .eq(campo, mail)
+        .limit(50)
+        .find();
+
+      encontrados.push(
+        ...(resultado.items || [])
+      );
+    } catch (_) {}
+  }
+
+  const unicos = Array.from(
+    new Map(
+      encontrados
+        .filter(Boolean)
+        .map((item) => [texto(item?._id), item])
+    ).values()
+  ).filter((item) => texto(item?._id));
+
+  unicos.sort(ordenarClientesPreferindoAtivo);
+
+  return unicos[0] || null;
 }
 
 async function buscarClientePorId(clienteId) {
@@ -170,7 +203,7 @@ async function buscarClientePorId(clienteId) {
     if (cliente) {
       return cliente;
     }
-  } catch (error) {
+  } catch (_) {
     // O valor pode ser um clienteId legado, e não o _id.
   }
 
@@ -178,11 +211,14 @@ async function buscarClientePorId(clienteId) {
     const resultado = await wixData
       .query(COLECAO_CLIENTES)
       .eq("clienteId", id)
-      .limit(1)
+      .limit(50)
       .find();
 
-    return resultado.items[0] || null;
-  } catch (error) {
+    const items = resultado.items || [];
+    items.sort(ordenarClientesPreferindoAtivo);
+
+    return items[0] || null;
+  } catch (_) {
     return null;
   }
 }
@@ -230,19 +266,17 @@ function mesclarClienteComSessao(
 
   return {
     ...(cliente || {}),
-    _id:
-      primeiroValor(
-        cliente?._id,
-        clienteId
-      ),
+    _id: primeiroValor(
+      cliente?._id,
+      clienteId
+    ),
     clienteId,
     nome,
-    title:
-      primeiroValor(
-        cliente?.title,
-        cliente?.Title,
-        nome
-      ),
+    title: primeiroValor(
+      cliente?.title,
+      cliente?.Title,
+      nome
+    ),
     whatsapp,
     email,
     cpfCnpj
@@ -250,32 +284,27 @@ function mesclarClienteComSessao(
 }
 
 /**
- * Procura primeiro na coleção oficial de clientes.
- * Se o registro estiver incompleto ou ausente, recupera os dados
- * mais recentes da sessão do checkout sem criar colunas novas.
+ * Busca de compatibilidade por WhatsApp.
+ * Registros ativos da coleção Clientes sempre têm prioridade.
  */
 export async function buscarCliente(whatsapp) {
-  const whatsappPadrao =
-    normalizarWhatsapp(whatsapp);
+  const whatsappPadrao = normalizarWhatsapp(whatsapp);
 
   if (!whatsappPadrao) {
     return null;
   }
 
-  const variantes =
-    criarVariantesWhatsapp(whatsappPadrao);
+  const variantes = criarVariantesWhatsapp(whatsappPadrao);
 
-  const clienteDireto =
-    await buscarPorWhatsapp(
-      COLECAO_CLIENTES,
-      variantes
-    );
+  const clienteDireto = await buscarPorWhatsapp(
+    COLECAO_CLIENTES,
+    variantes
+  );
 
-  const sessao =
-    await buscarPorWhatsapp(
-      COLECAO_SESSOES,
-      variantes
-    );
+  const sessao = await buscarPorWhatsapp(
+    COLECAO_SESSOES,
+    variantes
+  );
 
   if (!clienteDireto && !sessao) {
     return null;
@@ -284,13 +313,12 @@ export async function buscarCliente(whatsapp) {
   let cliente = clienteDireto;
 
   if (!cliente && sessao) {
-    cliente =
-      await buscarClientePorId(
-        primeiroValor(
-          sessao.clienteId,
-          sessao["Cliente ID"]
-        )
-      );
+    cliente = await buscarClientePorId(
+      primeiroValor(
+        sessao.clienteId,
+        sessao["Cliente ID"]
+      )
+    );
   }
 
   return mesclarClienteComSessao(
@@ -300,9 +328,15 @@ export async function buscarCliente(whatsapp) {
   );
 }
 
+/**
+ * IDENTIDADE_CLIENTE_EMAIL_CANONICO_V1
+ *
+ * Para criar/atualizar cliente, o e-mail autenticado é a chave principal.
+ * WhatsApp é contato, não é autorização para transferir um cadastro de uma
+ * conta para outra. Isso impede que testes em PC/celular cruzem Cliente IDs.
+ */
 export async function criarCliente(dados = {}) {
-  const whatsapp =
-    normalizarWhatsapp(dados.whatsapp);
+  const whatsapp = normalizarWhatsapp(dados.whatsapp);
 
   if (!whatsapp) {
     throw new Error(
@@ -318,8 +352,39 @@ export async function criarCliente(dados = {}) {
     dados.cnpj
   );
 
-  const existente =
-    await buscarCliente(whatsapp);
+  let existente = email
+    ? await buscarClientePorEmail(email)
+    : null;
+
+  if (!existente) {
+    const porWhatsapp = await buscarPorWhatsapp(
+      COLECAO_CLIENTES,
+      criarVariantesWhatsapp(whatsapp)
+    );
+
+    const emailExistente = normalizarEmail(
+      primeiroValor(
+        porWhatsapp?.email,
+        porWhatsapp?.Email
+      )
+    );
+
+    /*
+      Só reaproveita cadastro localizado por telefone quando ele ainda não tem
+      e-mail ou quando pertence ao MESMO e-mail. E-mails diferentes significam
+      contas diferentes, mesmo que o telefone coincida.
+    */
+    if (
+      porWhatsapp &&
+      (
+        !email ||
+        !emailExistente ||
+        emailExistente === email
+      )
+    ) {
+      existente = porWhatsapp;
+    }
+  }
 
   if (existente) {
     existente.whatsapp = whatsapp;
@@ -338,6 +403,10 @@ export async function criarCliente(dados = {}) {
       existente.cpfCnpj = cpfCnpj;
     }
 
+    if (!texto(existente.clienteId)) {
+      existente.clienteId = texto(existente._id);
+    }
+
     if (!texto(existente.status)) {
       existente.status = "NOVO";
     }
@@ -347,18 +416,14 @@ export async function criarCliente(dados = {}) {
         "CHECKOUT_PROJETOS_PRONTOS";
     }
 
-    if (
-      typeof existente.ativo !== "boolean"
-    ) {
+    if (typeof existente.ativo !== "boolean") {
       existente.ativo = true;
     }
 
-    const atualizado = await wixData.update(
+    return wixData.update(
       COLECAO_CLIENTES,
       existente
     );
-
-    return atualizado;
   }
 
   const agora = new Date();
@@ -387,7 +452,7 @@ export async function criarCliente(dados = {}) {
 
   inserido.clienteId = inserido._id;
 
-  return await wixData.update(
+  return wixData.update(
     COLECAO_CLIENTES,
     inserido
   );
@@ -404,7 +469,7 @@ export async function atualizarUltimoAcesso(id) {
 
   cliente.ultimoAcesso = new Date();
 
-  return await wixData.update(
+  return wixData.update(
     COLECAO_CLIENTES,
     cliente
   );
@@ -425,7 +490,7 @@ export async function atualizarEmail(
   cliente.email = normalizarEmail(email);
   cliente.ultimoAcesso = new Date();
 
-  return await wixData.update(
+  return wixData.update(
     COLECAO_CLIENTES,
     cliente
   );

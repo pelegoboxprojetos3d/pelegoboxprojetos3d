@@ -1,5 +1,5 @@
 import wixData from "wix-data";
-import { currentMember as currentMemberBackend } from "wix-members-backend";
+import { members } from "wix-members.v2";
 import { webMethod, Permissions } from "wix-web-module";
 
 const SESSIONS = "SessoesProjetosProntos2";
@@ -9,17 +9,21 @@ const safe = value => String(value ?? "").trim();
 const email = value => safe(value).toLowerCase();
 
 async function identidadeDoMembro() {
-  const membro = await currentMemberBackend.getMember();
-  const emails = Array.isArray(membro?.contactDetails?.emails)
-    ? membro.contactDetails.emails
-    : [];
+  const resposta = await members.getCurrentMember({ fieldsets: ["FULL"] });
+  const membro = resposta?.member || resposta || {};
+  const contato = membro?.contact || {};
+  const detalhes = membro?.contactDetails || {};
+  const emailsContato = Array.isArray(contato?.emails) ? contato.emails : [];
+  const emailsDetalhes = Array.isArray(detalhes?.emails) ? detalhes.emails : [];
 
   return {
-    memberId: safe(membro?._id),
+    memberId: safe(membro?._id || membro?.id),
     email: email(
       membro?.loginEmail ||
-      emails[0] ||
-      membro?.contactDetails?.email
+      emailsContato[0] ||
+      emailsDetalhes[0] ||
+      contato?.email ||
+      detalhes?.email
     )
   };
 }
@@ -38,6 +42,9 @@ async function gravarAutorizacao(checkoutId, identidade) {
       ...resultado.items[0],
       memberId: identidade.memberId,
       email: identidade.email,
+      cardAuthMemberId: identidade.memberId,
+      cardAuthEmail: identidade.email,
+      cardAuthAt: now,
       updatedAtDate: now
     };
 
@@ -54,6 +61,9 @@ async function gravarAutorizacao(checkoutId, identidade) {
       checkoutId,
       memberId: identidade.memberId,
       email: identidade.email,
+      cardAuthMemberId: identidade.memberId,
+      cardAuthEmail: identidade.email,
+      cardAuthAt: now,
       status: "pending_auth",
       updatedAtDate: now
     },
@@ -62,17 +72,23 @@ async function gravarAutorizacao(checkoutId, identidade) {
 }
 
 export const autorizarPagamentoCartao = webMethod(
-  Permissions.SiteMember,
+  Permissions.Anyone,
   async (input = {}) => {
     try {
       const checkoutId = safe(input.checkoutId);
       if (!checkoutId) {
-        return { ok: false, error: "Checkout inválido. Atualize a página e tente novamente." };
+        return {
+          ok: false,
+          error: "Checkout inválido. Atualize a página e tente novamente."
+        };
       }
 
       const identidade = await identidadeDoMembro();
       if (!identidade.memberId || !identidade.email) {
-        return { ok: false, error: "Faça login novamente para pagar com cartão." };
+        return {
+          ok: false,
+          error: "Faça login novamente para pagar com cartão."
+        };
       }
 
       await gravarAutorizacao(checkoutId, identidade);
@@ -83,7 +99,7 @@ export const autorizarPagamentoCartao = webMethod(
         email: identidade.email
       };
     } catch (error) {
-      console.error("AUTORIZACAO CARTAO:", error?.message || error);
+      console.error("AUTORIZACAO CARTAO V2:", error?.message || error);
       return {
         ok: false,
         error: "Não foi possível confirmar sua conta Wix para o pagamento."

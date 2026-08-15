@@ -9,16 +9,32 @@ const digits = value => safe(value).replace(/\D/g, "");
 
 export function metodoPagamentoPublico(item) {
   if (!item) return null;
+  const idPagamentoSeguro = safe(item.paymentMethodId);
+  const reutilizavel = item.ativo !== false && idPagamentoSeguro && !idPagamentoSeguro.startsWith("SEM_TOKEN:");
   return {
-    existe: Boolean(safe(item.paymentMethodId)),
+    existe: Boolean(reutilizavel),
     cardBrand: safe(item.cardBrand),
     cardLastFour: digits(item.cardLastFour).slice(-4),
     cardExpirationMonth: digits(item.cardExpirationMonth).padStart(2, "0").slice(-2),
     cardExpirationYear: digits(item.cardExpirationYear).slice(-4),
     cardHolderName: safe(item.cardHolderName),
     cardDocument: digits(item.cardDocument),
-    ativo: item.ativo !== false
+    ativo: reutilizavel === true
   };
+}
+
+async function buscarRegistroPagamentoPrivadoPorEmail(value) {
+  const mail = email(value);
+  if (!mail) return null;
+
+  const result = await wixData
+    .query(COLLECTION)
+    .eq("email", mail)
+    .descending("_updatedDate")
+    .limit(1)
+    .find({ ...DB, consistentRead: true });
+
+  return result.items?.[0] || null;
 }
 
 export async function buscarMetodoPagamentoPrivadoPorEmail(value) {
@@ -52,9 +68,11 @@ export async function salvarMetodoPagamentoAprovado({
 } = {}) {
   const mail = email(emailLogin);
   const token = safe(paymentMethodId);
-  if (!mail || !token) return null;
+  if (!mail) return null;
 
-  const atual = await buscarMetodoPagamentoPrivadoPorEmail(mail);
+  const pagamentoId = safe(ultimoPagamentoId);
+  const idPersistido = token || `SEM_TOKEN:${pagamentoId || Date.now()}`;
+  const atual = await buscarRegistroPagamentoPrivadoPorEmail(mail);
   const now = new Date();
   const record = {
     ...(atual || {}),
@@ -62,7 +80,7 @@ export async function salvarMetodoPagamentoAprovado({
     email: mail,
     memberId: safe(memberId),
     clienteId: safe(clienteId),
-    paymentMethodId: token,
+    paymentMethodId: idPersistido,
     validaPayCustomerId: safe(validaPayCustomerId),
     cardBrand: safe(cardBrand).toUpperCase(),
     cardLastFour: digits(cardLastFour).slice(-4),
@@ -70,10 +88,10 @@ export async function salvarMetodoPagamentoAprovado({
     cardExpirationYear: digits(cardExpirationYear).slice(-4),
     cardHolderName: safe(cardHolderName).replace(/\s+/g, " ").toUpperCase(),
     cardDocument: digits(cardDocument),
-    ativo: true,
+    ativo: Boolean(token),
     criadoEm: atual?.criadoEm || now,
     atualizadoEm: now,
-    ultimoPagamentoId: safe(ultimoPagamentoId)
+    ultimoPagamentoId: pagamentoId
   };
 
   if (atual?._id) return wixData.update(COLLECTION, record, DB);

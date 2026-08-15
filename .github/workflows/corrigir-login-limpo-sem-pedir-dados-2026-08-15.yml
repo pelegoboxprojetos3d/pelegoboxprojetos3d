@@ -1,0 +1,87 @@
+name: Corrigir login limpo sem pedir dados
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/corrigir-login-limpo-sem-pedir-dados-2026-08-15.cjs"
+      - ".github/workflows/corrigir-login-limpo-sem-pedir-dados-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-login-limpo-sem-pedir-dados-2026-08-15
+  cancel-in-progress: false
+
+jobs:
+  corrigir-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validar hotfix
+        run: node --check scripts/corrigir-login-limpo-sem-pedir-dados-2026-08-15.cjs
+
+      - name: Aplicar correção cirúrgica
+        run: |
+          set -euo pipefail
+          node scripts/corrigir-login-limpo-sem-pedir-dados-2026-08-15.cjs
+          node --check 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          git diff --check
+          grep -q 'LOGIN_LIMPO_REAPROVEITA_CADASTRO_V2' 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          grep -q 'AUTH_CONTEXT_PREFLIGHT_MAX = 5200' 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          grep -q 'BOOT_CLIENTE_RECORRENTE_V2' 'src/pages/checkout-projeto-pronto.i9aj1.js'
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add -- 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          if ! git diff --cached --quiet; then
+            git commit -m "Não pedir dados de cliente recorrente após limpar histórico"
+          else
+            echo "Hotfix já estava aplicado."
+          fi
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+          echo "Publicado: login recorrente sem repetição de dados."

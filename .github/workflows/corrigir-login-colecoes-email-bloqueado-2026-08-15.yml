@@ -1,0 +1,68 @@
+name: Corrigir login coleções e email bloqueado
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/corrigir-login-colecoes-email-bloqueado-2026-08-15.cjs'
+      - '.github/workflows/corrigir-login-colecoes-email-bloqueado-2026-08-15.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wix-main-publish
+  cancel-in-progress: false
+
+jobs:
+  corrigir-publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Aplicar correção cirúrgica
+        run: node scripts/corrigir-login-colecoes-email-bloqueado-2026-08-15.cjs
+
+      - name: Validar hotfix
+        run: |
+          node --check 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          node --check 'src/public/custom-elements/pelego-checkout-pronto.js'
+          grep -q 'LOGIN_COLECOES_SEM_CORRIDA_V3' 'src/pages/checkout-projeto-pronto.i9aj1.js'
+          grep -q 'aria-readonly' 'src/public/custom-elements/pelego-checkout-pronto.js'
+
+      - name: Gravar no main
+        run: |
+          if git diff --quiet; then
+            echo 'Nenhuma alteração necessária.'
+            exit 0
+          fi
+          git config user.name 'PELEGO BOX PROJETOS 3D via WIX'
+          git config user.email 'pelegobox82@gmail.com'
+          git add 'src/pages/checkout-projeto-pronto.i9aj1.js' 'src/public/custom-elements/pelego-checkout-pronto.js'
+          git commit -m 'Fixar login nas coleções e bloquear email autenticado'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          curl --fail-with-body -sS -X POST \
+            'https://www.wixapis.com/site-publisher/v1/site/publish' \
+            -H "Authorization: $WIX_API_KEY" \
+            -H 'Content-Type: application/json' \
+            -H 'wix-site-id: d1022df4-d4fd-4561-8909-a59d876691b3' \
+            -d '{}'

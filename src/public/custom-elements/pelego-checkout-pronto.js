@@ -439,7 +439,7 @@ body{padding:4px 7px}
                 <li>A liberação acontece automaticamente após a confirmação.</li>
                 <li>Mantenha esta página aberta enquanto realiza o pagamento.</li>
                 <li>O acesso ao produto será aberto assim que o pagamento for identificado.</li>
-                <li>Você receberá dois e-mails: um confirmando o pagamento e outro com o acesso ao produto.</li>
+                <li>Você receberá um e-mail da PELEGO BOX com o botão de acesso ao produto após a confirmação do pagamento.</li>
               </ul>
             </aside>
           </div>
@@ -505,7 +505,7 @@ body{padding:4px 7px}
                   <li>A liberação acontece automaticamente após a confirmação.</li>
                   <li>Mantenha esta página aberta enquanto realiza o pagamento.</li>
                   <li>O acesso ao produto será aberto assim que o pagamento for identificado.</li>
-                  <li>Você receberá dois e-mails: um confirmando o pagamento e outro com o acesso ao produto.</li>
+                  <li>Você receberá um e-mail da PELEGO BOX com o botão de acesso ao produto após a confirmação do pagamento.</li>
                 </ul>
               </aside>
             </section>

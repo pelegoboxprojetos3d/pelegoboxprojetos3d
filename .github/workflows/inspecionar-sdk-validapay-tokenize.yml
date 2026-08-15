@@ -21,7 +21,5 @@ jobs:
           npm pack @validapay/tokenize@1.2.0 >/tmp/tarname.txt
           tarball="$(tail -n1 /tmp/tarname.txt)"
           tar -xzf "$tarball"
-          echo '=== ARQUIVOS ==='
-          find package -maxdepth 3 -type f -print
-          echo '=== PAYMENT METHODS / OAUTH / TOKENIZE ==='
-          grep -RniE 'payment.methods|tokenize|oauth2|auth/token|payment-methods|cardHolderName|expiration|customer' package | head -n 300 || true
+          echo '=== INDEX.JS COMPLETO ==='
+          cat package/index.js

@@ -21,6 +21,7 @@ const PIX_INTERVAL = 2000;
 const PIX_MAX = 300;
 const CARD_DELIVERY_INTERVAL = 1500;
 const CARD_DELIVERY_MAX = 80;
+const AUTH_CONTEXT_PREFLIGHT_MAX = 5200; // LOGIN_LIMPO_REAPROVEITA_CADASTRO_V2
 
 let ctx = {};
 let checkoutId = "";
@@ -1024,17 +1025,17 @@ $w.onReady(function(){
     O contexto da URL + storage é enviado imediatamente e as consultas
     complementares continuam em paralelo, sem bloquear a renderização.
   */
-  // BOOT_CLIENTE_RECORRENTE_V1
-  // Evita mostrar Nome/CPF/WhatsApp por um instante para quem acabou de
-  // entrar novamente na MESMA conta Wix. Damos no máximo 850 ms para o
-  // backend recuperar o cadastro; depois o checkout abre normalmente e a
-  // consulta continua em segundo plano, sem travar a compra.
+  // BOOT_CLIENTE_RECORRENTE_V2
+  // Depois de limpar histórico ou trocar de aparelho não existe storage local.
+  // Antes de mostrar Nome/CPF/WhatsApp, aguardamos a consulta da conta Wix
+  // autenticada. O próprio backend tem timeout de 5 s, então este preflight
+  // apenas impede o formulário errado de aparecer antes da resposta.
   const contextoAutenticadoPromise =
     carregarContextoClienteAutenticado();
 
   Promise.race([
     contextoAutenticadoPromise,
-    new Promise((resolve) => setTimeout(resolve, 850))
+    new Promise((resolve) => setTimeout(resolve, AUTH_CONTEXT_PREFLIGHT_MAX))
   ])
     .catch(() => {})
     .finally(() => {

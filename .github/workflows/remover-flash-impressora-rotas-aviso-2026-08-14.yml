@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Aplicar correção sem flash V3
+      - name: Aplicar hotfix final sem flash
         run: node scripts/remover-flash-impressora-rotas-aviso-2026-08-14.cjs
 
       - name: Validar página de entrega

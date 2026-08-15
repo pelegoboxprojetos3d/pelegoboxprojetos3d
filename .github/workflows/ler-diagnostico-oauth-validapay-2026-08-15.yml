@@ -1,0 +1,22 @@
+name: Ler diagnóstico OAuth ValidaPay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ler-diagnostico-oauth-validapay-2026-08-15.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar diagnóstico seguro
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail-with-body \
+            'https://www.pelegobox.com.br/_functions/diagnosticoTokenizacaoValidaPay'
+          echo

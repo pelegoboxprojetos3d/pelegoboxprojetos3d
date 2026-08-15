@@ -428,6 +428,10 @@ async function mostrarSecao(id) {
   try { const e=$w(id); if(typeof e.expand==='function') await e.expand(); if(typeof e.show==='function') await e.show(); } catch (_) {}
 }
 async function prepararSecoesEntrega() {
+  // SESSAO4VAZIA é parte permanente do desenho da página.
+  // Nunca esconder nem recolher, inclusive enquanto a impressora está ativa.
+  await mostrarSecao(SECOES_ENTREGA.vazia);
+
   await esconderSecao(SECOES_ENTREGA.banners);
   await esconderSecao(SECOES_ENTREGA.final);
 
@@ -619,32 +623,16 @@ async function esconderProcessamento() {
 
     const processando = $w(IDS.processando);
 
-    // PB: saída suave da seção vazia junto com a impressora.
-    // Primeiro ambas desaparecem em fade; só depois o espaço é recolhido.
-    let secaoVazia = null;
-    try {
-      secaoVazia = $w(SECOES_ENTREGA.vazia);
-    } catch (_) {}
-
-    const transicoesSaida = [];
-
+    // A impressora sai suavemente, mas a SESSAO4VAZIA permanece sempre.
     if (typeof processando.hide === "function") {
-      transicoesSaida.push(processando.hide("fade", { duration: 650 }));
+      await processando.hide("fade", { duration: 650 });
     }
-
-    if (secaoVazia && typeof secaoVazia.hide === "function") {
-      transicoesSaida.push(secaoVazia.hide("fade", { duration: 650 }));
-    }
-
-    await Promise.allSettled(transicoesSaida);
 
     if (typeof processando.collapse === "function") {
       await processando.collapse();
     }
 
-    if (secaoVazia && typeof secaoVazia.collapse === "function") {
-      await secaoVazia.collapse();
-    }
+    await mostrarSecao(SECOES_ENTREGA.vazia);
 
     processamentoVisivelDesde = 0;
     processamentoEmailPendente = false;

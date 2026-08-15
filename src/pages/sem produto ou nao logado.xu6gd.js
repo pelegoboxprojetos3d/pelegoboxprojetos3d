@@ -13,6 +13,8 @@ const IDS = {
   texto: "#textomenor"
 };
 
+const SESSAO_VAZIA = "#SESSAO4VAZIA";
+
 const PAGINA_PROJETOS = "/entregaprojetosprontos";
 let resolvendo = false;
 
@@ -26,6 +28,20 @@ function firstValue(...values) {
     if (text) return text;
   }
   return "";
+}
+
+async function garantirSessaoVaziaVisivel() {
+  try {
+    const secao = $w(SESSAO_VAZIA);
+
+    if (typeof secao.expand === "function") {
+      await secao.expand();
+    }
+
+    if (typeof secao.show === "function") {
+      await secao.show();
+    }
+  } catch (_) {}
 }
 
 function ocultarMensagemInicial() {
@@ -180,10 +196,12 @@ async function resolverPagina() {
 
 $w.onReady(function () {
   /*
-    Esta página é apenas de aviso/triagem. As três seções desenhadas no Editor
-    permanecem visíveis: texto, banners dos três botões e aviso importante.
-    Nenhuma impressora ou seção da página de entrega é controlada aqui.
+    Esta página é apenas de aviso/triagem. As seções desenhadas no Editor
+    permanecem visíveis. A SESSAO4VAZIA é estrutural e deve aparecer sempre,
+    tanto logado quanto não logado e independentemente do motivo da página.
   */
+
+  garantirSessaoVaziaVisivel().catch(() => {});
 
   // PB_AVISO_SEM_FLASH_CABECALHO_V1
   // Primeiro escondemos apenas os dois textos-padrão do Editor. Nenhuma seção,

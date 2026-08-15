@@ -431,11 +431,15 @@ async function prepararSecoesEntrega() {
   await esconderSecao(SECOES_ENTREGA.banners);
   await esconderSecao(SECOES_ENTREGA.final);
 
-  try {
-    const principal = $w(SECOES_ENTREGA.principal);
-    if (typeof principal.expand === "function") await principal.expand();
-    if (typeof principal.show === "function") await principal.show();
-  } catch (_) {}
+  // A área de processamento só é liberada DEPOIS que a rota foi validada.
+  // Isso vale tanto para acesso pelo avatar quanto para link de compra/e-mail.
+  for (const id of [SECOES_ENTREGA.principal, SECOES_ENTREGA.vazia]) {
+    try {
+      const secao = $w(id);
+      if (typeof secao.expand === "function") await secao.expand();
+      if (typeof secao.show === "function") await secao.show();
+    } catch (_) {}
+  }
 }
 
 async function liberarSecoesPosRepeater() {
@@ -3010,6 +3014,7 @@ async function carregarCentralSegundasVias() {
         return;
       }
 
+      await prepararSecoesEntrega();
       await mostrarDadosRepeater([
         itemRepeaterMensagem(
           "SEUS PROJETOS PRONTOS",
@@ -3037,6 +3042,7 @@ async function carregarCentralSegundasVias() {
     // projetos são carregados. Assim uma conta sem compras continua indo direto
     // para a página de aviso, mas uma conta com compras nunca fica numa tela
     // branca esperando o Repeater aparecer.
+    await prepararSecoesEntrega();
     processamentoVisualEncerrado = false;
     await mostrarProcessamento();
 
@@ -3061,6 +3067,7 @@ async function carregarCentralSegundasVias() {
       erro?.message || erro
     );
 
+    await prepararSecoesEntrega();
     await mostrarDadosRepeater([
       itemRepeaterMensagem(
         "SEUS PROJETOS PRONTOS",
@@ -3413,6 +3420,45 @@ function redirecionarHomeAoDeslogar() {
 // BLINDAGEM VISUAL DA ABERTURA
 // ======================================================
 
+// PB_ROTEAMENTO_AVATAR_PREFLIGHT_V4
+function blindarPreflightEntrega() {
+  /*
+    REGRA DE ROTEAMENTO:
+    - Avatar sem parâmetros: consulta primeiro a coleção do membro.
+    - Link de compra/e-mail: valida primeiro login e titularidade.
+    Enquanto essa decisão não terminou, a página de entrega fica 100% fechada.
+  */
+  processamentoVisivelDesde = 0;
+  processamentoVisualEncerrado = false;
+
+  try {
+    const repetidor = $w(IDS.repetidor);
+    repetidor.data = [];
+    if (typeof repetidor.hide === "function") repetidor.hide();
+  } catch (_) {}
+
+  try {
+    const processando = $w(IDS.processando);
+    if (typeof processando.hide === "function") processando.hide();
+    if (typeof processando.collapse === "function") processando.collapse();
+  } catch (_) {}
+
+  for (const id of [
+    SECOES_ENTREGA.principal,
+    SECOES_ENTREGA.banners,
+    SECOES_ENTREGA.final,
+    SECOES_ENTREGA.vazia
+  ]) {
+    try {
+      const secao = $w(id);
+      if (typeof secao.hide === "function") secao.hide();
+      if (typeof secao.collapse === "function") secao.collapse();
+    } catch (_) {}
+  }
+
+  blindarGaleriaPadrao();
+}
+
 function blindarAberturaEntrega() {
   /*
     Esta função precisa rodar antes de qualquer await.
@@ -3451,10 +3497,13 @@ function blindarAberturaEntrega() {
 // ON READY
 // ======================================================
 
-// ROTA_SEM_FLASH_V1
+// ROTA_INTELIGENTE_SEUS_PROJETOS_V4
 $w.onReady(async function () {
   checkoutEmAndamento = false;
   redirecionarHomeAoDeslogar();
+
+  // PRIMEIRO PASSO, sem exceção: nada da entrega pode aparecer antes da decisão.
+  blindarPreflightEntrega();
 
   const checkoutIdInicial = safe(
     wixLocation.query.checkout_id ||
@@ -3463,37 +3512,7 @@ $w.onReady(async function () {
   const tokenInicial = safe(wixLocation.query.token);
   const acessoDireto = Boolean(checkoutIdInicial || tokenInicial);
 
-  /*
-    Primeiro escondemos tudo que pertence à entrega antiga. A impressora NÃO
-    abre automaticamente quando o visitante chega pelo avatar ou quando ainda
-    nem sabemos se ele tem autorização para um link de e-mail.
-  */
-  try {
-    const repetidor = $w(IDS.repetidor);
-    repetidor.data = [];
-    if (typeof repetidor.hide === "function") repetidor.hide();
-  } catch (_) {}
-
-  // PREFLIGHT_CENTRAL_SEM_FLASH_V3
-  // Pelo avatar, primeiro consulta silenciosamente se a conta possui projetos.
-  // Só depois de confirmar projetos a impressora é exibida.
-  try {
-    const processando = $w(IDS.processando);
-    if (typeof processando.hide === "function") processando.hide();
-    if (typeof processando.collapse === "function") processando.collapse();
-  } catch (_) {}
-
-  for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {
-    try {
-      const secao = $w(id);
-      if (typeof secao.hide === "function") secao.hide();
-      if (typeof secao.collapse === "function") secao.collapse();
-    } catch (_) {}
-  }
-
-  await prepararSecoesEntrega();
   await ocultarDadosAteCarregamento();
-  blindarGaleriaPadrao();
   await prepararRepeaterParaCarregamento();
 
   try {
@@ -3510,9 +3529,9 @@ $w.onReady(async function () {
 
   if (acessoDireto) {
     /*
-      Faz uma consulta de autorização ANTES de abrir a impressora. Assim um
-      link encaminhado por e-mail não pisca a tela de entrega para quem está
-      deslogado ou em outra conta.
+      FLUXO E-MAIL / COMPRA:
+      valida login e titularidade ANTES de abrir qualquer coisa da entrega.
+      Um link encaminhado para outra pessoa nunca deve piscar a impressora.
     */
     try {
       const preflight = await buscarEntregaProjetoPronto({
@@ -3550,6 +3569,8 @@ $w.onReady(async function () {
       );
     }
 
+    // Só depois da autorização a página de entrega e a impressora entram em cena.
+    await prepararSecoesEntrega();
     blindarAberturaEntrega();
     await mostrarProcessamento().catch((erro) => {
       console.warn(
@@ -3559,8 +3580,11 @@ $w.onReady(async function () {
     });
   } else {
     /*
-      A central já abriu a impressora imediatamente no começo do onReady.
-      Ela permanece visível enquanto os projetos são consultados e renderizados.
+      FLUXO AVATAR / SEUS PROJETOS PRONTOS:
+      NÃO abre impressora aqui.
+      carregarCentralSegundasVias() consulta a coleção primeiro:
+      - zero projetos -> /semprodutonaologao?motivo=sem_produtos
+      - tem projetos  -> libera a área e abre a impressora
     */
     processamentoVisualEncerrado = false;
   }
@@ -3579,11 +3603,13 @@ $w.onReady(async function () {
       return;
     }
 
-    mostrarDadosRepeater([
-      itemRepeaterMensagem(
-        "SEUS PROJETOS PRONTOS",
-        "Não foi possível carregar seus projetos agora. Atualize a página em instantes."
-      )
-    ]).catch(() => {});
+    prepararSecoesEntrega()
+      .then(() => mostrarDadosRepeater([
+        itemRepeaterMensagem(
+          "SEUS PROJETOS PRONTOS",
+          "Não foi possível carregar seus projetos agora. Atualize a página em instantes."
+        )
+      ]))
+      .catch(() => {});
   });
 });

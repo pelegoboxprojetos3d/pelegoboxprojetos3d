@@ -1,0 +1,171 @@
+name: Corrigir auth cartão v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/corrigir-auth-cartao-v2-2026-08-14.yml
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar correção
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          auth_path = Path('src/backend/validaPayCartaoAuth.web.js')
+          auth = auth_path.read_text(encoding='utf-8')
+          auth = auth.replace('import { currentMember as currentMemberBackend } from "wix-members-backend";','import { members } from "wix-members.v2";')
+
+          auth = re.sub(
+            r'async function identidadeDoMembro\(\) \{.*?\n\}\n\nasync function gravarAutorizacao',
+            '''async function identidadeDoMembro() {
+  const resposta = await members.getCurrentMember({ fieldsets: ["FULL"] });
+  const membro = resposta?.member || resposta || {};
+  const contato = membro?.contact || {};
+  const detalhes = membro?.contactDetails || {};
+  const emailsContato = Array.isArray(contato?.emails) ? contato.emails : [];
+  const emailsDetalhes = Array.isArray(detalhes?.emails) ? detalhes.emails : [];
+
+  return {
+    memberId: safe(membro?._id || membro?.id),
+    email: email(
+      membro?.loginEmail ||
+      emailsContato[0] ||
+      emailsDetalhes[0] ||
+      contato?.email ||
+      detalhes?.email
+    )
+  };
+}
+
+async function gravarAutorizacao''',
+            auth,
+            count=1,
+            flags=re.S
+          )
+
+          auth = auth.replace(
+            '      memberId: identidade.memberId,\n      email: identidade.email,\n      updatedAtDate: now',
+            '      memberId: identidade.memberId,\n      email: identidade.email,\n      cardAuthMemberId: identidade.memberId,\n      cardAuthEmail: identidade.email,\n      cardAuthNonce: identidade.authNonce,\n      cardAuthAt: now,\n      updatedAtDate: now'
+          )
+          auth = auth.replace(
+            '      memberId: identidade.memberId,\n      email: identidade.email,\n      status: "pending_auth",\n      updatedAtDate: now',
+            '      memberId: identidade.memberId,\n      email: identidade.email,\n      cardAuthMemberId: identidade.memberId,\n      cardAuthEmail: identidade.email,\n      cardAuthNonce: identidade.authNonce,\n      cardAuthAt: now,\n      status: "pending_auth",\n      updatedAtDate: now'
+          )
+          auth = auth.replace('  Permissions.SiteMember,','  Permissions.Anyone,',1)
+          auth = auth.replace(
+            '      await gravarAutorizacao(checkoutId, identidade);\n\n      return {\n        ok: true,\n        memberId: identidade.memberId,\n        email: identidade.email\n      };',
+            '      const authNonce = `cauth_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;\n      await gravarAutorizacao(checkoutId, { ...identidade, authNonce });\n\n      return {\n        ok: true,\n        memberId: identidade.memberId,\n        email: identidade.email,\n        authNonce\n      };'
+          )
+          auth_path.write_text(auth, encoding='utf-8')
+
+          card_path = Path('src/backend/validaPayCartaoProjetosProntos.jsw')
+          card = card_path.read_text(encoding='utf-8')
+          card = card.replace('import { currentMember as currentMemberBackend } from "wix-members-backend";\n','')
+          card = re.sub(
+            r'async function identidadeMembroAtualCartao\(checkoutId = ""\) \{.*?\n\}\n\nfunction campoProfundoCartao',
+            '''async function identidadeMembroAtualCartao(checkoutId = "", authNonce = "") {
+  const id = safe(checkoutId);
+  const nonceInformado = safe(authNonce);
+  if (!id || !nonceInformado) return { memberId: "", email: "" };
+
+  try {
+    const sessao = await findSession(id);
+    const memberId = safe(sessao?.cardAuthMemberId);
+    const email = safe(sessao?.cardAuthEmail).toLowerCase();
+    const nonceSalvo = safe(sessao?.cardAuthNonce);
+    const timestamp = new Date(sessao?.cardAuthAt || 0).getTime();
+    const age = Date.now() - timestamp;
+    const autorizacaoRecente = Number.isFinite(age) && age >= 0 && age <= 2 * 60 * 1000;
+
+    if (
+      memberId &&
+      email &&
+      nonceSalvo &&
+      nonceSalvo === nonceInformado &&
+      autorizacaoRecente
+    ) {
+      return { memberId, email };
+    }
+  } catch (_) {}
+
+  return { memberId: "", email: "" };
+}
+
+function campoProfundoCartao''',
+            card,
+            count=1,
+            flags=re.S
+          )
+          card = card.replace(
+            'const identidadeMembro = await identidadeMembroAtualCartao(checkoutId);',
+            'const identidadeMembro = await identidadeMembroAtualCartao(checkoutId, input.cardAuthNonce);'
+          )
+          card_path.write_text(card, encoding='utf-8')
+
+          page_path = Path('src/pages/checkout-projeto-pronto.i9aj1.js')
+          page = page_path.read_text(encoding='utf-8')
+          needle = '      ...basePayload(data),\n      card:data.card||{},'
+          replacement = '      ...basePayload(data),\n      cardAuthNonce:safe(auth.authNonce),\n      card:data.card||{},'
+          if needle not in page:
+            raise SystemExit('Âncora createCard não encontrada')
+          page = page.replace(needle, replacement, 1)
+          page_path.write_text(page, encoding='utf-8')
+          PY
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar correção no main
+        shell: bash
+        run: |
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/validaPayCartaoAuth.web.js src/backend/validaPayCartaoProjetosProntos.jsw src/pages/checkout-projeto-pronto.i9aj1.js
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+          else
+            git commit -m "Fixar autorização do cartão na sessão autenticada"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar Wix receber o código
+        run: sleep 50
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi

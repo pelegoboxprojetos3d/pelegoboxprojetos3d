@@ -3474,20 +3474,14 @@ $w.onReady(async function () {
     if (typeof repetidor.hide === "function") repetidor.hide();
   } catch (_) {}
 
-  if (acessoDireto) {
-    // Link de e-mail/checkout: mantém a impressora fechada até validar a conta.
-    try {
-      const processando = $w(IDS.processando);
-      if (typeof processando.hide === "function") processando.hide();
-      if (typeof processando.collapse === "function") processando.collapse();
-    } catch (_) {}
-  } else {
-    // IMPRESSORA_CENTRAL_IMEDIATA_V2
-    // Central pelo avatar: abre a impressora antes de qualquer consulta remota,
-    // eliminando o quadro intermediário em que aparecia somente o rodapé.
-    processamentoVisualEncerrado = false;
-    blindarAberturaEntrega();
-  }
+  // PREFLIGHT_CENTRAL_SEM_FLASH_V3
+  // Pelo avatar, primeiro consulta silenciosamente se a conta possui projetos.
+  // Só depois de confirmar projetos a impressora é exibida.
+  try {
+    const processando = $w(IDS.processando);
+    if (typeof processando.hide === "function") processando.hide();
+    if (typeof processando.collapse === "function") processando.collapse();
+  } catch (_) {}
 
   for (const id of [SECOES_ENTREGA.banners, SECOES_ENTREGA.final]) {
     try {

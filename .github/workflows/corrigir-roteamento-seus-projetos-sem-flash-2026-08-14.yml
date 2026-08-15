@@ -1,0 +1,89 @@
+name: Corrigir roteamento Seus Projetos Prontos sem flash
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/corrigir-roteamento-seus-projetos-sem-flash-2026-08-14.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-roteamento-seus-projetos-sem-flash
+  cancel-in-progress: false
+
+jobs:
+  aplicar-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Aplicar correção de roteamento
+        run: node scripts/corrigir-roteamento-seus-projetos-sem-flash-2026-08-14.cjs
+
+      - name: Validar sintaxe e regras
+        run: |
+          set -euo pipefail
+          FILE="src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          cp "$FILE" /tmp/entrega-projetos-prontos.mjs
+          node --check /tmp/entrega-projetos-prontos.mjs
+          grep -q "PB_ROTEAMENTO_AVATAR_PREFLIGHT_V4" "$FILE"
+          grep -q "ROTA_INTELIGENTE_SEUS_PROJETOS_V4" "$FILE"
+          grep -q "blindarPreflightEntrega" "$FILE"
+          grep -q "sem_produtos" "$FILE"
+          grep -q "LOGIN_NECESSARIO" "$FILE"
+          grep -q "COMPRA_DE_OUTRA_CONTA" "$FILE"
+
+      - name: Gravar página corrigida no main
+        run: |
+          set -euo pipefail
+          FILE="src/pages/ENTREGA PROJETOS PRONTOS.hr1cn.js"
+          if git diff --quiet -- "$FILE"; then
+            echo "Página já estava corrigida."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add "$FILE"
+            git commit -m "Corrigir roteamento de Seus Projetos Prontos sem flash"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

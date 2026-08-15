@@ -43,7 +43,8 @@ jobs:
           node scripts/corrigir-cartao-auth-sessao-verificada-2026-08-15.cjs
           node --check src/backend/clientes.web.js
           node --check src/pages/checkout-projeto-pronto.i9aj1.js
-          node --check src/backend/validaPayCartaoProjetosProntos.jsw
+          cp src/backend/validaPayCartaoProjetosProntos.jsw /tmp/validaPayCartaoProjetosProntos.mjs
+          node --check /tmp/validaPayCartaoProjetosProntos.mjs
           git diff --check
 
       - name: Validar regra

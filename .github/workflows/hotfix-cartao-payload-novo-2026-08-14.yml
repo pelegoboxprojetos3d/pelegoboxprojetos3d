@@ -1,0 +1,119 @@
+name: Corrigir payload do cartão novo
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/hotfix-cartao-payload-novo-2026-08-14.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hotfix-cartao-payload-novo
+  cancel-in-progress: true
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Corrigir payload
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/backend/validaPayCartaoProjetosProntos.jsw')
+          s = p.read_text(encoding='utf-8')
+          old = '''      customer: {
+                name: nome,
+                email,
+                documentNumber: cpfCnpj,
+                phone: whatsapp
+              },
+              paymentMethodId,
+              installments,'''
+          new = '''      customer: {
+                name: nome,
+                email,
+                documentNumber: cpfCnpj,
+                phone: whatsapp
+              },
+              installments,'''
+          if old not in s:
+              old = '''      customer: {
+                  name: nome,
+                  email,
+                  documentNumber: cpfCnpj,
+                  phone: whatsapp
+                },
+                paymentMethodId,
+                installments,'''
+              new = '''      customer: {
+                  name: nome,
+                  email,
+                  documentNumber: cpfCnpj,
+                  phone: whatsapp
+                },
+                installments,'''
+          if old not in s:
+              old = '''      },
+              paymentMethodId,
+              installments,
+              passFeesToCustomer: false,'''
+              new = '''      },
+              installments,
+              passFeesToCustomer: false,'''
+          if old not in s:
+              raise SystemExit('Trecho paymentMethodId vazio no payload não encontrado')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Validar código
+        run: npm run lint
+
+      - name: Gravar no main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX PROJETOS 3D via WIX"
+          git config user.email "pelegobox82@gmail.com"
+          git add src/backend/validaPayCartaoProjetosProntos.jsw
+          git commit -m "Enviar cartão novo sem paymentMethodId vazio"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar Wix receber o código
+        run: sleep 55
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/wix.json --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" --data '{}')"
+          cat /tmp/wix.json || true
+          echo
+          echo "Wix Site Publisher HTTP $status"
+          test "$status" -ge 200 -a "$status" -lt 300

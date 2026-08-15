@@ -59,3 +59,5 @@ jobs:
           if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
             exit 1
           fi
+
+# disparo identidade cliente 2026-08-14

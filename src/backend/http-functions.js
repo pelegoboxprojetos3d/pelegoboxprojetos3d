@@ -2766,3 +2766,77 @@ export async function get_diagnosticoRespondeChatPP(request) {
 // CENTRAL_PROJETOS_EMAIL_LOGIN_V1
 
 // CENTRAL_PROJETOS_MEMBRO_REAL_V2
+
+
+// TEMP_DIAG_TOKENIZACAO_VALIDAPAY_V1
+// Diagnóstico temporário e sem dados de cartão. Testa apenas se as credenciais
+// de produção aceitam o scope payment.methods/write. Nunca retorna access_token.
+export async function get_diagnosticoTokenizacaoValidaPay() {
+  try {
+    const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+    const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+
+    if (!clientId || !clientSecret) {
+      return ok({
+        headers: { "Content-Type": "application/json" },
+        body: {
+          ok: false,
+          stage: "credentials",
+          status: 0,
+          scopeRequested: "payment.methods/write",
+          tokenReceived: false,
+          error: "credenciais_ausentes"
+        }
+      });
+    }
+
+    const form = [
+      "grant_type=client_credentials",
+      `client_id=${encodeURIComponent(clientId)}`,
+      `client_secret=${encodeURIComponent(clientSecret)}`,
+      `scope=${encodeURIComponent("payment.methods/write")}`
+    ].join("&");
+
+    const response = await fetch(VALIDAPAY_AUTH_URL, {
+      method: "post",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form
+    });
+
+    const raw = await response.text();
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = { raw }; }
+
+    return ok({
+      headers: { "Content-Type": "application/json" },
+      body: {
+        ok: response.ok === true,
+        stage: "oauth",
+        status: Number(response.status || 0),
+        statusText: safe(response.statusText),
+        scopeRequested: "payment.methods/write",
+        grantedScope: safe(data?.scope),
+        tokenReceived: Boolean(safe(data?.access_token)),
+        error: safe(
+          data?.error_description ||
+          data?.message ||
+          (typeof data?.error === "string" ? data.error : data?.error?.message) ||
+          data?.code ||
+          data?.raw
+        ).slice(0, 500)
+      }
+    });
+  } catch (error) {
+    return ok({
+      headers: { "Content-Type": "application/json" },
+      body: {
+        ok: false,
+        stage: "exception",
+        status: 0,
+        scopeRequested: "payment.methods/write",
+        tokenReceived: false,
+        error: safe(error?.message || error).slice(0, 500)
+      }
+    });
+  }
+}

@@ -14,16 +14,16 @@ jobs:
   ler:
     runs-on: ubuntu-latest
     steps:
-      - name: Comparar rotas HTTP functions
+      - name: Consultar OAuth pela rota existente
         run: |
           set -u
           for base in 'https://www.pelegobox.com.br' 'https://pelegobox.com.br'; do
-            for path in '/_functions/diagnosticoTokenizacaoValidaPay' '/_functions/checkAbandon'; do
+            for path in '/_functions/checkAbandon?diagTokenizacao=oauth' '/_functions/checkAbandon'; do
               echo "=== $base$path ==="
               body="$(mktemp)"
               code="$(curl --silent --show-error --location --output "$body" --write-out '%{http_code}' "$base$path" || true)"
               echo "HTTP $code"
-              head -c 1200 "$body" || true
+              head -c 1600 "$body" || true
               echo
               rm -f "$body"
             done

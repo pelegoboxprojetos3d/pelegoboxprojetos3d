@@ -1,12 +1,14 @@
 import wixData from "wix-data";
+import { fetch } from "wix-fetch";
 import { getSecret } from "wix-secrets-backend";
 import { currentMember as currentMemberBackend } from "wix-members-backend";
 import { webMethod, Permissions } from "wix-web-module";
-import { tokenize } from "@validapay/tokenize";
 import { salvarMetodoPagamentoAprovado, metodoPagamentoPublico } from "backend/metodosPagamentoProjetosProntos";
 
 const SESSIONS = "SessoesProjetosProntos2";
 const DB = { suppressAuth: true };
+const OAUTH_URL = "https://oauth2.validapay.com.br/auth/token";
+const TOKENIZE_URL = "https://api.validapay.com.br/v1/payment-methods/tokenize";
 const safe = value => String(value ?? "").trim();
 const digits = value => safe(value).replace(/\D/g, "");
 const mail = value => safe(value).toLowerCase();
@@ -30,16 +32,88 @@ function erroSeguro(error) {
   return safe(error?.code || error?.name || error?.message || "TOKENIZATION_FAILED").slice(0, 160);
 }
 
+async function lerJson(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch (_) { return { raw: text }; }
+}
+
+function mensagemApi(data, fallback = "Falha ao tokenizar cartão") {
+  return safe(
+    data?.error?.message ||
+    data?.message ||
+    data?.error_description ||
+    data?.code ||
+    data?.raw ||
+    fallback
+  );
+}
+
+// CARTAO_TOKEN_WIX_FETCH_V2
+// O SDK oficial @validapay/tokenize 1.2.0 usa o fetch global do Node.
+// No runtime Velo, o restante do checkout já usa wix-fetch com estabilidade.
+// Reproduzimos aqui exatamente as duas chamadas do SDK, mantendo esta rotina
+// fora do motor que efetua a cobrança.
+async function tokenizarViaWixFetch({ clientId, clientSecret, card, customer }) {
+  const oauthBody = [
+    "grant_type=client_credentials",
+    `client_id=${encodeURIComponent(clientId)}`,
+    `client_secret=${encodeURIComponent(clientSecret)}`,
+    `scope=${encodeURIComponent("payment.methods/write")}`
+  ].join("&");
+
+  const authResponse = await fetch(OAUTH_URL, {
+    method: "post",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: oauthBody
+  });
+  const authData = await lerJson(authResponse);
+  const accessToken = safe(authData?.access_token);
+  if (!authResponse.ok || !accessToken) {
+    const error = new Error(mensagemApi(authData, "Falha ao obter token de tokenização"));
+    error.code = safe(authData?.code || authData?.error || `HTTP_${authResponse.status}`);
+    throw error;
+  }
+
+  const tokenizeResponse = await fetch(TOKENIZE_URL, {
+    method: "post",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+      cardHolderName: card.cardHolderName,
+      number: card.number,
+      cvv: card.cvv,
+      expiration: card.expiration,
+      customer
+    })
+  });
+  const tokenizeData = await lerJson(tokenizeResponse);
+  if (!tokenizeResponse.ok) {
+    const error = new Error(mensagemApi(tokenizeData));
+    error.code = safe(tokenizeData?.code || tokenizeData?.error?.code || `HTTP_${tokenizeResponse.status}`);
+    throw error;
+  }
+  return tokenizeData;
+}
+
 async function tokenizarComRetry(payload) {
   let ultimoErro = null;
   for (let tentativa = 1; tentativa <= 2; tentativa += 1) {
     try {
-      return await tokenize(payload);
+      return await tokenizarViaWixFetch(payload);
     } catch (error) {
       ultimoErro = error;
       const code = safe(error?.code).toUpperCase();
-      if (tentativa < 2 && (code === "ACCOUNT_NOT_FOUND" || code === "FORBIDDEN")) {
-        await wait(550);
+      const message = safe(error?.message).toUpperCase();
+      const transitorio =
+        code === "ACCOUNT_NOT_FOUND" ||
+        code === "FORBIDDEN" ||
+        message.includes("CONTA NÃO ENCONTRADA") ||
+        message.includes("CONTA NAO ENCONTRADA");
+      if (tentativa < 2 && transitorio) {
+        await wait(650);
         continue;
       }
       throw error;
@@ -48,7 +122,7 @@ async function tokenizarComRetry(payload) {
   throw ultimoErro || new Error("TOKENIZATION_FAILED");
 }
 
-// CARTAO_TOKEN_ISOLADO_WEBMETHOD_V1
+// CARTAO_TOKEN_ISOLADO_WEBMETHOD_V2
 export const salvarCartaoAprovadoDoMembroAtual = webMethod(
   Permissions.SiteMember,
   async ({ checkoutId, chargeId, card = {}, cardDocument } = {}) => {

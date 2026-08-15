@@ -409,7 +409,70 @@ async function fetchMercadoPagoPayment(
 // CHECK ABANDONADO
 // ======================================================
 
-export async function get_checkAbandon() {
+export async function get_checkAbandon(request) {
+  // TEMP_DIAG_TOKENIZACAO_VIA_CHECK_ABANDON_V1
+  // Diagnóstico temporário e sem dados de cartão. Só executa com query explícita.
+  if (safe(request?.query?.diagTokenizacao) === "oauth") {
+    try {
+      const clientId = safe(await getSecret("VALIDAPAY_CLIENT_ID"));
+      const clientSecret = safe(await getSecret("VALIDAPAY_CLIENT_SECRET"));
+
+      if (!clientId || !clientSecret) {
+        return ok({ body: {
+          ok: false,
+          stage: "credentials",
+          status: 0,
+          scopeRequested: "payment.methods/write",
+          tokenReceived: false,
+          error: "credenciais_ausentes"
+        }});
+      }
+
+      const form = [
+        "grant_type=client_credentials",
+        `client_id=${encodeURIComponent(clientId)}`,
+        `client_secret=${encodeURIComponent(clientSecret)}`,
+        `scope=${encodeURIComponent("payment.methods/write")}`
+      ].join("&");
+
+      const response = await fetch(VALIDAPAY_AUTH_URL, {
+        method: "post",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form
+      });
+
+      const raw = await response.text();
+      let data = {};
+      try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = { raw }; }
+
+      return ok({ body: {
+        ok: response.ok === true,
+        stage: "oauth",
+        status: Number(response.status || 0),
+        statusText: safe(response.statusText),
+        scopeRequested: "payment.methods/write",
+        grantedScope: safe(data?.scope),
+        tokenReceived: Boolean(safe(data?.access_token)),
+        error: safe(
+          data?.error_description ||
+          data?.message ||
+          (typeof data?.error === "string" ? data.error : data?.error?.message) ||
+          data?.code ||
+          data?.raw
+        ).slice(0, 500)
+      }});
+    } catch (error) {
+      return ok({ body: {
+        ok: false,
+        stage: "exception",
+        status: 0,
+        scopeRequested: "payment.methods/write",
+        tokenReceived: false,
+        error: safe(error?.message || error).slice(0, 500)
+      }});
+    }
+  }
+
   const result =
     await checkAbandoned();
 

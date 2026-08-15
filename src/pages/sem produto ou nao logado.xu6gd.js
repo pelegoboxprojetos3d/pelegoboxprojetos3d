@@ -82,6 +82,14 @@ function parametros() {
   };
 }
 
+function acessoDiretoDoEmail(p = {}) {
+  return Boolean(
+    safe(p.via).toLowerCase() === "email" &&
+    (safe(p.checkoutId) || safe(p.token)) &&
+    safe(p.motivo).toLowerCase() !== "conta_errada"
+  );
+}
+
 async function membroLogado() {
   try {
     const member = await currentMember.getMember({ fieldsets: ["FULL"] });
@@ -132,6 +140,23 @@ async function resolverPagina() {
   try {
     const p = parametros();
     const member = await membroLogado();
+
+    /*
+      PB_EMAIL_SEM_FLASH_V1
+      Se o visitante veio pelo botão do e-mail com checkout_id/token e a conta
+      Wix já está logada, esta página é apenas um porteiro técnico. Não consulta
+      a central, não monta aviso e não mostra seu conteúdo: encaminha a compra
+      original diretamente para a página de entrega, onde a validação do e-mail
+      da compra continua sendo feita pelo backend.
+    */
+    if (member && acessoDiretoDoEmail(p)) {
+      abrirProjetos({
+        checkoutId: p.checkoutId,
+        token: p.token,
+        via: "email"
+      });
+      return;
+    }
 
     if (p.motivo === "login" && !member) {
       mostrarAvisoLogin();
@@ -207,6 +232,28 @@ $w.onReady(function () {
   // Primeiro escondemos apenas os dois textos-padrão do Editor. Nenhuma seção,
   // banner, rodapé, altura ou estrutura visual é recolhida/modificada.
   ocultarMensagemInicial();
+
+  /*
+    Atalho síncrono para o caso mais comum do botão do e-mail. O Wix expõe
+    loggedIn() de forma imediata no frontend; assim, se a sessão já existe,
+    navegamos para a entrega antes de esperar getMember() e antes de consultar
+    qualquer coleção. O fallback assíncrono em resolverPagina() continua sendo
+    a fonte de verdade caso a sessão ainda esteja propagando no navegador.
+  */
+  const pInicial = parametros();
+  try {
+    if (
+      acessoDiretoDoEmail(pInicial) &&
+      authentication.loggedIn()
+    ) {
+      abrirProjetos({
+        checkoutId: pInicial.checkoutId,
+        token: pInicial.token,
+        via: "email"
+      });
+      return;
+    }
+  } catch (_) {}
 
   try {
     authentication.onLogin(() => {

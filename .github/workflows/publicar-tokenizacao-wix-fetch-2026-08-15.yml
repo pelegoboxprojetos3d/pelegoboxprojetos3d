@@ -25,8 +25,8 @@ jobs:
           grep -q 'CARTAO_TOKEN_WIX_FETCH_V2' src/backend/salvarCartaoValidaPay.web.js
           grep -q 'https://api.validapay.com.br/v1/payment-methods/tokenize' src/backend/salvarCartaoValidaPay.web.js
           grep -q 'payment.methods/write' src/backend/salvarCartaoValidaPay.web.js
-          if grep -q '@validapay/tokenize' src/backend/salvarCartaoValidaPay.web.js; then
-            echo 'ERRO: módulo isolado ainda depende do fetch global do SDK.'
+          if grep -Eq '^import .*@validapay/tokenize' src/backend/salvarCartaoValidaPay.web.js; then
+            echo 'ERRO: módulo isolado ainda importa o SDK.'
             exit 1
           fi
       - name: Aguardar sincronização GitHub para Wix

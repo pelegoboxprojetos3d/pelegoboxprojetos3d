@@ -655,6 +655,48 @@ function email(v){return safe(v).toLowerCase()}
 function money(v){var n=Number(v||0);if(!isFinite(n))n=0;return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
 function post(data){try{window.parent.postMessage(data,"*")}catch(_){}}
 
+/* CHECKOUT_SCROLL_CROSSBROWSER_V1
+   Chrome já mantém a posição corretamente com o resize estável restaurado.
+   Nos demais navegadores, o iframe/Custom Element pode disparar scroll anchoring
+   quando uma microtela troca de altura. Capturamos o scroll da página PAI
+   SINCRONAMENTE, antes de esconder/mostrar qualquer bloco, e o restauramos por
+   uma janela curta. Não toca em pagamento, foco, dados ou layout visual. */
+function googleChromePuro(){
+ var ua=safe(navigator.userAgent);
+ var chromium=/Chrome\/\d+/i.test(ua)||/CriOS\/\d+/i.test(ua);
+ var outro=/Edg\/|EdgiOS\/|OPR\/|OPiOS\/|SamsungBrowser\/|YaBrowser\//i.test(ua);
+ var brave=Boolean(navigator.brave);
+ return chromium&&!outro&&!brave;
+}
+function preservarScrollPaiCrossBrowser(){
+ if(googleChromePuro())return;
+ var pai=null,x=0,y=0,root=null,body=null;
+ try{
+  pai=window.parent;
+  if(!pai||pai===window)return;
+  x=Number(pai.scrollX||pai.pageXOffset||0);
+  y=Number(pai.scrollY||pai.pageYOffset||0);
+  root=pai.document&&pai.document.documentElement;
+  body=pai.document&&pai.document.body;
+ }catch(_){return}
+
+ var restaurar=function(){
+  try{
+   var oldRoot=root?root.style.scrollBehavior:"";
+   var oldBody=body?body.style.scrollBehavior:"";
+   if(root)root.style.scrollBehavior="auto";
+   if(body)body.style.scrollBehavior="auto";
+   pai.scrollTo(x,y);
+   if(root)root.style.scrollBehavior=oldRoot;
+   if(body)body.style.scrollBehavior=oldBody;
+  }catch(_){}
+ };
+
+ restaurar();
+ requestAnimationFrame(function(){restaurar();requestAnimationFrame(restaurar)});
+ [35,90,170,300,520,800,1150,1500].forEach(function(ms){setTimeout(restaurar,ms)});
+}
+
 var CURRENT_LAYOUT_MODE="INITIAL";
 var HEIGHT_TIMER=null;
 var LAST_EMITTED_HEIGHT=0;
@@ -858,6 +900,7 @@ function basePayment(){
 }
 function showPayment(){
  if(S.paymentReady)return;
+ preservarScrollPaiCrossBrowser();
  S.paymentReady=true;S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"","");
  E.identity.classList.add("hidden");E.payment.classList.remove("hidden");E.normal.classList.remove("hidden");E.cardMode.classList.add("hidden");setStep(2);
  layoutMode("PAYMENT");
@@ -947,6 +990,7 @@ function selectPaymentMethod(method){
  setPaymentMethodStatus(E.pixFromCard,"Ativo");
 }
 function openPix(){
+ preservarScrollPaiCrossBrowser();
  selectPaymentMethod("PIX");
  E.cardMode.classList.add("hidden");E.normal.classList.remove("hidden");E.pixArea.classList.remove("hidden");
  S.pixCode="";E.pixCode.value="";E.copy.disabled=true;E.qr.innerHTML="";E.tetrisWrap.classList.remove("hidden");
@@ -1042,6 +1086,7 @@ function applySavedCardMode(useSaved){
 }
 
 function openCard(){
+ preservarScrollPaiCrossBrowser();
  selectPaymentMethod("CARD");
  restoreDesktopOrder();
 

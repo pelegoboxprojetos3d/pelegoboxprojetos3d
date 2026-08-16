@@ -655,6 +655,19 @@ function email(v){return safe(v).toLowerCase()}
 function money(v){var n=Number(v||0);if(!isFinite(n))n=0;return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
 function post(data){try{window.parent.postMessage(data,"*")}catch(_){}}
 
+/* CHECKOUT_PRE_LAYOUT_SCROLL_LOCK_V1
+   Captura a posição da PÁGINA PAI antes de esconder/mostrar blocos.
+   O postMessage chega depois, então mandar apenas CHECKOUT_LAYOUT era tarde demais:
+   o navegador/Wix já podia ter ancorado a rolagem em outro ponto. */
+function beginLayoutChange(mode){
+ var sx=0,sy=0;
+ try{
+  sx=Number(window.parent.scrollX||window.parent.pageXOffset||0);
+  sy=Number(window.parent.scrollY||window.parent.pageYOffset||0);
+ }catch(_){}
+ post({type:"CHECKOUT_LAYOUT_BEGIN",mode:String(mode||"").toUpperCase(),scrollX:sx,scrollY:sy});
+}
+
 var CURRENT_LAYOUT_MODE="INITIAL";
 var HEIGHT_TIMER=null;
 var LAST_EMITTED_HEIGHT=0;
@@ -858,6 +871,7 @@ function basePayment(){
 }
 function showPayment(){
  if(S.paymentReady)return;
+ beginLayoutChange("PAYMENT");
  S.paymentReady=true;S.saving=false;E.identityBtn.disabled=false;setAlert(E.identityAlert,"","");
  E.identity.classList.add("hidden");E.payment.classList.remove("hidden");E.normal.classList.remove("hidden");E.cardMode.classList.add("hidden");setStep(2);
  layoutMode("PAYMENT");
@@ -947,6 +961,7 @@ function selectPaymentMethod(method){
  setPaymentMethodStatus(E.pixFromCard,"Ativo");
 }
 function openPix(){
+ beginLayoutChange("PIX");
  selectPaymentMethod("PIX");
  E.cardMode.classList.add("hidden");E.normal.classList.remove("hidden");E.pixArea.classList.remove("hidden");
  S.pixCode="";E.pixCode.value="";E.copy.disabled=true;E.qr.innerHTML="";E.tetrisWrap.classList.remove("hidden");
@@ -1042,6 +1057,7 @@ function applySavedCardMode(useSaved){
 }
 
 function openCard(){
+ beginLayoutChange("CARD");
  selectPaymentMethod("CARD");
  restoreDesktopOrder();
 
@@ -1396,6 +1412,7 @@ class PelegoCheckoutPronto extends HTMLElement {
     this._pending = null;
     this._frameReady = false;
     this._appliedHeight = 0;
+    this._layoutScrollLock = null;
     this._windowHandler = this._onWindowMessage.bind(this);
   }
   connectedCallback() {
@@ -1492,6 +1509,29 @@ class PelegoCheckoutPronto extends HTMLElement {
     if (data?.data && typeof data.data === "object" && !data.type) data = data.data;
     return data && typeof data === "object" ? data : {};
   }
+  _captureLayoutScroll(data = {}) {
+    const x = Number(data.scrollX);
+    const y = Number(data.scrollY);
+    this._layoutScrollLock = {
+      x: Number.isFinite(x) ? x : (window.scrollX || window.pageXOffset || 0),
+      y: Number.isFinite(y) ? y : (window.scrollY || window.pageYOffset || 0),
+      mode: String(data.mode || "").trim().toUpperCase(),
+      until: Date.now() + 1800
+    };
+  }
+  _restoreLayoutScroll(lock) {
+    if (!lock || Date.now() > lock.until) return;
+    const restore = () => {
+      try { window.scrollTo(lock.x, lock.y); } catch (_) {}
+    };
+    restore();
+    requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
+    setTimeout(restore, 70);
+    setTimeout(restore, 160);
+    setTimeout(restore, 320);
+    setTimeout(restore, 650);
+    setTimeout(restore, 1050);
+  }
   _scrollCheckoutToTop() {
     const scrollNow = () => {
       try {
@@ -1520,6 +1560,12 @@ class PelegoCheckoutPronto extends HTMLElement {
     if (modeKey) this._lastLayoutMode = modeKey;
 
     const height = Math.max(180, Math.min(2300, requested + 2));
+    const scrollLock = this._layoutScrollLock;
+    const lockActive = Boolean(
+      scrollLock &&
+      Date.now() <= scrollLock.until &&
+      (!scrollLock.mode || !modeKey || scrollLock.mode === modeKey)
+    );
 
     /*
       Mesmo quando a altura nao muda, uma troca real de microtela precisa
@@ -1527,7 +1573,10 @@ class PelegoCheckoutPronto extends HTMLElement {
       celular depois de teclado, telefone, CPF, Pix ou troca para cartao.
     */
     if (Math.abs(height - this._appliedHeight) <= 1) {
-      // PIX/CARD não reposicionam a página. O stepper deve continuar visível.
+      if (lockActive) {
+        this._restoreLayoutScroll(scrollLock);
+        return;
+      }
       if (modeChanged && !paymentMode) this._scrollCheckoutToTop();
       return;
     }
@@ -1537,9 +1586,9 @@ class PelegoCheckoutPronto extends HTMLElement {
       pequenos ajustes de altura. Na ENTRADA do modo CARD, entretanto, sobe.
     */
     // Ao abrir PIX ou CARTÃO, preserva exatamente a posição atual da página.
-    const preserveScroll = paymentMode;
-    const scrollX = window.scrollX || window.pageXOffset || 0;
-    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const preserveScroll = paymentMode || lockActive;
+    const scrollX = lockActive ? scrollLock.x : (window.scrollX || window.pageXOffset || 0);
+    const scrollY = lockActive ? scrollLock.y : (window.scrollY || window.pageYOffset || 0);
 
     this._appliedHeight = height;
     const css = `${height}px`;
@@ -1565,10 +1614,19 @@ class PelegoCheckoutPronto extends HTMLElement {
       });
       setTimeout(restoreScroll, 80);
       setTimeout(restoreScroll, 180);
+      setTimeout(restoreScroll, 360);
+      setTimeout(restoreScroll, 700);
+      setTimeout(restoreScroll, 1100);
     }
 
-    if (modeChanged && !paymentMode) {
+    if (modeChanged && !paymentMode && !lockActive) {
       this._scrollCheckoutToTop();
+    }
+    if (lockActive) {
+      const usedLock = scrollLock;
+      setTimeout(() => {
+        if (this._layoutScrollLock === usedLock) this._layoutScrollLock = null;
+      }, 1250);
     }
 
     this.dispatchEvent(new CustomEvent("checkout-height-change", { detail: { height }, bubbles: true, composed: true }));
@@ -1579,6 +1637,7 @@ class PelegoCheckoutPronto extends HTMLElement {
     const data = this._normalize(event.data);
     const type = String(data.type || data.tipo || data.action || "").trim().toUpperCase();
     if (type === "PAYMENT_CELEBRATION") { pelegoCelebrateFullScreen(data.tipoProduto || data.productType || "MEDIDAS"); return; }
+    if (type === "CHECKOUT_LAYOUT_BEGIN") { this._captureLayoutScroll(data); return; }
     if (type === "READY") {
       this._frameReady = true;
       this._flush();

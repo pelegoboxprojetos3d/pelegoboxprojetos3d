@@ -1,0 +1,93 @@
+name: Corrigir scroll cross-browser do checkout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-scroll-crossbrowser-checkout-2026-08-16.yml"
+      - "scripts/corrigir-scroll-crossbrowser-checkout-2026-08-16.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-scroll-crossbrowser-checkout
+  cancel-in-progress: false
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar código atual
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Atualizar main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Aplicar somente proteção cross-browser
+        run: |
+          set -euo pipefail
+          node --check scripts/corrigir-scroll-crossbrowser-checkout-2026-08-16.cjs
+          node scripts/corrigir-scroll-crossbrowser-checkout-2026-08-16.cjs
+
+      - name: Validar proteção e preservar pagamentos
+        run: |
+          set -euo pipefail
+          node --check src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'CHECKOUT_SCROLL_CROSSBROWSER_V1' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'preservarScrollPaiCrossBrowser();' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'function openPix()' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'function openCard()' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'Pagar com cartão salvo' src/public/custom-elements/pelego-checkout-pronto.js
+          if grep -q 'this._scrollCheckoutToTop()' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: scroll universal antigo voltou"
+            exit 1
+          fi
+          if grep -q 'E.pixArea.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: Pix ainda força scroll"
+            exit 1
+          fi
+          if grep -q 'E.cardSelected.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: Cartão ainda força scroll"
+            exit 1
+          fi
+          git diff --check
+
+      - name: Gravar somente Custom Element
+        run: |
+          set -euo pipefail
+          git add -- src/public/custom-elements/pelego-checkout-pronto.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Estabilizar scroll do checkout fora do Chrome"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          else
+            echo "Correção já aplicada."
+          fi
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npx wix login --api-key "$WIX_API_KEY"
+          npx wix whoami
+          npx wix publish --source local -y

@@ -1,0 +1,89 @@
+name: Restaurar scroll estável do checkout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/restaurar-scroll-estavel-checkout-2026-08-16.yml"
+      - "scripts/restaurar-scroll-estavel-checkout-2026-08-16.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: restaurar-scroll-estavel-checkout
+  cancel-in-progress: false
+
+jobs:
+  restaurar-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar código atual
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Atualizar main antes de tocar no checkout
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Restaurar apenas o comportamento de scroll
+        run: |
+          set -euo pipefail
+          node --check scripts/restaurar-scroll-estavel-checkout-2026-08-16.cjs
+          node scripts/restaurar-scroll-estavel-checkout-2026-08-16.cjs
+
+      - name: Validar sem tocar em pagamento
+        run: |
+          set -euo pipefail
+          node --check src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'Comportamento estável anterior ao scroll universal' src/public/custom-elements/pelego-checkout-pronto.js
+          if grep -q 'this._scrollCheckoutToTop()' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: chamada que sobe o Custom Element ainda existe"
+            exit 1
+          fi
+          if grep -q 'E.pixArea.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: Pix ainda força scroll"
+            exit 1
+          fi
+          if grep -q 'E.cardSelected.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: Cartão ainda força scroll"
+            exit 1
+          fi
+          git diff --check
+
+      - name: Gravar somente Custom Element
+        run: |
+          set -euo pipefail
+          git add -- src/public/custom-elements/pelego-checkout-pronto.js
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+          else
+            git commit -m "Restaurar resize estável do Custom Element"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npx wix login --api-key "$WIX_API_KEY"
+          npx wix whoami
+          npx wix publish --source local -y

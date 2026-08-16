@@ -1,0 +1,86 @@
+name: Corrigir scroll ao trocar pagamento
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-scroll-metodos-pagamento-2026-08-16.yml"
+      - "scripts/corrigir-scroll-metodos-pagamento-2026-08-16.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-scroll-metodos-pagamento
+  cancel-in-progress: false
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar código atual
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Atualizar main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Aplicar correção cirúrgica
+        run: |
+          set -euo pipefail
+          node --check scripts/corrigir-scroll-metodos-pagamento-2026-08-16.cjs
+          node scripts/corrigir-scroll-metodos-pagamento-2026-08-16.cjs
+
+      - name: Validar checkout
+        run: |
+          set -euo pipefail
+          node --check src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'PAGAMENTO_SEM_SALTO_SCROLL_V1' src/public/custom-elements/pelego-checkout-pronto.js
+          if grep -q 'E.pixArea.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: scroll automático do PIX ainda existe"
+            exit 1
+          fi
+          if grep -q 'E.cardSelected.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
+            echo "ERRO: scroll automático do cartão ainda existe"
+            exit 1
+          fi
+          grep -q 'const preserveScroll = paymentMode;' src/public/custom-elements/pelego-checkout-pronto.js
+          git diff --check
+
+      - name: Gravar correção no main
+        run: |
+          set -euo pipefail
+          git add -- src/public/custom-elements/pelego-checkout-pronto.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Manter stepper visível ao trocar pagamento"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          else
+            echo "Correção já estava aplicada."
+          fi
+
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+
+      - name: Publicar exatamente o código corrigido via Wix CLI
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$WIX_API_KEY"
+          npx wix login --api-key "$WIX_API_KEY"
+          npx wix whoami
+          npx wix publish --source local -y

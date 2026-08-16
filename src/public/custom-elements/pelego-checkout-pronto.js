@@ -954,7 +954,7 @@ function openPix(){
  layoutMode("PIX");
  startTetris();mobilePixOrder();
  var p=basePayment();p.type="CREATE_PIX";post(p);
- try{E.pixArea.scrollIntoView({behavior:"smooth",block:"nearest"})}catch(_){}
+ /* PAGAMENTO_SEM_SALTO_SCROLL_V1: mantém o stepper visível ao abrir PIX. */
 }
 /* QR_MOBILE_RETRY_PROVIDER_IMAGE_V2 */
 var QR_RENDER_SEQ=0;
@@ -1056,7 +1056,7 @@ function openCard(){
  [120,350,800,1500].forEach(function(ms){setTimeout(function(){if(!S.useSavedCard)updateVisual()},ms)});
 
  mobileCardOrder();
- try{E.cardSelected.scrollIntoView({behavior:"smooth",block:"start"})}catch(_){}
+ /* PAGAMENTO_SEM_SALTO_SCROLL_V1: mantém o stepper visível ao abrir CARTÃO. */
 }
 function cardBrandInfo(v){
  var n=digits(v);
@@ -1515,6 +1515,7 @@ class PelegoCheckoutPronto extends HTMLElement {
 
     const modeKey = String(mode || "").trim().toUpperCase();
     const modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);
+    const paymentMode = modeKey === "PIX" || modeKey === "CARD";
     if (modeKey) this._lastLayoutMode = modeKey;
 
     const height = Math.max(180, Math.min(2300, requested + 2));
@@ -1525,7 +1526,8 @@ class PelegoCheckoutPronto extends HTMLElement {
       celular depois de teclado, telefone, CPF, Pix ou troca para cartao.
     */
     if (Math.abs(height - this._appliedHeight) <= 1) {
-      if (modeChanged) this._scrollCheckoutToTop();
+      // PIX/CARD não reposicionam a página. O stepper deve continuar visível.
+      if (modeChanged && !paymentMode) this._scrollCheckoutToTop();
       return;
     }
 
@@ -1533,7 +1535,8 @@ class PelegoCheckoutPronto extends HTMLElement {
       Dentro do mesmo formulario de cartao preservamos a posicao durante
       pequenos ajustes de altura. Na ENTRADA do modo CARD, entretanto, sobe.
     */
-    const preserveScroll = modeKey === "CARD" && !modeChanged;
+    // Ao abrir PIX ou CARTÃO, preserva exatamente a posição atual da página.
+    const preserveScroll = paymentMode;
     const scrollX = window.scrollX || window.pageXOffset || 0;
     const scrollY = window.scrollY || window.pageYOffset || 0;
 
@@ -1563,7 +1566,7 @@ class PelegoCheckoutPronto extends HTMLElement {
       setTimeout(restoreScroll, 180);
     }
 
-    if (modeChanged) {
+    if (modeChanged && !paymentMode) {
       this._scrollCheckoutToTop();
     }
 

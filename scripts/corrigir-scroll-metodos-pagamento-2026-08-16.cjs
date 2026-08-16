@@ -17,8 +17,8 @@ function replaceOnce(oldText, newText, label) {
 }
 
 replaceOnce(
-  '  var modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);\n  if (modeKey) this._lastLayoutMode = modeKey;',
-  '  var modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);\n  const paymentMode = modeKey === "PIX" || modeKey === "CARD";\n  if (modeKey) this._lastLayoutMode = modeKey;',
+  '    const modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);\n    if (modeKey) this._lastLayoutMode = modeKey;',
+  '    const modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);\n    const paymentMode = modeKey === "PIX" || modeKey === "CARD";\n    if (modeKey) this._lastLayoutMode = modeKey;',
   "detectar modo PIX/CARD"
 );
 

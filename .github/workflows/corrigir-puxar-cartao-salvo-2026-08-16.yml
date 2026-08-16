@@ -1,0 +1,96 @@
+name: Corrigir leitura do cartão salvo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/corrigir-puxar-cartao-salvo-2026-08-16.yml"
+      - "scripts/corrigir-puxar-cartao-salvo-2026-08-16.cjs"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: corrigir-puxar-cartao-salvo
+  cancel-in-progress: false
+
+jobs:
+  corrigir-validar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar código atual
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Atualizar main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automação"
+          git config user.email "pelegobox82@gmail.com"
+          git pull --rebase origin main
+
+      - name: Aplicar correção cirúrgica
+        run: |
+          set -euo pipefail
+          node --check scripts/corrigir-puxar-cartao-salvo-2026-08-16.cjs
+          node scripts/corrigir-puxar-cartao-salvo-2026-08-16.cjs
+
+      - name: Validar arquivos
+        run: |
+          set -euo pipefail
+          cp src/pages/checkout-projeto-pronto.i9aj1.js /tmp/checkout.mjs
+          cp src/backend/metodosPagamentoProjetosProntos.web.js /tmp/metodos.mjs
+          node --check /tmp/checkout.mjs
+          node --check /tmp/metodos.mjs
+          grep -q 'CARTAO_SALVO_LEITURA_RETRY_V2' src/pages/checkout-projeto-pronto.i9aj1.js
+          grep -q 'buscarMetodoPagamentoDoMembroAtual({ checkoutId })' src/pages/checkout-projeto-pronto.i9aj1.js
+          grep -q 'CARTAO_SALVO_BACKEND_RETRY_V2' src/backend/metodosPagamentoProjetosProntos.web.js
+          grep -q 'Permissions.SiteMember' src/backend/metodosPagamentoProjetosProntos.web.js
+          git diff --check
+
+      - name: Gravar correção no main
+        run: |
+          set -euo pipefail
+          git add -- \
+            src/pages/checkout-projeto-pronto.i9aj1.js \
+            src/backend/metodosPagamentoProjetosProntos.web.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Estabilizar leitura do cartão salvo"
+          else
+            echo "Correção já aplicada."
+          fi
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file" || true
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+          echo "Publicado: leitura do cartão salvo estabilizada."

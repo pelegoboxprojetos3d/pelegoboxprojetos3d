@@ -2,6 +2,7 @@ import { currentMember as currentMemberBackend } from "wix-members-backend";
 import { webMethod, Permissions } from "wix-web-module";
 import {
   buscarMetodoPagamentoPrivadoPorEmail,
+  buscarMetodoPagamentoPrivadoPorMembroId,
   metodoPagamentoPublico
 } from "backend/metodosPagamentoProjetosProntos";
 
@@ -30,7 +31,11 @@ async function membroAtualComRetry() {
 
       const memberId = safe(membro?._id);
       const email = emailDoMembro(membro);
-      if (memberId && email) return { membro, memberId, email };
+
+      // CARTAO_SALVO_PRIORIZA_MEMBER_ID_V3
+      // O memberId é a chave mais estável do login Wix e já está salvo na coleção.
+      // Não dependemos mais do email estar disponível no mesmo instante.
+      if (memberId) return { membro, memberId, email };
     } catch (_) {}
 
     if (tentativa < 6) await wait(180);
@@ -46,16 +51,26 @@ async function membroAtualComRetry() {
 export const buscarMetodoPagamentoDoMembroAtual = webMethod(
   Permissions.SiteMember,
   async (_input = {}) => {
-    // CARTAO_SALVO_BACKEND_RETRY_V2
     const identidade = await membroAtualComRetry();
     const memberId = safe(identidade?.memberId);
     const email = limparEmail(identidade?.email);
 
-    if (!memberId || !email) {
+    if (!memberId && !email) {
       return { memberId, email, metodo: null };
     }
 
-    const item = await buscarMetodoPagamentoPrivadoPorEmail(email);
+    let item = null;
+
+    // Primeiro procura pela identidade imutável do membro Wix.
+    if (memberId) {
+      item = await buscarMetodoPagamentoPrivadoPorMembroId(memberId);
+    }
+
+    // Compatibilidade com registros antigos que possam não ter memberId.
+    if (!item && email) {
+      item = await buscarMetodoPagamentoPrivadoPorEmail(email);
+    }
+
     return {
       memberId,
       email,

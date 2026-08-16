@@ -1063,18 +1063,46 @@ async function salvarCartaoAprovadoSemBloquearVenda(paymentId) {
 }
 
 async function carregarMetodoPagamentoSalvo() {
-  try {
-    const result = await waitTimeout(buscarMetodoPagamentoDoMembroAtual(), 5000, "");
-    savedCardPayload = {
-      type: "SAVED_CARD",
-      existe: result?.metodo?.existe === true,
-      ...(result?.metodo || {})
-    };
-    if (checkoutUiReady) post(savedCardPayload);
-  } catch (_) {
-    savedCardPayload = { type:"SAVED_CARD", existe:false };
-    if (checkoutUiReady) post(savedCardPayload);
+  // CARTAO_SALVO_LEITURA_RETRY_V2
+  // O login Wix pode aparecer no cabeçalho alguns instantes antes de o webMethod
+  // receber o contexto do membro. Fazemos releituras curtas e só declaramos
+  // "sem cartão" depois de esgotar as tentativas.
+  let ultimo = null;
+
+  for (let tentativa = 1; tentativa <= 5; tentativa += 1) {
+    try {
+      const result = await waitTimeout(
+        buscarMetodoPagamentoDoMembroAtual({ checkoutId }),
+        2400,
+        ""
+      );
+
+      if (result && typeof result === "object") ultimo = result;
+
+      if (result?.metodo?.existe === true) {
+        savedCardPayload = {
+          type: "SAVED_CARD",
+          existe: true,
+          ...result.metodo
+        };
+        if (checkoutUiReady) post(savedCardPayload);
+        return savedCardPayload;
+      }
+
+      // Membro identificado e realmente sem cartão: não há motivo para esperar.
+      if (safe(result?.memberId) && email(result?.email)) break;
+    } catch (_) {}
+
+    if (tentativa < 5) await waitMs(260);
   }
+
+  savedCardPayload = {
+    type: "SAVED_CARD",
+    existe: ultimo?.metodo?.existe === true,
+    ...(ultimo?.metodo || {})
+  };
+  if (checkoutUiReady) post(savedCardPayload);
+  return savedCardPayload;
 }
 
 function back() {

@@ -49,6 +49,9 @@ jobs:
           set -euo pipefail
           node --check src/public/custom-elements/pelego-checkout-pronto.js
           grep -q 'PAGAMENTO_SEM_SALTO_SCROLL_V1' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'CHECKOUT_PRE_LAYOUT_SCROLL_LOCK_V1' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'type === "CHECKOUT_LAYOUT_BEGIN"' src/public/custom-elements/pelego-checkout-pronto.js
+          grep -q 'const preserveScroll = paymentMode || lockActive;' src/public/custom-elements/pelego-checkout-pronto.js
           if grep -q 'E.pixArea.scrollIntoView' src/public/custom-elements/pelego-checkout-pronto.js; then
             echo "ERRO: scroll automático do PIX ainda existe"
             exit 1
@@ -57,7 +60,6 @@ jobs:
             echo "ERRO: scroll automático do cartão ainda existe"
             exit 1
           fi
-          grep -q 'const preserveScroll = paymentMode;' src/public/custom-elements/pelego-checkout-pronto.js
           git diff --check
 
       - name: Gravar correção no main
@@ -65,7 +67,7 @@ jobs:
           set -euo pipefail
           git add -- src/public/custom-elements/pelego-checkout-pronto.js
           if ! git diff --cached --quiet; then
-            git commit -m "Manter stepper visível ao trocar pagamento"
+            git commit -m "Capturar scroll antes do reflow do checkout"
             git pull --rebase origin main
             git push origin HEAD:main
           else

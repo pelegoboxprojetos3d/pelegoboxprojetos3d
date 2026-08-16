@@ -37,6 +37,21 @@ async function buscarRegistroPagamentoPrivadoPorEmail(value) {
   return result.items?.[0] || null;
 }
 
+export async function buscarMetodoPagamentoPrivadoPorMembroId(value) {
+  const memberId = safe(value);
+  if (!memberId) return null;
+
+  const result = await wixData
+    .query(COLLECTION)
+    .eq("memberId", memberId)
+    .eq("ativo", true)
+    .descending("_updatedDate")
+    .limit(1)
+    .find({ ...DB, consistentRead: true });
+
+  return result.items?.[0] || null;
+}
+
 export async function buscarMetodoPagamentoPrivadoPorEmail(value) {
   const mail = email(value);
   if (!mail) return null;

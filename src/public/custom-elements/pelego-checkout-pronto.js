@@ -1515,7 +1515,8 @@ class PelegoCheckoutPronto extends HTMLElement {
 
     const modeKey = String(mode || "").trim().toUpperCase();
     const modeChanged = Boolean(modeKey && modeKey !== this._lastLayoutMode);
-    const paymentMode = modeKey === "PIX" || modeKey === "CARD";
+    // PAYMENT é a transição logo após preencher/confirmar os dados. Ela também não pode deslocar a página.
+    const paymentMode = modeKey === "PAYMENT" || modeKey === "PIX" || modeKey === "CARD";
     if (modeKey) this._lastLayoutMode = modeKey;
 
     const height = Math.max(180, Math.min(2300, requested + 2));

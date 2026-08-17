@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PELEGO BOX • Buscador Sheets",
-  "version": "1.2.0",
-  "description": "Automatiza o F5 ao voltar do dashboard para Videos_projetos, sem interferir no fechamento do buscador.",
+  "version": "1.3.0",
+  "description": "Automatiza o F5 ao entrar nos dashboards e ao voltar para Videos_projetos, mantendo o buscador correto em cada aba.",
   "content_scripts": [
     {
       "matches": ["https://docs.google.com/spreadsheets/*"],

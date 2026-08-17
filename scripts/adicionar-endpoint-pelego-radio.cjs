@@ -4,6 +4,7 @@ const path = require("path");
 const file = path.join(process.cwd(), "src", "backend", "http-functions.js");
 let source = fs.readFileSync(file, "utf8");
 
+// V1.0.1 — publicação dedicada do catálogo da rádio.
 const marker = "// PELEGO_RADIO_CATALOGO_PUBLICO_V1";
 
 if (source.includes(marker)) {

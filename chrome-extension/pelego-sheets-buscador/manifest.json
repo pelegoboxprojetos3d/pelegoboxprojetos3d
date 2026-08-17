@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PELEGO BOX • Buscador Sheets",
-  "version": "1.1.0",
-  "description": "Mantém o Buscador PELEGO BOX vivo, ocultando no dashboard e mostrando novamente em Videos_projetos sem F5.",
+  "version": "1.2.0",
+  "description": "Automatiza o F5 ao voltar do dashboard para Videos_projetos, sem interferir no fechamento do buscador.",
   "content_scripts": [
     {
       "matches": ["https://docs.google.com/spreadsheets/*"],

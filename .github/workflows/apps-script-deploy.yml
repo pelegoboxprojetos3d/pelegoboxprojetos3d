@@ -2,6 +2,12 @@ name: Apps Script Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps-script/**'
+      - '.clasp.json'
 
 permissions:
   contents: read

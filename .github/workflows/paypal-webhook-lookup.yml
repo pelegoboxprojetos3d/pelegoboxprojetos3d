@@ -1,4 +1,4 @@
-name: Diagnosticar lookup de webhooks PayPal
+name: Trocar lookup de webhooks PayPal
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  diagnosticar:
+  trocar:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -43,7 +43,7 @@ jobs:
           echo "access_token=$token" >> "$GITHUB_OUTPUT"
           echo "Autenticação Live concluída."
 
-      - name: Conferir webhook do Make
+      - name: Confirmar webhook do Make na PELEGO BOX Store
         env:
           ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
         run: |
@@ -53,87 +53,113 @@ jobs:
             -H 'Content-Type: application/json' \
             https://api-m.paypal.com/v1/notifications/webhooks)"
           make_count="$(printf '%s' "$response" | jq '[.webhooks[]? | select(.url | contains("hook.us2.make.com"))] | length')"
-          echo "webhook_make_encontrado=$make_count" > paypal-diagnostico.txt
-          test "$make_count" -ge 1 || { echo "Webhook do Make não encontrado"; exit 1; }
+          test "$make_count" -ge 1 || { echo "ERRO: webhook do Make não encontrado na REST App atual."; exit 1; }
+          echo "Webhook do Make confirmado na REST App atual."
 
-      - name: Consultar e tentar criar Webhook Lookup
-        id: lookup
+      - name: Trocar Webhook Lookup antigo
+        id: swap
         env:
           ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
           PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
         run: |
-          set -u
+          set -euo pipefail
 
-          get_body="$(mktemp)"
-          get_status="$(curl --silent --show-error \
-            --output "$get_body" \
+          list_body="$(mktemp)"
+          list_status="$(curl --silent --show-error \
+            --output "$list_body" \
             --write-out '%{http_code}' \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H 'Content-Type: application/json' \
             https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
+          test "$list_status" = "200" || { echo "ERRO ao listar Webhook Lookup: HTTP $list_status"; cat "$list_body"; exit 1; }
 
-          {
-            echo "GET /v1/notifications/webhooks-lookup HTTP $get_status"
-            cat "$get_body"
-            echo
-          } >> paypal-diagnostico.txt
-
-          existing_id=""
-          if [ "$get_status" = "200" ]; then
-            existing_id="$(jq -r --arg cid "$PAYPAL_CLIENT_ID" '
-              if type == "array" then
-                ([.[] | select(.client_id == $cid) | .id][0] // empty)
-              elif has("webhooks_lookups") then
-                ([.webhooks_lookups[]? | select(.client_id == $cid) | .id][0] // empty)
-              elif .client_id == $cid then
-                (.id // empty)
-              else
-                empty
-              end
-            ' "$get_body" 2>/dev/null || true)"
-          fi
-
-          if [ -n "$existing_id" ]; then
-            echo "RESULTADO: Webhook Lookup já existe. ID=$existing_id" >> paypal-diagnostico.txt
-            echo "resultado=existente" >> "$GITHUB_OUTPUT"
+          current_id="$(jq -r --arg cid "$PAYPAL_CLIENT_ID" '[.webhooks_lookups[]? | select(.client_id == $cid) | .id][0] // empty' "$list_body")"
+          if [ -n "$current_id" ]; then
+            echo "Webhook Lookup já está ligado à PELEGO BOX Store. ID: $current_id"
+            echo "lookup_id=$current_id" >> "$GITHUB_OUTPUT"
+            echo "resultado=ja_correto" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          post_body="$(mktemp)"
-          post_status="$(curl --silent --show-error \
-            --output "$post_body" \
+          total="$(jq '[.webhooks_lookups[]?] | length' "$list_body")"
+          foreign_id="$(jq -r '[.webhooks_lookups[]?.id][0] // empty' "$list_body")"
+          foreign_prefix="$(jq -r '[.webhooks_lookups[]?.client_id][0] // empty' "$list_body" | cut -c1-12)"
+
+          if [ "$total" -ne 1 ] || [ -z "$foreign_id" ]; then
+            echo "ERRO DE SEGURANÇA: esperado exatamente 1 lookup antigo; encontrados: $total. Nada foi apagado."
+            exit 1
+          fi
+
+          echo "Lookup antigo confirmado: $foreign_id (Client ID ${foreign_prefix}...)."
+          echo "Excluindo lookup antigo autorizado..."
+
+          delete_body="$(mktemp)"
+          delete_status="$(curl --silent --show-error \
+            --output "$delete_body" \
             --write-out '%{http_code}' \
-            -X POST \
+            -X DELETE \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H 'Content-Type: application/json' \
-            -d '{}' \
-            https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
+            "https://api-m.paypal.com/v1/notifications/webhooks-lookup/$foreign_id")"
 
-          {
-            echo "POST /v1/notifications/webhooks-lookup HTTP $post_status"
-            cat "$post_body"
-            echo
-          } >> paypal-diagnostico.txt
-
-          if [ "$post_status" = "201" ]; then
-            lookup_id="$(jq -r '.id // empty' "$post_body")"
-            echo "RESULTADO: Webhook Lookup criado. ID=$lookup_id" >> paypal-diagnostico.txt
-            echo "resultado=criado" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$delete_status" != "204" ]; then
+            echo "ERRO ao excluir lookup antigo: HTTP $delete_status"
+            cat "$delete_body"
+            exit 1
           fi
+          echo "Lookup antigo excluído com sucesso."
 
-          echo "RESULTADO: PayPal recusou a criação do Webhook Lookup." >> paypal-diagnostico.txt
-          echo "resultado=recusado" >> "$GITHUB_OUTPUT"
-          exit 0
+          new_id=""
+          for tentativa in 1 2 3 4 5; do
+            create_body="$(mktemp)"
+            create_status="$(curl --silent --show-error \
+              --output "$create_body" \
+              --write-out '%{http_code}' \
+              -X POST \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d '{}' \
+              https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
 
-      - name: Salvar diagnóstico
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: paypal-webhook-lookup-diagnostico
-          path: paypal-diagnostico.txt
-          retention-days: 7
+            if [ "$create_status" = "201" ]; then
+              new_id="$(jq -r '.id // empty' "$create_body")"
+              returned_client="$(jq -r '.client_id // empty' "$create_body")"
+              test -n "$new_id" || { echo "PayPal criou lookup sem retornar ID."; exit 1; }
+              test "$returned_client" = "$PAYPAL_CLIENT_ID" || { echo "ERRO: lookup criado para Client ID inesperado."; exit 1; }
+              break
+            fi
 
-      - name: Resultado
+            echo "Criação ainda não disponível (HTTP $create_status), tentativa $tentativa/5."
+            if [ "$tentativa" -eq 5 ]; then
+              cat "$create_body"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "Novo Webhook Lookup criado para a PELEGO BOX Store. ID: $new_id"
+          echo "lookup_id=$new_id" >> "$GITHUB_OUTPUT"
+          echo "resultado=trocado" >> "$GITHUB_OUTPUT"
+
+      - name: Conferência final
+        env:
+          ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          EXPECTED_LOOKUP_ID: ${{ steps.swap.outputs.lookup_id }}
         run: |
-          echo "Resultado: ${{ steps.lookup.outputs.resultado }}"
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail-with-body \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
+
+          matching="$(printf '%s' "$response" | jq --arg cid "$PAYPAL_CLIENT_ID" '[.webhooks_lookups[]? | select(.client_id == $cid)] | length')"
+          final_id="$(printf '%s' "$response" | jq -r --arg cid "$PAYPAL_CLIENT_ID" '[.webhooks_lookups[]? | select(.client_id == $cid) | .id][0] // empty')"
+
+          test "$matching" -eq 1 || { echo "ERRO: conferência final encontrou $matching lookups para a REST App atual."; exit 1; }
+          test -n "$final_id" || { echo "ERRO: lookup final não encontrado."; exit 1; }
+          test "$final_id" = "$EXPECTED_LOOKUP_ID" || { echo "ERRO: ID final diferente do esperado."; exit 1; }
+
+          echo "CONFIRMADO: Webhook Lookup agora está ligado à PELEGO BOX Store."
+          echo "Lookup ID final: $final_id"
+          echo "Resultado da operação: ${{ steps.swap.outputs.resultado }}"

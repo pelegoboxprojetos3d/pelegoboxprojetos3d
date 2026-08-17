@@ -80,8 +80,8 @@ jobs:
           existing_id="$(printf '%s' "$list" | jq -r --arg cid "$PAYPAL_CLIENT_ID" '
             if type == "array" then
               ([.[] | select(.client_id == $cid) | .id][0] // empty)
-            elif has("webhook_lookups") then
-              ([.webhook_lookups[]? | select(.client_id == $cid) | .id][0] // empty)
+            elif has("webhooks_lookups") then
+              ([.webhooks_lookups[]? | select(.client_id == $cid) | .id][0] // empty)
             elif .client_id == $cid then
               (.id // empty)
             else
@@ -118,4 +118,4 @@ jobs:
             https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
 
           echo "Resposta final do PayPal (dados não sensíveis):"
-          printf '%s' "$response" | jq 'if type == "array" then map({id, client_id, account_number}) elif has("webhook_lookups") then {webhook_lookups: [.webhook_lookups[]? | {id, client_id, account_number}]} else {id, client_id, account_number} end'
+          printf '%s' "$response" | jq 'if type == "array" then map({id, client_id, account_number}) elif has("webhooks_lookups") then {webhooks_lookups: [.webhooks_lookups[]? | {id, client_id, account_number}]} else {id, client_id, account_number} end'

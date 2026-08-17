@@ -1,0 +1,72 @@
+name: Publicar catálogo PELEGO RADIO
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/adicionar-endpoint-pelego-radio.cjs"
+      - ".github/workflows/publicar-pelego-radio-catalogo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pelego-radio-catalogo
+  cancel-in-progress: true
+
+jobs:
+  catalogo-radio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Aplicar endpoint público da rádio
+        run: node scripts/adicionar-endpoint-pelego-radio.cjs
+
+      - name: Gravar somente o endpoint
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/backend/http-functions.js; then
+            echo "Endpoint já está aplicado."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add src/backend/http-functions.js
+            git commit -m "PELEGO RADIO: endpoint público de catálogo"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar versão salva no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "Falha ao publicar catálogo da rádio no Wix: HTTP $status"
+            exit 1
+          fi
+          echo "Catálogo da PELEGO RADIO publicado no Wix."

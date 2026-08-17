@@ -4,13 +4,12 @@
  *
  * Regras:
  * - Dashboard_Mensal e Dashboard_Anual não usam o buscador.
- * - A sidebar NÃO é destruída ao entrar no dashboard.
- * - A extensão do Chrome apenas oculta a sidebar no dashboard e a mostra novamente em Videos_projetos.
+ * - Videos_projetos reabre o buscador ao entrar na aba.
  * - Eixos dos gráficos de faturamento/vendas usam marcações de 5 em 5.
  * - Os gráficos continuam autoescaláveis: o teto sobe para o próximo múltiplo de 5.
  */
 
-const PBX_DASHBOARD_FINAL_VERSION = '2026-08-17-final-v2';
+const PBX_DASHBOARD_FINAL_VERSION = '2026-08-17-final-v1';
 
 function onSelectionChange(e) {
   try {
@@ -24,9 +23,12 @@ function onSelectionChange(e) {
 
     if (ultimaAba !== nome) {
       cache.put('PBX_ULTIMA_ABA', nome, 21600);
-      // Importante: não fecha e não tenta reabrir a sidebar aqui.
-      // O Apps Script não é confiável para reabrir UI em troca de aba.
-      // A extensão do Chrome cuida apenas de ocultar/mostrar a mesma sidebar viva.
+
+      if (nome === 'Dashboard_Mensal' || nome === 'Dashboard_Anual') {
+        pbxFecharBuscadorNoDashboard_();
+      } else if (nome === 'Videos_projetos') {
+        pbxAbrirBuscador();
+      }
     }
 
     if (nome === 'Dashboard_Mensal' || nome === 'Dashboard_Anual') {
@@ -41,10 +43,13 @@ function onSelectionChange(e) {
   }
 }
 
-// Mantida por compatibilidade com versões anteriores.
-// Não fecha mais a sidebar: destruir a sidebar obrigava um novo F5 para recriá-la.
 function pbxFecharBuscadorNoDashboard_() {
-  return { ok: true, modo: 'sidebar_persistente' };
+  try {
+    const html = HtmlService
+      .createHtmlOutput('<script>google.script.host.close();</script>')
+      .setTitle('BUSCADOR • DESATIVADO NO DASHBOARD');
+    SpreadsheetApp.getUi().showSidebar(html);
+  } catch (_) {}
 }
 
 /**

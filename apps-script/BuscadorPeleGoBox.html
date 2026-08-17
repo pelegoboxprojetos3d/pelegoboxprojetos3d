@@ -185,13 +185,18 @@
     if (on) elStatus.textContent = 'Pesquisando…';
   }
 
+  function marcarDashboardSemFechar_(aba){
+    elSheetName.textContent = aba || 'Dashboard';
+    elStatus.textContent = 'Buscador pausado no dashboard.';
+  }
+
   function atualizarAba(){
     google.script.run
       .withSuccessHandler(info => {
         elSheetName.textContent = info.aba || '—';
 
         if (info.desativado) {
-          google.script.host.close();
+          marcarDashboardSemFechar_(info.aba);
           return;
         }
 
@@ -218,7 +223,7 @@
         setLoading(false);
 
         if (res && res.desativado) {
-          google.script.host.close();
+          marcarDashboardSemFechar_(res.aba);
           return;
         }
 
@@ -316,7 +321,7 @@
     google.script.run
       .withSuccessHandler(res => {
         if (res && res.desativado) {
-          google.script.host.close();
+          marcarDashboardSemFechar_(res.aba);
           return;
         }
 
@@ -375,20 +380,19 @@
     }
   });
 
-  // Vigia a aba ativa: entrou em qualquer dashboard, fecha o buscador sozinho.
-  // Assim o painel não perde largura nem fica espremido.
+  // Mantém a mesma sidebar viva. No dashboard ela é apenas pausada;
+  // a extensão do Chrome oculta/mostra a barra sem destruí-la.
   let ultimaAbaVigiada = '';
   function vigiarAbaAtiva(){
     google.script.run
       .withSuccessHandler(info => {
         const aba = (info && info.aba) || '';
-        if (info && info.desativado) {
-          google.script.host.close();
-          return;
-        }
         if (aba && aba !== ultimaAbaVigiada) {
           ultimaAbaVigiada = aba;
           elSheetName.textContent = aba;
+        }
+        if (info && info.desativado) {
+          marcarDashboardSemFechar_(aba);
         }
       })
       .pbxInfoBuscador();

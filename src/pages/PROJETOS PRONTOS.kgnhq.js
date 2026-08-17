@@ -98,6 +98,17 @@ function configurarProjetos() {
     });
 }
 
+function configurarBotaoVerTodos() {
+    const botao = $w("#vertodososprojeosprontos");
+
+    botao.link =
+        "/videos-dos-projetos-prontos";
+
+    botao.target =
+        "_self";
+}
+
 $w.onReady(function () {
     configurarProjetos();
+    configurarBotaoVerTodos();
 });

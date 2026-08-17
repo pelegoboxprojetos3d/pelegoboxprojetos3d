@@ -144,7 +144,7 @@
 
   <div class="nav">
     <button onclick="anterior()">◀ Anterior</button>
-    <button onclick="mostrarTudo()">☰ Mostrar tudo</button>
+    <button onclick="mostrarTudo()">↺ RESET</button>
     <button onclick="proximo()">Próximo ▶</button>
   </div>
 
@@ -157,7 +157,7 @@
 
   <div class="footer">
     <kbd>Enter</kbd> pesquisa • a planilha mostra somente as linhas encontradas.<br>
-    <b>Mostrar tudo</b> restaura as 1.800 linhas. Nenhum dado é apagado.
+    <b>RESET</b> restaura a planilha completa. Nenhum dado é apagado.
   </div>
 
 <script>
@@ -191,11 +191,7 @@
         elSheetName.textContent = info.aba || '—';
 
         if (info.desativado) {
-          resultados = [];
-          atual = -1;
-          elCounter.textContent = '';
-          elStatus.textContent = 'Buscador desativado nesta aba.';
-          elResults.innerHTML = '<div class="empty"><b>Dashboard protegido.</b><br>O buscador foi desativado aqui para não mexer nas linhas auxiliares dos gráficos.</div>';
+          google.script.host.close();
           return;
         }
 
@@ -231,12 +227,7 @@
         setLoading(false);
 
         if (res && res.desativado) {
-          resultados = [];
-          atual = -1;
-          elSheetName.textContent = res.aba || '—';
-          elCounter.textContent = '';
-          elStatus.textContent = res.mensagem || 'Buscador desativado nesta aba.';
-          elResults.innerHTML = '<div class="empty"><b>Dashboard protegido.</b><br>Use o buscador nas abas de dados. Nesta aba ele não oculta nenhuma linha.</div>';
+          google.script.host.close();
           return;
         }
 
@@ -373,12 +364,40 @@
 
   elQ.addEventListener('input', () => {
     clearTimeout(debounce);
-    if (elQ.value.trim().length >= 2) {
+    const texto = elQ.value.trim();
+
+    // Limpou a busca = RESET imediato da planilha.
+    if (!texto) {
+      mostrarTudo();
+      return;
+    }
+
+    if (texto.length >= 2) {
       debounce = setTimeout(buscar, 420);
     }
   });
 
+  // Vigia a aba ativa: entrou em qualquer dashboard, fecha o buscador sozinho.
+  // Assim o painel não perde largura nem fica espremido.
+  let ultimaAbaVigiada = '';
+  function vigiarAbaAtiva(){
+    google.script.run
+      .withSuccessHandler(info => {
+        const aba = (info && info.aba) || '';
+        if (info && info.desativado) {
+          google.script.host.close();
+          return;
+        }
+        if (aba && aba !== ultimaAbaVigiada) {
+          ultimaAbaVigiada = aba;
+          elSheetName.textContent = aba;
+        }
+      })
+      .pbxInfoBuscador();
+  }
+
   atualizarAba();
+  setInterval(vigiarAbaAtiva, 700);
 </script>
 </body>
 </html>

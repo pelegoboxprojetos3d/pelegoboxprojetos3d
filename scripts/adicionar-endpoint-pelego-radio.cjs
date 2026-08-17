@@ -4,7 +4,6 @@ const path = require("path");
 const file = path.join(process.cwd(), "src", "backend", "http-functions.js");
 let source = fs.readFileSync(file, "utf8");
 
-// V1.0.1 — publicação dedicada do catálogo da rádio.
 const marker = "// PELEGO_RADIO_CATALOGO_PUBLICO_V1";
 
 if (source.includes(marker)) {
@@ -58,7 +57,7 @@ function radioImageUrl(value) {
 
   const wixImage = raw.match(/^wix:image:\/\/v1\/([^/]+)\//i);
   if (wixImage?.[1]) {
-    return `https://static.wixstatic.com/media/${wixImage[1]}`;
+    return "https://static.wixstatic.com/media/" + wixImage[1];
   }
 
   return raw;
@@ -120,7 +119,7 @@ export async function get_pelegoRadioCatalog(request) {
         title: safe(item?.name).toUpperCase(),
         image: radioImageUrl(item?.mainMedia),
         buyUrl: item?.productPageUrl
-          ? `https://www.pelegobox.com.br${safe(item.productPageUrl)}`
+          ? "https://www.pelegobox.com.br" + safe(item.productPageUrl)
           : "",
         slug: safe(item?.slug)
       }));
@@ -140,7 +139,6 @@ export async function get_pelegoRadioCatalog(request) {
 
     const result = await wixData
       .query("Videosprojetos")
-      .eq("ativo_checkout", "SIM")
       .descending("ordem_video")
       .skip(offset)
       .limit(limit)
@@ -150,6 +148,7 @@ export async function get_pelegoRadioCatalog(request) {
       const code = radioProjectCode(item);
       const brand = safe(item?.marca_1 || item?.marca_2 || item?.marca_3);
       const title = radioDecodeTitle(item?.titulo_video).toUpperCase();
+      const active = safe(item?.ativo_checkout).toUpperCase() === "SIM";
 
       return {
         id: safe(item?._id),
@@ -158,8 +157,8 @@ export async function get_pelegoRadioCatalog(request) {
         title,
         image: radioImageUrl(item?.thumbnail),
         videoUrl: safe(item?.link_video),
-        buyUrl: code
-          ? `https://www.pelegobox.com.br/checkoutprojetosprontos?codigo=${encodeURIComponent(code)}${brand ? `&marca=${encodeURIComponent(brand)}` : ""}`
+        buyUrl: active && code
+          ? "https://www.pelegobox.com.br/checkoutprojetosprontos?codigo=" + encodeURIComponent(code) + (brand ? "&marca=" + encodeURIComponent(brand) : "")
           : ""
       };
     });

@@ -1,0 +1,121 @@
+name: Configurar lookup de webhooks PayPal
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/paypal-webhook-lookup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validar secrets obrigatórios
+        env:
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$PAYPAL_CLIENT_ID" || { echo "PAYPAL_CLIENT_ID ausente"; exit 1; }
+          test -n "$PAYPAL_CLIENT_SECRET" || { echo "PAYPAL_CLIENT_SECRET ausente"; exit 1; }
+
+      - name: Autenticar no PayPal Live
+        id: oauth
+        env:
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail-with-body \
+            -u "$PAYPAL_CLIENT_ID:$PAYPAL_CLIENT_SECRET" \
+            -H 'Accept: application/json' \
+            -H 'Accept-Language: en_US' \
+            -d 'grant_type=client_credentials' \
+            https://api-m.paypal.com/v1/oauth2/token)"
+
+          token="$(printf '%s' "$response" | jq -r '.access_token // empty')"
+          test -n "$token" || { echo "PayPal não retornou access_token"; exit 1; }
+
+          echo "access_token=$token" >> "$GITHUB_OUTPUT"
+          echo "Autenticação Live concluída."
+
+      - name: Conferir webhook do Make cadastrado na REST App
+        env:
+          ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail-with-body \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            https://api-m.paypal.com/v1/notifications/webhooks)"
+
+          count="$(printf '%s' "$response" | jq '[.webhooks[]?] | length')"
+          echo "Webhooks encontrados na REST App: $count"
+          printf '%s' "$response" | jq -r '.webhooks[]? | "- ID: \(.id) | URL: \(.url) | eventos: \([.event_types[]?.name] | join(", "))"'
+
+          make_count="$(printf '%s' "$response" | jq '[.webhooks[]? | select(.url | contains("hook.us2.make.com"))] | length')"
+          if [ "$make_count" -lt 1 ]; then
+            echo "ERRO: nenhum webhook do Make foi encontrado nesta REST App."
+            exit 1
+          fi
+
+      - name: Criar Webhook Lookup se ainda não existir
+        env:
+          ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+
+          list="$(curl --silent --show-error --fail-with-body \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
+
+          existing_id="$(printf '%s' "$list" | jq -r --arg cid "$PAYPAL_CLIENT_ID" '
+            if type == "array" then
+              ([.[] | select(.client_id == $cid) | .id][0] // empty)
+            elif has("webhook_lookups") then
+              ([.webhook_lookups[]? | select(.client_id == $cid) | .id][0] // empty)
+            elif .client_id == $cid then
+              (.id // empty)
+            else
+              empty
+            end
+          ')"
+
+          if [ -n "$existing_id" ]; then
+            echo "Webhook Lookup já existia. ID: $existing_id"
+          else
+            echo "Nenhum Webhook Lookup desta REST App encontrado. Criando..."
+            created="$(curl --silent --show-error --fail-with-body \
+              -X POST \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -d '{}' \
+              https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
+
+            lookup_id="$(printf '%s' "$created" | jq -r '.id // empty')"
+            client_id="$(printf '%s' "$created" | jq -r '.client_id // empty')"
+            test -n "$lookup_id" || { echo "PayPal não retornou ID do Webhook Lookup"; printf '%s\n' "$created"; exit 1; }
+            echo "Webhook Lookup criado com sucesso. ID: $lookup_id"
+            echo "Client ID confirmado: ${client_id:0:10}..."
+          fi
+
+      - name: Conferência final do Webhook Lookup
+        env:
+          ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail-with-body \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
+
+          echo "Resposta final do PayPal (dados não sensíveis):"
+          printf '%s' "$response" | jq 'if type == "array" then map({id, client_id, account_number}) elif has("webhook_lookups") then {webhook_lookups: [.webhook_lookups[]? | {id, client_id, account_number}]} else {id, client_id, account_number} end'

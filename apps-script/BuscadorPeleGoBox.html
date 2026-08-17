@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root{
+      --bg:#f4f8fc;
+      --card:#ffffff;
+      --ink:#102a43;
+      --muted:#627d98;
+      --line:#d9e2ec;
+      --blue:#1687ff;
+      --cyan:#00b8d9;
+      --purple:#7c4dff;
+      --green:#18a873;
+      --yellow:#ffb300;
+      --price:#0f9d72;
+      --shadow:0 8px 24px rgba(16,42,67,.10);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      padding:14px;
+      background:linear-gradient(180deg,#eef6ff 0%,var(--bg) 100%);
+      color:var(--ink);
+      font-family:Arial,Helvetica,sans-serif;
+    }
+    .hero{
+      padding:14px 14px 12px;
+      border-radius:16px;
+      background:linear-gradient(135deg,#102a43 0%,#174f78 58%,#1687ff 100%);
+      color:#fff;
+      box-shadow:var(--shadow);
+      margin-bottom:12px;
+    }
+    .title{font-size:17px;font-weight:800;letter-spacing:.2px;margin:0 0 4px}
+    .sub{font-size:11px;color:#d9ecff;line-height:1.35}
+    .sheet-pill{
+      display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 9px;
+      border-radius:999px;background:rgba(255,255,255,.14);font-size:11px;max-width:100%;
+    }
+    .sheet-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+    .search-card{
+      background:var(--card);border:1px solid var(--line);border-radius:16px;
+      padding:12px;box-shadow:var(--shadow);
+    }
+    .search-wrap{display:flex;gap:7px;align-items:center}
+    input{
+      width:100%;height:42px;border:2px solid #cbd8e6;border-radius:12px;
+      padding:0 12px;font-size:14px;color:var(--ink);outline:none;background:#fff;transition:.15s ease;
+    }
+    input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(22,135,255,.12)}
+    button{border:0;cursor:pointer;font-family:inherit}
+    .go{
+      width:44px;height:42px;flex:0 0 44px;border-radius:12px;color:#fff;
+      background:linear-gradient(135deg,var(--blue),var(--cyan));font-size:18px;font-weight:900;
+      box-shadow:0 6px 16px rgba(22,135,255,.24);
+    }
+    .modes{display:flex;gap:7px;margin-top:9px}
+    .mode{
+      flex:1;padding:7px 8px;border-radius:9px;background:#edf2f7;
+      color:var(--muted);font-size:11px;font-weight:700;
+    }
+    .mode.active{background:#e7f3ff;color:#0866c6;box-shadow:inset 0 0 0 1px #9dcbff}
+    .meta{
+      display:flex;justify-content:space-between;align-items:center;gap:8px;
+      margin:12px 2px 8px;font-size:11px;color:var(--muted);
+    }
+    .count{font-weight:800;color:var(--ink)}
+    .nav{display:flex;gap:7px;margin-bottom:9px}
+    .nav button{
+      flex:1;border-radius:10px;padding:8px 7px;background:#fff;border:1px solid var(--line);
+      color:var(--ink);font-weight:700;font-size:11px;
+    }
+    .nav button:hover{background:#f0f7ff}
+    .results{
+      display:flex;flex-direction:column;gap:8px;max-height:485px;overflow:auto;padding-right:2px;
+    }
+    .item{
+      background:#fff;border:1px solid var(--line);border-left:4px solid var(--cyan);
+      border-radius:13px;padding:10px;cursor:pointer;transition:.14s ease;
+    }
+    .item:nth-child(4n+2){border-left-color:var(--purple)}
+    .item:nth-child(4n+3){border-left-color:var(--green)}
+    .item:nth-child(4n+4){border-left-color:var(--yellow)}
+    .item:hover{transform:translateY(-1px);border-color:#9ec8f1;box-shadow:0 6px 16px rgba(16,42,67,.08)}
+    .item.active{background:#eaf4ff;border-color:#65adf5;box-shadow:0 0 0 2px rgba(22,135,255,.10)}
+    .where{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px}
+    .addr{font-weight:900;color:#0866c6;font-size:12px}
+    .hits{
+      font-size:10px;color:var(--muted);background:#eef2f6;border-radius:999px;
+      padding:3px 6px;white-space:nowrap;
+    }
+    .headline{font-size:12px;font-weight:800;color:#243b53;line-height:1.35;margin-bottom:7px}
+    .price{
+      display:inline-flex;align-items:center;gap:5px;background:#e8f7f1;color:#08795a;
+      border:1px solid #a9dfcd;border-radius:9px;padding:5px 8px;font-size:12px;font-weight:900;
+      margin:0 0 8px;
+    }
+    .fields{display:grid;grid-template-columns:1fr;gap:4px}
+    .field{
+      display:grid;grid-template-columns:92px 1fr;gap:6px;align-items:start;
+      padding-top:4px;border-top:1px solid #edf2f7;font-size:10.5px;
+    }
+    .field:first-child{border-top:0}
+    .label{font-weight:800;color:#627d98;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .value{color:#334e68;line-height:1.3;word-break:break-word}
+    .empty{
+      background:#fff;border:1px dashed #bcccdc;border-radius:12px;padding:18px 12px;
+      text-align:center;color:var(--muted);font-size:12px;line-height:1.45;
+    }
+    .loading{opacity:.65;pointer-events:none}
+    .footer{margin-top:10px;font-size:10px;line-height:1.4;text-align:center;color:#829ab1}
+    kbd{padding:2px 5px;border:1px solid #bcccdc;background:#fff;border-radius:5px;font-size:9px}
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="title">🔎 BUSCADOR PELEGO BOX</div>
+    <div class="sub">Mostra os dados no painel e também deixa visíveis na planilha somente as linhas encontradas.</div>
+    <div class="sheet-pill">
+      <span>ABA:</span>
+      <span id="sheetName" class="sheet-name">carregando…</span>
+    </div>
+  </div>
+
+  <div id="searchCard" class="search-card">
+    <div class="search-wrap">
+      <input id="q" type="text" autocomplete="off" placeholder="Código, cliente, valor, título…" autofocus>
+      <button class="go" onclick="buscar()" title="Pesquisar">⌕</button>
+    </div>
+
+    <div class="modes">
+      <button id="modeContem" class="mode active" onclick="setModo('contem')">CONTÉM</button>
+      <button id="modeExato" class="mode" onclick="setModo('exato')">EXATO</button>
+    </div>
+  </div>
+
+  <div class="meta">
+    <span id="status">Pronto para pesquisar.</span>
+    <span id="counter" class="count"></span>
+  </div>
+
+  <div class="nav">
+    <button onclick="anterior()">◀ Anterior</button>
+    <button onclick="mostrarTudo()">☰ Mostrar tudo</button>
+    <button onclick="proximo()">Próximo ▶</button>
+  </div>
+
+  <div id="results" class="results">
+    <div class="empty">
+      Digite algo acima.<br>
+      Exemplo: <b>1595</b>, <b>R$ 110</b>, <b>JBL</b> ou um cliente.
+    </div>
+  </div>
+
+  <div class="footer">
+    <kbd>Enter</kbd> pesquisa • a planilha mostra somente as linhas encontradas.<br>
+    <b>Mostrar tudo</b> restaura as 1.800 linhas. Nenhum dado é apagado.
+  </div>
+
+<script>
+  let modo = 'contem';
+  let resultados = [];
+  let atual = -1;
+  let debounce = null;
+
+  const elQ = document.getElementById('q');
+  const elResults = document.getElementById('results');
+  const elStatus = document.getElementById('status');
+  const elCounter = document.getElementById('counter');
+  const elSheetName = document.getElementById('sheetName');
+  const elCard = document.getElementById('searchCard');
+
+  function setModo(novo){
+    modo = novo;
+    document.getElementById('modeContem').classList.toggle('active', modo === 'contem');
+    document.getElementById('modeExato').classList.toggle('active', modo === 'exato');
+    if (elQ.value.trim()) buscar();
+  }
+
+  function setLoading(on){
+    elCard.classList.toggle('loading', !!on);
+    if (on) elStatus.textContent = 'Pesquisando…';
+  }
+
+  function atualizarAba(){
+    google.script.run
+      .withSuccessHandler(info => {
+        elSheetName.textContent = info.aba || '—';
+
+        if (info.desativado) {
+          resultados = [];
+          atual = -1;
+          elCounter.textContent = '';
+          elStatus.textContent = 'Buscador desativado nesta aba.';
+          elResults.innerHTML = '<div class="empty"><b>Dashboard protegido.</b><br>O buscador foi desativado aqui para não mexer nas linhas auxiliares dos gráficos.</div>';
+          return;
+        }
+
+        if (elQ.value.trim()) buscar();
+        else elStatus.textContent = (info.linhas || 0) + ' linha(s) nesta aba.';
+      })
+      .withFailureHandler(erro)
+      .pbxInfoBuscador();
+  }
+
+  function buscar(){
+    clearTimeout(debounce);
+    const q = elQ.value.trim();
+
+    if (!q){
+      resultados = [];
+      atual = -1;
+      elStatus.textContent = 'Mostrando todas as linhas.';
+      elCounter.textContent = '';
+      elResults.innerHTML = '<div class="empty">Digite um código, valor, título, cliente, e-mail, WhatsApp ou qualquer texto.</div>';
+
+      google.script.run
+        .withFailureHandler(erro)
+        .pbxMostrarTodasLinhasSilencioso_();
+
+      return;
+    }
+
+    setLoading(true);
+
+    google.script.run
+      .withSuccessHandler(res => {
+        setLoading(false);
+
+        if (res && res.desativado) {
+          resultados = [];
+          atual = -1;
+          elSheetName.textContent = res.aba || '—';
+          elCounter.textContent = '';
+          elStatus.textContent = res.mensagem || 'Buscador desativado nesta aba.';
+          elResults.innerHTML = '<div class="empty"><b>Dashboard protegido.</b><br>Use o buscador nas abas de dados. Nesta aba ele não oculta nenhuma linha.</div>';
+          return;
+        }
+
+        resultados = res.resultados || [];
+        atual = resultados.length ? 0 : -1;
+        elSheetName.textContent = res.aba || '—';
+        elStatus.textContent = res.mensagem || '';
+        atualizarContador();
+        render();
+
+        // Comportamento Ctrl+F: achou, já marca o primeiro resultado na planilha.
+        if (resultados.length) ir(0, true);
+      })
+      .withFailureHandler(e => {
+        setLoading(false);
+        erro(e);
+      })
+      .pbxBuscarNaAbaAtiva(q, modo);
+  }
+
+  function render(){
+    if (!resultados.length){
+      elResults.innerHTML = '<div class="empty">Nada encontrado nesta aba.<br>Tente <b>CONTÉM</b> ou outra palavra.</div>';
+      return;
+    }
+
+    elResults.innerHTML = resultados.map((r, i) => {
+      const d = r.destaque || {};
+      const titulo = d.titulo || r.valorEncontrado || '';
+      const codigo = d.codigo ? '#' + esc(d.codigo) + ' • ' : '';
+      const preco = d.preco
+        ? '<div class="price">💰 ' + esc(d.precoLabel || 'VALOR') + ': ' + esc(d.preco) + '</div>'
+        : '';
+
+      const campos = (r.campos || []).map(c => `
+        <div class="field">
+          <div class="label">${esc(c.label)}</div>
+          <div class="value">${esc(c.valor)}</div>
+        </div>
+      `).join('');
+
+      return `
+        <div class="item ${i === atual ? 'active' : ''}" onclick="ir(${i})">
+          <div class="where">
+            <span class="addr">Linha ${r.linha} • ${esc(r.a1)}</span>
+            <span class="hits">${r.ocorrencias} ocorrência${r.ocorrencias === 1 ? '' : 's'}</span>
+          </div>
+          <div class="headline">${codigo}${esc(titulo)}</div>
+          ${preco}
+          <div class="fields">${campos}</div>
+        </div>
+      `;
+    }).join('');
+
+    focarAtual();
+  }
+
+  function ir(i, silencioso){
+    if (i < 0 || i >= resultados.length) return;
+    atual = i;
+    atualizarContador();
+
+    if (!silencioso) render();
+
+    const r = resultados[i];
+
+    google.script.run
+      .withFailureHandler(erro)
+      .pbxIrParaResultado(elSheetName.textContent, r.linha, r.coluna);
+  }
+
+  function anterior(){
+    if (!resultados.length) return;
+    atual = atual <= 0 ? resultados.length - 1 : atual - 1;
+    ir(atual);
+  }
+
+  function proximo(){
+    if (!resultados.length) return;
+    atual = atual >= resultados.length - 1 ? 0 : atual + 1;
+    ir(atual);
+  }
+
+  function mostrarTudo(){
+    elQ.value = '';
+    resultados = [];
+    atual = -1;
+    elCounter.textContent = '';
+    elStatus.textContent = 'Restaurando todas as linhas…';
+    elResults.innerHTML = '<div class="empty">Todas as linhas voltaram a aparecer.<br>Digite uma nova busca quando quiser filtrar.</div>';
+
+    google.script.run
+      .withSuccessHandler(res => {
+        elSheetName.textContent = (res && res.aba) || elSheetName.textContent;
+        elStatus.textContent = 'Todas as linhas visíveis.';
+      })
+      .withFailureHandler(erro)
+      .pbxMostrarTodasLinhasSilencioso_();
+  }
+
+  function atualizarContador(){
+    elCounter.textContent = resultados.length && atual >= 0
+      ? (atual + 1) + ' / ' + resultados.length
+      : '';
+  }
+
+  function focarAtual(){
+    const ativo = elResults.querySelector('.item.active');
+    if (ativo) ativo.scrollIntoView({block:'nearest', behavior:'smooth'});
+  }
+
+  function erro(e){
+    const msg = e && e.message ? e.message : String(e || 'Erro inesperado.');
+    elStatus.textContent = 'Erro.';
+    elResults.innerHTML = '<div class="empty"><b>Erro:</b><br>' + esc(msg) + '</div>';
+  }
+
+  function esc(v){
+    return String(v == null ? '' : v)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+  elQ.addEventListener('keydown', e => {
+    if (e.key === 'Enter') buscar();
+    if (e.key === 'Escape') {
+      elQ.value = '';
+      buscar();
+    }
+  });
+
+  elQ.addEventListener('input', () => {
+    clearTimeout(debounce);
+    if (elQ.value.trim().length >= 2) {
+      debounce = setTimeout(buscar, 420);
+    }
+  });
+
+  atualizarAba();
+</script>
+</body>
+</html>

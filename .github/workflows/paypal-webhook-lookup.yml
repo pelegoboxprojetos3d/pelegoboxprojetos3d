@@ -1,4 +1,4 @@
-name: Configurar lookup de webhooks PayPal
+name: Diagnosticar lookup de webhooks PayPal
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  configurar:
+  diagnosticar:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -38,14 +38,12 @@ jobs:
             -H 'Accept-Language: en_US' \
             -d 'grant_type=client_credentials' \
             https://api-m.paypal.com/v1/oauth2/token)"
-
           token="$(printf '%s' "$response" | jq -r '.access_token // empty')"
           test -n "$token" || { echo "PayPal não retornou access_token"; exit 1; }
-
           echo "access_token=$token" >> "$GITHUB_OUTPUT"
           echo "Autenticação Live concluída."
 
-      - name: Conferir webhook do Make cadastrado na REST App
+      - name: Conferir webhook do Make
         env:
           ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
         run: |
@@ -54,68 +52,88 @@ jobs:
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H 'Content-Type: application/json' \
             https://api-m.paypal.com/v1/notifications/webhooks)"
-
-          count="$(printf '%s' "$response" | jq '[.webhooks[]?] | length')"
-          echo "Webhooks encontrados na REST App: $count"
-          printf '%s' "$response" | jq -r '.webhooks[]? | "- ID: \(.id) | URL: \(.url) | eventos: \([.event_types[]?.name] | join(", "))"'
-
           make_count="$(printf '%s' "$response" | jq '[.webhooks[]? | select(.url | contains("hook.us2.make.com"))] | length')"
-          if [ "$make_count" -lt 1 ]; then
-            echo "ERRO: nenhum webhook do Make foi encontrado nesta REST App."
-            exit 1
-          fi
+          echo "webhook_make_encontrado=$make_count" > paypal-diagnostico.txt
+          test "$make_count" -ge 1 || { echo "Webhook do Make não encontrado"; exit 1; }
 
-      - name: Criar Webhook Lookup se ainda não existir
+      - name: Consultar e tentar criar Webhook Lookup
+        id: lookup
         env:
           ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
           PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
         run: |
-          set -euo pipefail
+          set -u
 
-          list="$(curl --silent --show-error --fail-with-body \
+          get_body="$(mktemp)"
+          get_status="$(curl --silent --show-error \
+            --output "$get_body" \
+            --write-out '%{http_code}' \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H 'Content-Type: application/json' \
             https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
 
-          existing_id="$(printf '%s' "$list" | jq -r --arg cid "$PAYPAL_CLIENT_ID" '
-            if type == "array" then
-              ([.[] | select(.client_id == $cid) | .id][0] // empty)
-            elif has("webhooks_lookups") then
-              ([.webhooks_lookups[]? | select(.client_id == $cid) | .id][0] // empty)
-            elif .client_id == $cid then
-              (.id // empty)
-            else
-              empty
-            end
-          ')"
+          {
+            echo "GET /v1/notifications/webhooks-lookup HTTP $get_status"
+            cat "$get_body"
+            echo
+          } >> paypal-diagnostico.txt
 
-          if [ -n "$existing_id" ]; then
-            echo "Webhook Lookup já existia. ID: $existing_id"
-          else
-            echo "Nenhum Webhook Lookup desta REST App encontrado. Criando..."
-            created="$(curl --silent --show-error --fail-with-body \
-              -X POST \
-              -H "Authorization: Bearer $ACCESS_TOKEN" \
-              -H 'Content-Type: application/json' \
-              -d '{}' \
-              https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
-
-            lookup_id="$(printf '%s' "$created" | jq -r '.id // empty')"
-            client_id="$(printf '%s' "$created" | jq -r '.client_id // empty')"
-            test -n "$lookup_id" || { echo "PayPal não retornou ID do Webhook Lookup"; printf '%s\n' "$created"; exit 1; }
-            echo "Webhook Lookup criado com sucesso. ID: $lookup_id"
-            echo "Client ID confirmado: ${client_id:0:10}..."
+          existing_id=""
+          if [ "$get_status" = "200" ]; then
+            existing_id="$(jq -r --arg cid "$PAYPAL_CLIENT_ID" '
+              if type == "array" then
+                ([.[] | select(.client_id == $cid) | .id][0] // empty)
+              elif has("webhooks_lookups") then
+                ([.webhooks_lookups[]? | select(.client_id == $cid) | .id][0] // empty)
+              elif .client_id == $cid then
+                (.id // empty)
+              else
+                empty
+              end
+            ' "$get_body" 2>/dev/null || true)"
           fi
 
-      - name: Conferência final do Webhook Lookup
-        env:
-          ACCESS_TOKEN: ${{ steps.oauth.outputs.access_token }}
-        run: |
-          set -euo pipefail
-          response="$(curl --silent --show-error --fail-with-body \
+          if [ -n "$existing_id" ]; then
+            echo "RESULTADO: Webhook Lookup já existe. ID=$existing_id" >> paypal-diagnostico.txt
+            echo "resultado=existente" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          post_body="$(mktemp)"
+          post_status="$(curl --silent --show-error \
+            --output "$post_body" \
+            --write-out '%{http_code}' \
+            -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H 'Content-Type: application/json' \
+            -d '{}' \
             https://api-m.paypal.com/v1/notifications/webhooks-lookup)"
 
-          echo "Resposta final do PayPal (dados não sensíveis):"
-          printf '%s' "$response" | jq 'if type == "array" then map({id, client_id, account_number}) elif has("webhooks_lookups") then {webhooks_lookups: [.webhooks_lookups[]? | {id, client_id, account_number}]} else {id, client_id, account_number} end'
+          {
+            echo "POST /v1/notifications/webhooks-lookup HTTP $post_status"
+            cat "$post_body"
+            echo
+          } >> paypal-diagnostico.txt
+
+          if [ "$post_status" = "201" ]; then
+            lookup_id="$(jq -r '.id // empty' "$post_body")"
+            echo "RESULTADO: Webhook Lookup criado. ID=$lookup_id" >> paypal-diagnostico.txt
+            echo "resultado=criado" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "RESULTADO: PayPal recusou a criação do Webhook Lookup." >> paypal-diagnostico.txt
+          echo "resultado=recusado" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Salvar diagnóstico
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paypal-webhook-lookup-diagnostico
+          path: paypal-diagnostico.txt
+          retention-days: 7
+
+      - name: Resultado
+        run: |
+          echo "Resultado: ${{ steps.lookup.outputs.resultado }}"

@@ -207,16 +207,7 @@
     const q = elQ.value.trim();
 
     if (!q){
-      resultados = [];
-      atual = -1;
-      elStatus.textContent = 'Mostrando todas as linhas.';
-      elCounter.textContent = '';
-      elResults.innerHTML = '<div class="empty">Digite um código, valor, título, cliente, e-mail, WhatsApp ou qualquer texto.</div>';
-
-      google.script.run
-        .withFailureHandler(erro)
-        .pbxMostrarTodasLinhasSilencioso_();
-
+      mostrarTudo();
       return;
     }
 
@@ -312,20 +303,30 @@
   }
 
   function mostrarTudo(){
+    clearTimeout(debounce);
+    const abaAlvo = elSheetName.textContent || 'Videos_projetos';
+
     elQ.value = '';
     resultados = [];
     atual = -1;
     elCounter.textContent = '';
     elStatus.textContent = 'Restaurando todas as linhas…';
-    elResults.innerHTML = '<div class="empty">Todas as linhas voltaram a aparecer.<br>Digite uma nova busca quando quiser filtrar.</div>';
+    elResults.innerHTML = '<div class="empty">Restaurando a planilha completa…</div>';
 
     google.script.run
       .withSuccessHandler(res => {
-        elSheetName.textContent = (res && res.aba) || elSheetName.textContent;
-        elStatus.textContent = 'Todas as linhas visíveis.';
+        if (res && res.desativado) {
+          google.script.host.close();
+          return;
+        }
+
+        elSheetName.textContent = (res && res.aba) || abaAlvo;
+        elStatus.textContent = 'Planilha restaurada.';
+        elResults.innerHTML = '<div class="empty"><b>RESET concluído.</b><br>Todas as linhas voltaram a aparecer.</div>';
+        elQ.focus();
       })
       .withFailureHandler(erro)
-      .pbxMostrarTodasLinhasSilencioso_();
+      .pbxResetarBuscadorCompleto(abaAlvo);
   }
 
   function atualizarContador(){
@@ -356,17 +357,14 @@
 
   elQ.addEventListener('keydown', e => {
     if (e.key === 'Enter') buscar();
-    if (e.key === 'Escape') {
-      elQ.value = '';
-      buscar();
-    }
+    if (e.key === 'Escape') mostrarTudo();
   });
 
   elQ.addEventListener('input', () => {
     clearTimeout(debounce);
     const texto = elQ.value.trim();
 
-    // Limpou a busca = RESET imediato da planilha.
+    // Limpou a busca = RESET imediato da aba em que a pesquisa foi feita.
     if (!texto) {
       mostrarTudo();
       return;

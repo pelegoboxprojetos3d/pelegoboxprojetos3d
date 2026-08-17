@@ -78,6 +78,9 @@ jobs:
       - name: Corrigir impressora da central de projetos
         run: node scripts/corrigir-impressora-central-projetos-2026-08-14.cjs
 
+      - name: Garantir endpoint do PELEGO RADIO
+        run: node scripts/adicionar-endpoint-pelego-radio.cjs
+
       - name: Validar código
         run: npm run lint
 

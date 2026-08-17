@@ -1,7 +1,7 @@
 (() => {
   const GID_VIDEOS = '1613309343';
   const DASHBOARDS = new Set(['1900100001', '1900200002']);
-  const RELOAD_GUARD = 'pelego_busca_reload_guard_v120';
+  const RELOAD_GUARD = 'pelego_busca_reload_guard_v130';
 
   function gidAtual() {
     const hash = String(location.hash || '');
@@ -17,14 +17,21 @@
     }
   }
 
-  // Esta extensão NÃO toca mais na sidebar e NÃO tenta clicar em menus do Sheets.
-  // O Apps Script continua responsável por fechar o buscador nos dashboards.
-  // A única tarefa daqui é automatizar o F5 que já sabemos que reabre o buscador.
+  // Estratégia simples e confiável:
+  // - entrou em Dashboard_Mensal/Anual => recarrega a página; no onOpen o buscador não abre.
+  // - voltou de dashboard para Videos_projetos => recarrega a página; no onOpen o buscador abre.
+  // Não toca na sidebar, não simula clique e não depende de onSelectionChange.
 
   let ultimoGid = gidAtual();
 
   if (sessionStorage.getItem(RELOAD_GUARD) === '1') {
     sessionStorage.removeItem(RELOAD_GUARD);
+  }
+
+  function recarregarUmaVez() {
+    if (sessionStorage.getItem(RELOAD_GUARD) === '1') return;
+    sessionStorage.setItem(RELOAD_GUARD, '1');
+    setTimeout(() => location.reload(), 120);
   }
 
   function verificarTroca() {
@@ -34,11 +41,15 @@
     const anterior = ultimoGid;
     ultimoGid = atual;
 
-    if (DASHBOARDS.has(anterior) && atual === GID_VIDEOS) {
-      if (sessionStorage.getItem(RELOAD_GUARD) === '1') return;
+    // Entrou em qualquer dashboard: automatiza o F5 que garante tela limpa.
+    if (DASHBOARDS.has(atual)) {
+      recarregarUmaVez();
+      return;
+    }
 
-      sessionStorage.setItem(RELOAD_GUARD, '1');
-      setTimeout(() => location.reload(), 120);
+    // Voltou de dashboard para Videos_projetos: automatiza o F5 que reabre o buscador.
+    if (DASHBOARDS.has(anterior) && atual === GID_VIDEOS) {
+      recarregarUmaVez();
     }
   }
 

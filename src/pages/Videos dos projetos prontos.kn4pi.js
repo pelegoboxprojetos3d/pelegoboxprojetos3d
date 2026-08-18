@@ -1,6 +1,10 @@
 import wixData from "wix-data";
 import wixLocation from "wix-location";
 
+import {
+  buscarProjetosProntos
+} from "backend/buscaProjetosProntos.web";
+
 // TÍTULO NO WIX: Videos dos projetos prontos
 //
 // R9
@@ -335,6 +339,158 @@ function buildReadyCheckoutUrl(
   );
 }
 
+const READY_PROJECTS_ROUTE =
+  "/videos-dos-projetos-prontos";
+
+function optionalElement(selector) {
+  try {
+    return $w(selector);
+  } catch (_) {
+    return null;
+  }
+}
+
+function currentSearchTerm() {
+  return safe(
+    wixLocation.query.busca
+  );
+}
+
+function setSearchStatus(
+  message
+) {
+  const status =
+    optionalElement(
+      "#txtStatusBusca"
+    );
+
+  if (status) {
+    status.text =
+      safe(message);
+  }
+}
+
+function configureSearchBox() {
+  const input =
+    optionalElement(
+      "#inputBuscaProjetos"
+    );
+
+  const button =
+    optionalElement(
+      "#btnBuscarProjetos"
+    );
+
+  if (!input || !button) {
+    return;
+  }
+
+  input.value =
+    currentSearchTerm();
+
+  const submit = () => {
+    const term =
+      safe(input.value);
+
+    const url = term
+      ? (
+        READY_PROJECTS_ROUTE +
+        `?busca=${encodeURIComponent(term)}`
+      )
+      : READY_PROJECTS_ROUTE;
+
+    wixLocation.to(url);
+  };
+
+  button.onClick(submit);
+
+  input.onKeyPress(
+    (event) => {
+      if (
+        event.key === "Enter"
+      ) {
+        submit();
+      }
+    }
+  );
+}
+
+async function applyProjectSearch() {
+  const term =
+    currentSearchTerm();
+
+  if (!term) {
+    return false;
+  }
+
+  setSearchStatus(
+    "Procurando os melhores projetos..."
+  );
+
+  const response =
+    await buscarProjetosProntos(
+      term,
+      36
+    );
+
+  if (!response?.ok) {
+    throw new Error(
+      response?.error ||
+      "A busca não respondeu."
+    );
+  }
+
+  const results =
+    Array.isArray(
+      response.resultados
+    )
+      ? response.resultados
+      : [];
+
+  const ids =
+    results
+      .map(
+        (item) =>
+          safe(item?._id)
+      )
+      .filter(Boolean);
+
+  const filter = ids.length
+    ? wixData
+        .filter()
+        .hasSome(
+          "_id",
+          ids
+        )
+    : wixData
+        .filter()
+        .eq(
+          "_id",
+          "__nenhum_projeto__"
+        );
+
+  await $w("#dataset1")
+    .setFilter(filter);
+
+  if (response.fallback) {
+    $w("#txtTituloPagina").text =
+      "Sugestões de projetos prontos";
+
+    setSearchStatus(
+      `Não encontramos exatamente "${term}". Veja estas sugestões.`
+    );
+  } else {
+    $w("#txtTituloPagina").text =
+      `Resultados para "${term}"`;
+
+    setSearchStatus(
+      `${ids.length} projeto(s) encontrado(s).`
+    );
+  }
+
+  return true;
+}
+
 async function applyBrandFilter() {
   const brand = normalizeBrand(
     wixLocation.query.marca
@@ -476,14 +632,24 @@ function configureRepeater() {
 $w.onReady(
   async function () {
     configureRepeater();
+    configureSearchBox();
 
     try {
-      await applyBrandFilter();
+      const searched =
+        await applyProjectSearch();
+
+      if (!searched) {
+        await applyBrandFilter();
+      }
     } catch (error) {
       console.error(
-        "Erro ao filtrar projetos pela marca:",
+        "Erro ao buscar projetos prontos:",
         error?.message || error,
         error
+      );
+
+      setSearchStatus(
+        "Não foi possível pesquisar agora. Tente novamente."
       );
     }
   }

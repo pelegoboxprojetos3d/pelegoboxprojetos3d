@@ -1,407 +1,155 @@
-const PELEGO_RADIO_HTML = String.raw`
+const STATIONS = [
+  {id:'groovesalad',name:'Groove Salad',genre:'Ambient / Downtempo'},
+  {id:'groovesalad2',name:'Groove Salad 2',genre:'Ambient / Downtempo'},
+  {id:'dronezone',name:'Drone Zone',genre:'Ambient / Drone'},
+  {id:'spacestation',name:'Space Station Soma',genre:'Eletrônica / Ambient'},
+  {id:'secretagent',name:'Secret Agent',genre:'Lounge / Exótica'},
+  {id:'u80s',name:'Underground 80s',genre:'Anos 80 / New Wave'},
+  {id:'seventies',name:'Left Coast 70s',genre:'Anos 70 / Rock / Pop'},
+  {id:'indiepop',name:'Indie Pop Rocks!',genre:'Indie / Pop / Rock'},
+  {id:'poptron',name:'PopTron',genre:'Indie Pop / Eletrônica'},
+  {id:'metal',name:'Metal Detector',genre:'Metal'},
+  {id:'doomed',name:'Doomed',genre:'Doom / Stoner Metal'},
+  {id:'reggae',name:'Heavyweight Reggae',genre:'Reggae / Dub'},
+  {id:'bootliquor',name:'Boot Liquor',genre:'Americana / Country'},
+  {id:'sonicuniverse',name:'Sonic Universe',genre:'Jazz'},
+  {id:'beatblender',name:'Beat Blender',genre:'Deep House / Chill'},
+  {id:'cliqhop',name:'cliqhop idm',genre:'IDM / Eletrônica'},
+  {id:'thetrip',name:'The Trip',genre:'Trance / Eletrônica'},
+  {id:'dubstep',name:'Dub Step Beyond',genre:'Dubstep / Bass'},
+  {id:'fluid',name:'Fluid',genre:'Instrumental Hip-Hop / Beats'},
+  {id:'digitalis',name:'Digitalis',genre:'Indie / Eletrônica'},
+  {id:'lush',name:'Lush',genre:'Dream Pop / Vocais'},
+  {id:'covers',name:'Covers',genre:'Covers / Alternativo'},
+  {id:'deepspaceone',name:'Deep Space One',genre:'Space Ambient'},
+  {id:'defcon',name:'DEF CON Radio',genre:'Eletrônica'},
+  {id:'seven',name:'Seven Inch Soul',genre:'Soul / Funk'},
+  {id:'folkfwd',name:'Folk Forward',genre:'Folk / Indie Folk'},
+  {id:'illstreet',name:'Illinois Street Lounge',genre:'Lounge / Exótica'},
+  {id:'vaporwaves',name:'Vaporwaves',genre:'Vaporwave / Chill'},
+  {id:'synphaera',name:'Synphaera Radio',genre:'Ambient / Eletrônica'}
+];
+
+const GENRES = [
+  'ROCK','CLASSIC ROCK','HARD ROCK','METAL','POP','DANCE','JAZZ','BLUES','COUNTRY',
+  'ELETRÔNICA','HOUSE','REGGAE','TECHNO','TRANCE','LOUNGE','FUNK','SOUL','R&B',
+  'RAP','HIP HOP','GOSPEL','CLÁSSICA','INSTRUMENTAL','MPB','POP BR','ROCK NACIONAL',
+  'SERTANEJO','SERTANEJO RAIZ','MODÃO','PAGODE','SAMBA','FORRÓ','PISEIRO','BREGA','ARROCHA',
+  'FUNK','PANCADÃO / MEGA FUNK','TRAP BR','RAP NACIONAL','AXÉ','BREGA FUNK','FLASHBACK BR'
+];
+
+const EQ_NAMES = ['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
+const EQ_FREQS = [40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];
+const PRESETS = {
+  'FLAT':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  'GRAVE +':[5,5,5,4,4,4,3,3,2,2,1,1,0,0,0,0,0,0,-1,-1,-1,-1,-1,-1],
+  'GRAVE ++':[8,8,7,7,6,6,5,4,3,3,2,1,0,0,0,0,-1,-1,-2,-2,-2,-2,-2,-2],
+  'HOME THEATER':[7,7,6,6,5,4,3,2,1,0,-1,-1,-1,0,0,1,1,2,2,3,3,3,2,2],
+  'ROCK':[4,4,3,3,2,1,0,-1,-1,0,1,2,2,2,1,1,2,3,3,3,2,2,3,3],
+  'POP':[2,2,2,1,1,0,0,0,1,1,1,2,2,2,2,2,2,2,2,2,2,3,3,2],
+  'VOZ':[-3,-3,-3,-2,-2,-1,0,1,2,3,4,4,4,4,3,3,2,1,0,-1,-1,-1,-2,-2],
+  'AUTOMOTIVO':[9,9,8,8,7,6,5,4,3,2,1,0,-1,-1,-1,-1,0,1,2,2,2,2,1,0],
+  'BRILHO':[-2,-2,-2,-1,-1,0,0,0,0,0,0,0,0,1,1,1,2,2,3,3,4,5,6,6]
+};
+
+const DEFAULT_CONFIG = {
+  volume:32,
+  eqPreset:'FLAT',
+  eqGains:PRESETS.FLAT.slice(),
+  allowInternational:true,
+  allowNational:false,
+  selectedGenres:['ROCK','POP','RAP','CLÁSSICA','SERTANEJO','SAMBA'],
+  randomMode:'TEMPO',
+  randomTimeMinutes:30,
+  randomSongCount:5,
+  crossfadeSeconds:2
+};
+
+const FALLBACK_ZERO = [
+  {sku:'1260',brand:'PELEGO BOX',title:'LINE ARRAY 4X10\" PELEGO BOX LA 410',buyUrl:'https://www.pelegobox.com.br/product-page/projeto-caixa-line-array-cornetada-trapezoidal-com-al%C3%A7a-pelego-box-005'}
+];
+const FALLBACK_PRONTO = [
+  {code:'1804',brand:'JBL',title:'CAIXA BASS REFLEX LOW BASS 1X15\" JBL TORNADO 2200 15SWT2200',buyUrl:'https://www.pelegobox.com.br/checkoutprojetosprontos?codigo=1804'}
+];
+
+const HTML = String.raw`
 <style>
-  :host {
-    display: block;
-    width: 100%;
-    color: #f4f7f5;
-    font-family: Arial, Helvetica, sans-serif;
-    --pb-green: #24d66b;
-    --pb-green-dark: #138b45;
-    --pb-bg: #080c0a;
-    --pb-panel: #0e1511;
-    --pb-line: rgba(68, 255, 138, .28);
-    --pb-muted: #8d9991;
-  }
-
-  * { box-sizing: border-box; }
-
-  .radio-page {
-    width: 100%;
-    margin: 0 auto;
-    padding: 10px;
-    background:
-      radial-gradient(circle at 50% -15%, rgba(36, 214, 107, .12), transparent 38%),
-      linear-gradient(180deg, #090e0b 0%, #060806 100%);
-    border: 1px solid rgba(255,255,255,.06);
-    border-radius: 18px;
-    overflow: hidden;
-  }
-
-  .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    padding: 12px 16px 14px;
-    border-bottom: 1px solid var(--pb-line);
-  }
-
-  .brand {
-    min-width: 0;
-  }
-
-  .brand strong {
-    display: block;
-    color: #fff;
-    font-size: clamp(19px, 2vw, 31px);
-    line-height: 1;
-    letter-spacing: .5px;
-  }
-
-  .brand strong span { color: var(--pb-green); }
-
-  .brand small {
-    display: block;
-    margin-top: 7px;
-    color: var(--pb-muted);
-    font-size: clamp(9px, .9vw, 13px);
-  }
-
-  .live {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    flex: 0 0 auto;
-    padding: 8px 11px;
-    border: 1px solid rgba(36,214,107,.35);
-    border-radius: 999px;
-    background: rgba(36,214,107,.08);
-    color: #baf6cf;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .6px;
-  }
-
-  .live-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--pb-green);
-    box-shadow: 0 0 0 0 rgba(36,214,107,.55);
-    animation: pulse 1.25s infinite;
-  }
-
-  .stage {
-    position: relative;
-    width: 100%;
-    min-height: 560px;
-    margin-top: 10px;
-    overflow: hidden;
-    border: 1px solid var(--pb-line);
-    border-radius: 14px;
-    background: #050706;
-  }
-
-  .player-frame {
-    display: block;
-    width: 100%;
-    height: 100%;
-    min-height: 560px;
-    border: 0;
-    background: #050706;
-  }
-
-  .native-player,
-  .waiting {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 34px;
-    text-align: center;
-    background:
-      linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
-      radial-gradient(circle at center, rgba(36,214,107,.10), transparent 50%),
-      #070b08;
-    background-size: 32px 32px, 32px 32px, auto, auto;
-  }
-
-  .waiting-title {
-    margin: 0;
-    color: #f8fff9;
-    font-size: clamp(20px, 2vw, 34px);
-    font-weight: 800;
-    letter-spacing: .7px;
-  }
-
-  .waiting-subtitle {
-    max-width: 700px;
-    margin: 0;
-    color: var(--pb-muted);
-    font-size: 12px;
-    line-height: 1.55;
-  }
-
-  .bars {
-    display: flex;
-    height: 86px;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 6px;
-  }
-
-  .bars i {
-    display: block;
-    width: 7px;
-    min-height: 10px;
-    border-radius: 5px 5px 2px 2px;
-    background: linear-gradient(180deg, #7cffaa, var(--pb-green));
-    box-shadow: 0 0 13px rgba(36,214,107,.18);
-    animation: eq 1s ease-in-out infinite alternate;
-  }
-
-  .bars i:nth-child(2n) { animation-delay: -.33s; }
-  .bars i:nth-child(3n) { animation-delay: -.68s; }
-  .bars i:nth-child(5n) { animation-delay: -.18s; }
-
-  .native-player audio {
-    width: min(760px, 92%);
-    margin-top: 8px;
-  }
-
-  .downloads {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    padding: 14px 0 2px;
-  }
-
-  .download {
-    display: flex;
-    min-height: 74px;
-    align-items: center;
-    justify-content: center;
-    gap: 13px;
-    padding: 12px 18px;
-    border: 1px solid rgba(36,214,107,.35);
-    border-radius: 13px;
-    background: linear-gradient(180deg, rgba(36,214,107,.13), rgba(36,214,107,.055));
-    color: #f8fff9;
-    text-decoration: none;
-    transition: transform .14s ease, border-color .14s ease, background .14s ease;
-  }
-
-  .download:hover {
-    transform: translateY(-2px);
-    border-color: rgba(36,214,107,.75);
-    background: linear-gradient(180deg, rgba(36,214,107,.22), rgba(36,214,107,.08));
-  }
-
-  .download.disabled {
-    cursor: default;
-    opacity: .46;
-    pointer-events: none;
-  }
-
-  .download svg {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 34px;
-    fill: none;
-    stroke: var(--pb-green);
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .download-text {
-    min-width: 0;
-  }
-
-  .download-text strong {
-    display: block;
-    font-size: clamp(12px, 1.15vw, 16px);
-    line-height: 1.15;
-  }
-
-  .download-text small {
-    display: block;
-    margin-top: 5px;
-    color: #9ca7a0;
-    font-size: 9px;
-  }
-
-  @keyframes pulse {
-    70% { box-shadow: 0 0 0 8px rgba(36,214,107,0); }
-    100% { box-shadow: 0 0 0 0 rgba(36,214,107,0); }
-  }
-
-  @keyframes eq {
-    from { height: 13px; opacity: .55; }
-    to { height: 78px; opacity: 1; }
-  }
-
-  @media (min-width: 1450px) {
-    .stage,
-    .player-frame { min-height: 720px; }
-  }
-
-  @media (max-width: 780px) {
-    .radio-page { padding: 7px; border-radius: 12px; }
-    .head { padding: 10px 9px 12px; }
-    .live { font-size: 9px; padding: 7px 9px; }
-    .stage,
-    .player-frame { min-height: 610px; }
-    .downloads { grid-template-columns: 1fr; gap: 8px; padding-top: 9px; }
-    .download { min-height: 64px; justify-content: flex-start; }
-  }
+:host{display:block;width:100%;height:100%;min-height:0;color:#effff4;font-family:Arial,Helvetica,sans-serif;--g:#20ef64;--gd:#079632;--bg:#030706;--panel:#07100b;--line:rgba(31,239,99,.75);--muted:#a4ada8;--red:#dc241d}*{box-sizing:border-box}
+.shell{width:100%;height:100%;min-height:0;overflow:hidden;border:1px solid #52615a;border-radius:11px;background:radial-gradient(circle at 48% 0,rgba(0,255,80,.07),transparent 38%),linear-gradient(180deg,#020605,#060a08);box-shadow:0 0 0 1px #000 inset;color:#f4fff7;padding:7px;display:grid;grid-template-rows:auto 1.54fr 1fr .92fr auto;gap:7px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:1px 8px 2px;min-height:38px}.brandrow{display:flex;align-items:center;gap:12px;min-width:0}.logo-bars{display:flex;gap:2px;align-items:flex-end;width:42px;height:28px}.logo-bars i{width:2px;background:var(--g);box-shadow:0 0 7px rgba(32,239,100,.5)}.logo-bars i:nth-child(1){height:8px}.logo-bars i:nth-child(2){height:14px}.logo-bars i:nth-child(3){height:22px}.logo-bars i:nth-child(4){height:27px}.logo-bars i:nth-child(5){height:20px}.logo-bars i:nth-child(6){height:15px}.logo-bars i:nth-child(7){height:10px}.title{font-size:clamp(15px,1.6vw,28px);font-weight:800;letter-spacing:.3px;white-space:nowrap}.title .green{color:var(--g)}.subtitle{margin-top:2px;font-size:clamp(7px,.62vw,11px);color:#c2c7c4;white-space:nowrap}.win{display:flex;gap:22px;font-size:clamp(12px,1.3vw,21px);color:#ecfff2;align-items:center}.win span:nth-child(-n+2){color:var(--g)}
+.grid-top{display:grid;grid-template-columns:1fr 1fr 1.05fr;gap:7px;min-height:0}.panel{min-width:0;min-height:0;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,rgba(8,21,13,.94),rgba(3,8,5,.98));box-shadow:0 0 18px rgba(0,255,82,.08) inset,0 0 8px rgba(0,255,82,.08);overflow:hidden}.panel-title{height:27px;display:flex;align-items:center;gap:8px;padding:0 11px;color:var(--g);font-size:clamp(8px,.77vw,13px);letter-spacing:.6px}.ico{font-size:1.1em}.product{display:grid;grid-template-rows:1fr auto;min-height:0;height:calc(100% - 27px);padding:0 9px 8px}.product-visual{min-height:0;border:1px solid #27342e;border-radius:5px;background:#f3f3f3;overflow:hidden;position:relative}.product-visual img{width:100%;height:100%;object-fit:contain;display:block;background:#f1f1f1}.product-visual.noimg{display:flex;align-items:center;justify-content:center;color:#0c8c39;font-weight:900;text-align:center;font-size:clamp(11px,1.2vw,21px);padding:12px}.product-meta{padding:5px 4px 0;min-height:30px}.product-code{color:var(--g);font-weight:800;font-size:clamp(8px,.7vw,12px)}.product-desc{font-size:clamp(7px,.59vw,10px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d1d7d3;margin-top:2px}.navrow{display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:7px;margin-top:6px}.vbtn{height:31px;border:1px solid #53605a;border-radius:5px;background:linear-gradient(#17201c,#080d0b);color:#f2f5f3;font-size:clamp(7px,.62vw,11px);cursor:pointer}.vbtn:hover{border-color:var(--g)}.vbtn.buy{background:linear-gradient(#10a442,#08772f);border-color:#12dc56;font-size:clamp(8px,.7vw,12px)}
+.analyzer{display:grid;grid-template-rows:27px 1fr 19px;min-height:0;height:100%}.analyzer canvas{width:calc(100% - 18px);height:100%;margin:0 9px;border:1px solid #506159;border-radius:4px;background:#050908}.bands-label{display:flex;justify-content:space-around;align-items:center;font-size:clamp(7px,.55vw,10px);border-top:1px solid #34433c}.bands-label span{width:33%;text-align:center;border-right:1px solid #405149}.bands-label span:last-child{border:0}
+.grid-middle{display:grid;grid-template-columns:2fr 1fr;gap:7px;min-height:0}.filters{padding-bottom:7px}.filterbody{display:grid;grid-template-columns:138px 1fr;gap:7px;padding:0 9px;height:calc(100% - 27px);min-height:0}.scopebuttons{display:grid;grid-template-rows:1fr 1fr;gap:7px}.scope{border:1px solid #375148;border-radius:7px;background:linear-gradient(#0d1813,#08110d);color:#dfe7e2;cursor:pointer;font-size:clamp(8px,.63vw,11px)}.scope.active{border-color:#12e957;background:linear-gradient(#1bc455,#07852f);color:#fff;box-shadow:0 0 12px rgba(0,255,80,.18)}.genres{display:flex;flex-wrap:wrap;align-content:center;gap:4px;overflow:hidden}.genre{height:23px;padding:0 10px;min-width:65px;flex:1 1 80px;border:1px solid #44534d;border-radius:4px;background:linear-gradient(#141d19,#080d0b);color:#dadfdd;font-size:clamp(6px,.53vw,9px);white-space:nowrap;cursor:pointer}.genre.active{background:linear-gradient(#11a842,#08732e);border-color:#10d752;color:#fff}
+.playbox{display:grid;grid-template-rows:27px 1fr;min-height:0}.playbody{padding:6px 11px 8px;display:grid;grid-template-rows:auto auto auto auto auto;gap:5px;font-size:clamp(7px,.58vw,10px);min-height:0}.label{color:#dadeda;font-size:clamp(7px,.57vw,10px)}select{height:25px;background:#eee;color:#111;border-radius:3px;border:1px solid #adb2af;font-size:clamp(7px,.6vw,10px);padding:0 7px}.volrow{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px}.volrow input{accent-color:var(--g);width:100%}.randomrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}.randomrow label{display:grid;gap:3px}.hint{font-size:clamp(6px,.5vw,9px);color:#b1b8b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.controls button{height:33px;border-radius:5px;border:1px solid #4d5c55;background:linear-gradient(#15201b,#080e0b);color:#e7ece9;font-size:clamp(8px,.68vw,11px);cursor:pointer}.controls .play{background:linear-gradient(#12a842,#087831);border-color:#12e258}.controls .stop{background:linear-gradient(#d62d25,#941a16);border-color:#f34a41}
+.eqpanel{display:grid;grid-template-rows:28px 1fr 21px;min-height:0;padding:0 9px 7px}.eqhead{display:flex;align-items:center;justify-content:space-between}.eqtitle{color:var(--g);font-size:clamp(8px,.75vw,13px);letter-spacing:.5px}.preset{display:flex;align-items:center;gap:8px;font-size:clamp(7px,.55vw,9px)}.preset select{height:23px;min-width:120px}.eqgrid{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:2px;align-items:end;min-height:0}.band{min-width:0;display:grid;grid-template-rows:15px 1fr 14px;text-align:center;align-items:center;font-size:clamp(6px,.5vw,9px)}.band .db{color:#f1f4f2}.sliderwrap{height:100%;display:flex;align-items:center;justify-content:center;position:relative}.sliderwrap:before{content:'';position:absolute;width:3px;height:78%;border-radius:2px;background:linear-gradient(#2aff72,#0d7434)}.band input[type=range]{appearance:none;-webkit-appearance:none;width:72px;height:18px;transform:rotate(-90deg);background:transparent;position:relative;z-index:2}.band input::-webkit-slider-runnable-track{height:3px;background:transparent}.band input::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:4px;background:linear-gradient(#fff,#cfd2d0);border:1px solid #aaa;margin-top:-6px}.band .freq{white-space:nowrap;color:#d9dfdc}.eqgroups{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #435149;border-radius:4px;overflow:hidden}.eqgroups span{text-align:center;color:var(--g);font-size:clamp(7px,.62vw,11px);border-right:1px solid #435149;padding-top:3px}.eqgroups span:last-child{border:0}
+.footer{display:grid;grid-template-columns:1fr 1fr 1.55fr 1.35fr;gap:8px;min-height:42px}.footer button,.versionbox{border:1px solid #405049;border-radius:5px;background:linear-gradient(#111a16,#070b09);color:#eef4f0;font-size:clamp(9px,.95vw,16px);display:flex;align-items:center;justify-content:center;gap:10px}.footer button{cursor:pointer}.footer .danger{color:#fff}.footer .danger b{color:#ff3c36}.versionbox{color:#9da6a0;font-size:clamp(7px,.64vw,10px)}
+.toast{position:absolute;left:50%;bottom:12px;transform:translateX(-50%) translateY(14px);opacity:0;pointer-events:none;background:#101a15;border:1px solid var(--g);color:#dcffe6;border-radius:7px;padding:7px 13px;font-size:11px;transition:.2s;z-index:30}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.shell.hidden-ui .grid-top,.shell.hidden-ui .grid-middle,.shell.hidden-ui .eqpanel{display:none}.shell.hidden-ui{grid-template-rows:auto 1fr auto}.shell.hidden-ui:after{content:'PELEGO RADIO ONLINE • ÁUDIO CONTINUA TOCANDO';display:flex;align-items:center;justify-content:center;color:var(--g);font-size:clamp(14px,2vw,28px)}
+@media(max-width:900px){.shell{overflow:auto;height:auto;min-height:100%;grid-template-rows:auto auto auto auto auto}.grid-top{grid-template-columns:1fr}.grid-middle{grid-template-columns:1fr}.product{min-height:250px}.analyzer{min-height:220px}.filters{min-height:330px}.playbox{min-height:250px}.eqpanel{min-height:260px}.footer{grid-template-columns:1fr 1fr}.eqgrid{min-width:900px}.eqpanel{overflow-x:auto}.win{display:none}.subtitle{white-space:normal}.filterbody{grid-template-columns:100px 1fr}}
 </style>
-
-<section class="radio-page">
-  <header class="head">
-    <div class="brand">
-      <strong>PELEGO <span>RADIO</span></strong>
-      <small>Rádio Pelego Box • Player oficial</small>
-    </div>
-    <div class="live"><span class="live-dot"></span> ONLINE</div>
-  </header>
-
-  <main class="stage" id="stage"></main>
-
-  <div class="downloads">
-    <a class="download disabled" id="desktopDownload" href="#" rel="noopener">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="12" rx="2"></rect>
-        <path d="M8 20h8M12 16v4"></path>
-        <path d="M12 7v6m0 0 2.5-2.5M12 13l-2.5-2.5"></path>
-      </svg>
-      <span class="download-text">
-        <strong>BAIXAR PARA COMPUTADOR</strong>
-        <small id="desktopStatus">LINK EM CONFIGURAÇÃO</small>
-      </span>
-    </a>
-
-    <a class="download disabled" id="mobileDownload" href="#" rel="noopener">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="7" y="2" width="10" height="20" rx="2"></rect>
-        <path d="M10 5h4M11 19h2"></path>
-        <path d="M12 8v6m0 0 2.5-2.5M12 14l-2.5-2.5"></path>
-      </svg>
-      <span class="download-text">
-        <strong>BAIXAR PARA CELULAR</strong>
-        <small id="mobileStatus">LINK EM CONFIGURAÇÃO</small>
-      </span>
-    </a>
+<div class="shell" id="shell">
+  <div class="topbar">
+    <div class="brandrow"><div class="logo-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><div class="title"><span class="green">PELEGO RADIO</span> V5.4.8 PREMIUM LAB</div><div class="subtitle">Vitrine de Projetos Prontos &nbsp;•&nbsp; Analisador 24 Bandas &nbsp;•&nbsp; Equalizador &nbsp;•&nbsp; Rádio Automática</div></div></div>
+    <div class="win"><span>−</span><span>□</span><span>×</span></div>
   </div>
-</section>
-`;
+
+  <div class="grid-top">
+    <section class="panel"><div class="panel-title"><span class="ico">◇</span> PROJETOS FEITOS DO ZERO</div><div class="product"><div class="product-visual noimg" id="zeroVisual">PELEGO BOX</div><div><div class="product-meta"><div class="product-code" id="zeroCode">SKU: 1260</div><div class="product-desc" id="zeroDesc">LINE ARRAY 4X10\" PELEGO BOX LA 410</div></div><div class="navrow"><button class="vbtn" id="zeroPrev">◀ VOLTAR</button><button class="vbtn" id="zeroNext">PRÓXIMO ▶</button><button class="vbtn buy" id="zeroBuy">🛒 COMPRAR</button></div></div></div></section>
+    <section class="panel"><div class="panel-title"><span class="ico">◇</span> PROJETOS PRONTOS</div><div class="product"><div class="product-visual noimg" id="readyVisual">PELEGO BOX</div><div><div class="product-meta"><div class="product-code" id="readyCode">#1804 · JBL</div><div class="product-desc" id="readyDesc">CAIXA BASS REFLEX LOW BASS 1X15\" JBL TORNADO 2200</div></div><div class="navrow"><button class="vbtn" id="readyPrev">◀ VOLTAR</button><button class="vbtn" id="readyNext">PRÓXIMO ▶</button><button class="vbtn buy" id="readyBuy">🛒 COMPRAR</button></div></div></div></section>
+    <section class="panel analyzer"><div class="panel-title">〽 ANALISADOR - 24 BANDAS</div><canvas id="analyzer"></canvas><div class="bands-label"><span>GRAVE</span><span>MÉDIO</span><span>AGUDO</span></div></section>
+  </div>
+
+  <div class="grid-middle">
+    <section class="panel filters"><div class="panel-title">🎧 ESCOLHA O QUE QUER OUVIR</div><div class="filterbody"><div class="scopebuttons"><button class="scope" id="international">◎<br>INTERNACIONAL</button><button class="scope" id="national">◆<br>NACIONAL</button></div><div class="genres" id="genres"></div></div></section>
+    <section class="panel playbox"><div class="panel-title">♫ TOCANDO</div><div class="playbody"><div class="label">SAÍDA DE ÁUDIO</div><select id="device"><option value="">Saída padrão do navegador</option></select><div class="volrow"><span>🔊</span><input id="volume" type="range" min="0" max="100" value="32"><span id="volumeValue">32%</span></div><div class="randomrow"><label><span class="label">ALEATORIEDADE<br>POR TEMPO</span><select id="time"><option>15 minutos</option><option selected>30 minutos</option><option>45 minutos</option><option>60 minutos</option></select></label><label><span class="label">POR MÚSICAS</span><select id="songs"><option>3 músicas</option><option selected>5 músicas</option><option>10 músicas</option></select></label><label><span class="label">TRANSIÇÃO</span><select id="transition"><option>0 s</option><option>1 s</option><option selected>2 s</option><option>3 s</option><option>5 s</option></select></label></div><div class="hint" id="status">Tempo se atingir o limite, seguirá a faixa atual; desmarque para tocar até o fim.</div><div class="controls"><button class="play" id="play">▶ TOCAR</button><button id="next">PRÓXIMA ▶</button><button class="stop" id="stop">■ PARAR</button></div></div></section>
+  </div>
+
+  <section class="panel eqpanel"><div class="eqhead"><div class="eqtitle">⚙ EQUALIZADOR 24 BANDAS</div><div class="preset">PRESET <select id="preset"></select></div></div><div class="eqgrid" id="eqgrid"></div><div class="eqgroups"><span>〰 GRAVE</span><span>‡ MÉDIO</span><span>〰 AGUDO</span></div></section>
+  <div class="footer"><button id="save">▣ &nbsp; SALVAR</button><button id="hide">◉ &nbsp; OCULTAR</button><button class="danger" id="uninstall"><b>♜</b> DESINSTALAR APLICATIVO</button><div class="versionbox">Versão Online — V5.4.8 Premium LAB</div></div>
+  <div class="toast" id="toast"></div>
+  <audio id="audio" crossorigin="anonymous" preload="none"></audio>
+</div>`;
 
 class PelegoRadio extends HTMLElement {
-  static get observedAttributes() {
-    return [
-      "player-url",
-      "stream-url",
-      "desktop-download-url",
-      "mobile-download-url",
-    ];
-  }
-
-  connectedCallback() {
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-      this.shadowRoot.innerHTML = PELEGO_RADIO_HTML;
-    }
-
-    this.renderPlayer();
-    this.renderDownloads();
-  }
-
-  attributeChangedCallback() {
-    if (!this.isConnected || !this.shadowRoot) return;
-    this.renderPlayer();
-    this.renderDownloads();
-  }
-
-  renderPlayer() {
-    const stage = this.shadowRoot?.getElementById("stage");
-    if (!stage) return;
-
-    const playerUrl = String(this.getAttribute("player-url") || "").trim();
-    const streamUrl = String(this.getAttribute("stream-url") || "").trim();
-
-    stage.replaceChildren();
-
-    if (playerUrl) {
-      const iframe = document.createElement("iframe");
-      iframe.className = "player-frame";
-      iframe.src = playerUrl;
-      iframe.title = "Rádio Pelego Box";
-      iframe.loading = "eager";
-      iframe.allow = "autoplay; fullscreen; picture-in-picture";
-      iframe.allowFullscreen = true;
-      stage.appendChild(iframe);
-      return;
-    }
-
-    if (streamUrl) {
-      const shell = document.createElement("div");
-      shell.className = "native-player";
-      shell.innerHTML = `
-        <div class="bars" aria-hidden="true">${"<i></i>".repeat(24)}</div>
-        <h2 class="waiting-title">RÁDIO PELEGO BOX</h2>
-        <p class="waiting-subtitle">Transmissão online</p>
-      `;
-
-      const audio = document.createElement("audio");
-      audio.controls = true;
-      audio.preload = "none";
-      audio.src = streamUrl;
-      shell.appendChild(audio);
-      stage.appendChild(shell);
-      return;
-    }
-
-    const waiting = document.createElement("div");
-    waiting.className = "waiting";
-    waiting.innerHTML = `
-      <div class="bars" aria-hidden="true">${"<i></i>".repeat(24)}</div>
-      <h2 class="waiting-title">PELEGO RADIO</h2>
-      <p class="waiting-subtitle">Estrutura da página pronta. O HTML/URL definitivo do player entra aqui sem alterar o restante da página.</p>
-    `;
-    stage.appendChild(waiting);
-  }
-
-  renderDownloads() {
-    this.configureDownload(
-      "desktopDownload",
-      "desktopStatus",
-      this.getAttribute("desktop-download-url"),
-      "DOWNLOAD PARA WINDOWS",
-    );
-
-    this.configureDownload(
-      "mobileDownload",
-      "mobileStatus",
-      this.getAttribute("mobile-download-url"),
-      "DOWNLOAD PARA CELULAR",
-    );
-  }
-
-  configureDownload(linkId, statusId, rawUrl, readyLabel) {
-    const link = this.shadowRoot?.getElementById(linkId);
-    const status = this.shadowRoot?.getElementById(statusId);
-    const url = String(rawUrl || "").trim();
-
-    if (!(link instanceof HTMLAnchorElement) || !status) return;
-
-    if (url) {
-      link.href = url;
-      link.classList.remove("disabled");
-      link.setAttribute("target", "_blank");
-      status.textContent = readyLabel;
-    } else {
-      link.href = "#";
-      link.classList.add("disabled");
-      link.removeAttribute("target");
-      status.textContent = "LINK EM CONFIGURAÇÃO";
-    }
-  }
+  static get observedAttributes(){return ['catalog-zero-json','catalog-pronto-json','app-version'];}
+  constructor(){super();this.attachShadow({mode:'open'});this.shadowRoot.innerHTML=HTML;this.zeroCatalog=FALLBACK_ZERO.slice();this.readyCatalog=FALLBACK_PRONTO.slice();this.zeroIndex=0;this.readyIndex=0;this.currentStation=null;this.audioCtx=null;this.sourceNode=null;this.filters=[];this.gainNode=null;this.analyser=null;this.visualFrame=0;this.rotateZeroTimer=null;this.rotateReadyTimer=null;this.randomTimer=null;this.server=5;this.config=this.loadConfig();}
+  connectedCallback(){this.cache();this.buildGenres();this.buildEq();this.buildPreset();this.bind();this.applyConfig();this.renderProducts();this.startCatalogRotation();this.setupCanvas();this.refreshDevices();}
+  disconnectedCallback(){cancelAnimationFrame(this.visualFrame);clearInterval(this.rotateZeroTimer);clearInterval(this.rotateReadyTimer);clearTimeout(this.randomTimer);}
+  attributeChangedCallback(name,oldValue,newValue){if(oldValue===newValue)return;if(name==='catalog-zero-json')this.zeroCatalog=this.parseCatalog(newValue,FALLBACK_ZERO);if(name==='catalog-pronto-json')this.readyCatalog=this.parseCatalog(newValue,FALLBACK_PRONTO);if(this.isConnected)this.renderProducts();}
+  cache(){const $=id=>this.shadowRoot.getElementById(id);this.$=$;this.shell=$('shell');this.audio=$('audio');this.canvas=$('analyzer');this.ctx2d=this.canvas.getContext('2d');this.status=$('status');this.volume=$('volume');this.volumeValue=$('volumeValue');this.device=$('device');this.preset=$('preset');this.eqgrid=$('eqgrid');this.genresEl=$('genres');this.international=$('international');this.national=$('national');}
+  parseCatalog(raw,fallback){try{const data=JSON.parse(String(raw||''));return Array.isArray(data)&&data.length?data:fallback.slice();}catch(_){return fallback.slice();}}
+  loadConfig(){try{return {...DEFAULT_CONFIG,...JSON.parse(localStorage.getItem('pelego_radio_online_config_v548')||'{}')};}catch(_){return {...DEFAULT_CONFIG,eqGains:DEFAULT_CONFIG.eqGains.slice(),selectedGenres:DEFAULT_CONFIG.selectedGenres.slice()};}}
+  saveConfig(){try{localStorage.setItem('pelego_radio_online_config_v548',JSON.stringify(this.config));this.toast('Configuração salva neste navegador.');}catch(_){this.toast('Não foi possível salvar neste navegador.');}}
+  toast(text){const el=this.$('toast');el.textContent=text;el.classList.add('show');clearTimeout(this.toastTimer);this.toastTimer=setTimeout(()=>el.classList.remove('show'),2200);}
+  buildGenres(){this.genresEl.replaceChildren(...GENRES.map((genre,index)=>{const b=document.createElement('button');b.className='genre';b.textContent=genre;b.dataset.filter=genre;b.dataset.key=genre==='FUNK'?`FUNK-${index}`:genre;b.onclick=()=>{const f=b.dataset.filter;const arr=this.config.selectedGenres||[];if(arr.includes(f))this.config.selectedGenres=arr.filter(x=>x!==f);else this.config.selectedGenres=[...arr,f];this.refreshGenreButtons();};return b;}));}
+  refreshGenreButtons(){this.genresEl.querySelectorAll('.genre').forEach(b=>b.classList.toggle('active',(this.config.selectedGenres||[]).includes(b.dataset.filter)));this.international.classList.toggle('active',!!this.config.allowInternational);this.national.classList.toggle('active',!!this.config.allowNational);}
+  buildPreset(){Object.keys(PRESETS).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;this.preset.appendChild(o);});}
+  buildEq(){this.eqgrid.replaceChildren(...EQ_NAMES.map((name,i)=>{const band=document.createElement('div');band.className='band';band.innerHTML=`<div class="db" id="db${i}">0</div><div class="sliderwrap"><input aria-label="${name} Hz" data-index="${i}" type="range" min="-12" max="12" step="1" value="0"></div><div class="freq">${name}</div>`;const input=band.querySelector('input');input.oninput=()=>{const val=Number(input.value);this.config.eqGains[i]=val;this.$(`db${i}`).textContent=String(val);this.config.eqPreset='PERSONALIZADO';if([...this.preset.options].every(o=>o.value!=='PERSONALIZADO')){const o=document.createElement('option');o.value='PERSONALIZADO';o.textContent='PERSONALIZADO';this.preset.appendChild(o);}this.preset.value='PERSONALIZADO';if(this.filters[i])this.filters[i].gain.value=val;};return band;}));}
+  applyConfig(){this.volume.value=String(this.config.volume??32);this.volumeValue.textContent=`${this.volume.value}%`;this.preset.value=this.config.eqPreset||'FLAT';if(!this.preset.value)this.preset.value='FLAT';const gains=Array.isArray(this.config.eqGains)&&this.config.eqGains.length===24?this.config.eqGains:PRESETS.FLAT;this.eqgrid.querySelectorAll('input').forEach((input,i)=>{input.value=String(gains[i]||0);this.$(`db${i}`).textContent=String(gains[i]||0);});this.$('time').value=`${Number(this.config.randomTimeMinutes||30)} minutos`;this.$('songs').value=`${Number(this.config.randomSongCount||5)} músicas`;this.$('transition').value=`${Number(this.config.crossfadeSeconds||2)} s`;this.refreshGenreButtons();}
+  bind(){this.volume.oninput=()=>{this.config.volume=Number(this.volume.value);this.volumeValue.textContent=`${this.config.volume}%`;if(this.gainNode)this.gainNode.gain.value=this.config.volume/100;else this.audio.volume=this.config.volume/100;};this.preset.onchange=()=>this.applyPreset(this.preset.value);this.international.onclick=()=>{this.config.allowInternational=!this.config.allowInternational;this.refreshGenreButtons();};this.national.onclick=()=>{this.config.allowNational=!this.config.allowNational;this.refreshGenreButtons();};this.$('time').onchange=()=>{this.config.randomTimeMinutes=parseInt(this.$('time').value,10)||30;this.config.randomMode='TEMPO';this.scheduleRandom();};this.$('songs').onchange=()=>{this.config.randomSongCount=parseInt(this.$('songs').value,10)||5;this.config.randomMode='MUSICAS';};this.$('transition').onchange=()=>this.config.crossfadeSeconds=parseInt(this.$('transition').value,10)||0;this.$('play').onclick=()=>this.play();this.$('next').onclick=()=>this.nextStation();this.$('stop').onclick=()=>this.stop();this.$('save').onclick=()=>this.saveConfig();this.$('hide').onclick=()=>{this.shell.classList.toggle('hidden-ui');this.$('hide').textContent=this.shell.classList.contains('hidden-ui')?'◉  MOSTRAR':'◉  OCULTAR';};this.$('uninstall').onclick=()=>this.toast('No navegador não existe desinstalação. O botão foi mantido para preservar o layout do aplicativo.');this.audio.addEventListener('playing',()=>{this.status.textContent=`Tocando: ${this.currentStation?.name||'PELEGO RADIO'}`;this.$('play').textContent='❚❚ PAUSAR';this.scheduleRandom();});this.audio.addEventListener('pause',()=>{if(!this.audio.ended)this.$('play').textContent='▶ TOCAR';});this.audio.addEventListener('error',()=>this.handleStreamError());this.device.onchange=()=>this.setOutputDevice(this.device.value);this.$('zeroPrev').onclick=()=>this.shiftProduct('zero',-1);this.$('zeroNext').onclick=()=>this.shiftProduct('zero',1);this.$('readyPrev').onclick=()=>this.shiftProduct('ready',-1);this.$('readyNext').onclick=()=>this.shiftProduct('ready',1);this.$('zeroBuy').onclick=()=>this.buyCurrent('zero');this.$('readyBuy').onclick=()=>this.buyCurrent('ready');}
+  applyPreset(name){const gains=(PRESETS[name]||PRESETS.FLAT).slice();this.config.eqPreset=name;this.config.eqGains=gains;this.eqgrid.querySelectorAll('input').forEach((input,i)=>{input.value=String(gains[i]);this.$(`db${i}`).textContent=String(gains[i]);if(this.filters[i])this.filters[i].gain.value=gains[i];});}
+  stationTags(st){const g=String(st.genre||'').toUpperCase();const tags=[];if(/ROCK|DOOM|STONER/.test(g))tags.push('ROCK');if(/METAL/.test(g))tags.push('METAL');if(/POP|NEW WAVE|ANOS 70|ANOS 80/.test(g))tags.push('POP');if(/JAZZ/.test(g))tags.push('JAZZ');if(/BLUES/.test(g))tags.push('BLUES');if(/COUNTRY|AMERICANA|FOLK/.test(g))tags.push('COUNTRY');if(/REGGAE|DUB/.test(g))tags.push('REGGAE');if(/HIP|HOP|CLIQHOP/.test(g))tags.push('HIP HOP');if(/AMBIENT|DOWNTEMPO|DRONE|LOUNGE|CHILL|LUSH/.test(g))tags.push('LOUNGE');if(/ELETR|TECHNO|TRANCE|HOUSE|DUBSTEP|BEAT|VAPOR/.test(g))tags.push('ELETRÔNICA');if(/INSTRUMENTAL|SPACE|SYNTH/.test(g))tags.push('INSTRUMENTAL');if(/SOUL|FUNK/.test(g))tags.push('SOUL');if(!tags.length)tags.push('POP');return tags;}
+  pickStation(){let pool=[];const selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];if(this.config.allowInternational){pool=STATIONS.filter(st=>this.stationTags(st).some(t=>selected.includes(t)));}if(!pool.length)pool=STATIONS.slice();if(this.currentStation&&pool.length>1)pool=pool.filter(x=>x.id!==this.currentStation.id);return pool[Math.floor(Math.random()*pool.length)];}
+  streamUrl(st,server=5){return `https://ice${server}.somafm.com/${st.id}-128-mp3`;}
+  async ensureAudioGraph(){if(this.audioCtx)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC){this.audio.volume=this.config.volume/100;return;}this.audioCtx=new AC();this.sourceNode=this.audioCtx.createMediaElementSource(this.audio);let prev=this.sourceNode;this.filters=EQ_FREQS.map((freq,i)=>{const f=this.audioCtx.createBiquadFilter();f.type='peaking';f.frequency.value=freq;f.Q.value=1.05;f.gain.value=Number(this.config.eqGains?.[i]||0);prev.connect(f);prev=f;return f;});this.gainNode=this.audioCtx.createGain();this.gainNode.gain.value=this.config.volume/100;prev.connect(this.gainNode);this.analyser=this.audioCtx.createAnalyser();this.analyser.fftSize=2048;this.analyser.smoothingTimeConstant=.72;this.gainNode.connect(this.analyser);this.analyser.connect(this.audioCtx.destination);this.drawAnalyzer();}
+  async play(){if(!this.audio.paused){this.audio.pause();return;}try{await this.ensureAudioGraph();if(this.audioCtx?.state==='suspended')await this.audioCtx.resume();if(!this.currentStation){this.currentStation=this.pickStation();this.server=5;this.audio.src=this.streamUrl(this.currentStation,this.server);this.audio.load();}this.status.textContent='Conectando à estação...';await this.fadeTo(0,.01);await this.audio.play();await this.fadeTo(this.config.volume/100,Math.max(.15,Number(this.config.crossfadeSeconds||0)));}catch(e){this.status.textContent='O navegador bloqueou ou a estação não respondeu. Clique em TOCAR novamente.';}}
+  async nextStation(){const next=this.pickStation();if(!next)return;const sec=Math.max(0,Number(this.config.crossfadeSeconds||0));await this.fadeTo(0,sec/2);this.currentStation=next;this.server=5;this.audio.src=this.streamUrl(next,5);this.audio.load();this.status.textContent=`Conectando: ${next.name}`;try{await this.audio.play();await this.fadeTo(this.config.volume/100,sec/2);}catch(_){}}
+  stop(){clearTimeout(this.randomTimer);this.audio.pause();this.audio.removeAttribute('src');this.audio.load();this.currentStation=null;this.$('play').textContent='▶ TOCAR';this.status.textContent='Rádio parada.';this.drawIdleAnalyzer();}
+  fadeTo(target,seconds){if(!this.gainNode||!this.audioCtx){this.audio.volume=Math.max(0,Math.min(1,target));return Promise.resolve();}const now=this.audioCtx.currentTime;this.gainNode.gain.cancelScheduledValues(now);this.gainNode.gain.setValueAtTime(this.gainNode.gain.value,now);this.gainNode.gain.linearRampToValueAtTime(Math.max(.0001,target),now+Math.max(.01,seconds));return new Promise(r=>setTimeout(r,Math.max(10,seconds*1000)));}
+  handleStreamError(){if(!this.currentStation)return;if(this.server===5){this.server=2;this.audio.src=this.streamUrl(this.currentStation,2);this.audio.load();this.status.textContent='Trocando para servidor alternativo...';this.audio.play().catch(()=>{});return;}this.status.textContent='Estação indisponível agora. Indo para a próxima...';setTimeout(()=>this.nextStation(),900);}
+  scheduleRandom(){clearTimeout(this.randomTimer);if(this.audio.paused)return;if(this.config.randomMode==='TEMPO'){const min=Math.max(1,Number(this.config.randomTimeMinutes||30));this.randomTimer=setTimeout(()=>this.nextStation(),min*60000);}}
+  setupCanvas(){const ro=new ResizeObserver(()=>this.resizeCanvas());ro.observe(this.canvas);this.canvasObserver=ro;this.resizeCanvas();this.drawIdleAnalyzer();}
+  resizeCanvas(){const dpr=Math.max(1,window.devicePixelRatio||1);const r=this.canvas.getBoundingClientRect();this.canvas.width=Math.max(1,Math.floor(r.width*dpr));this.canvas.height=Math.max(1,Math.floor(r.height*dpr));this.ctx2d.setTransform(dpr,0,0,dpr,0,0);}
+  drawIdleAnalyzer(){if(!this.ctx2d)return;const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;c.clearRect(0,0,w,h);this.drawAnalyzerGrid(c,w,h);for(let i=0;i<24;i++){const bw=(w-28)/24;const amp=.18+.28*Math.abs(Math.sin(i*1.91));const bh=(h-36)*amp;c.fillStyle='#19c958';c.fillRect(16+i*bw,h-18-bh,Math.max(2,bw-3),bh);}}
+  drawAnalyzerGrid(c,w,h){c.fillStyle='#050908';c.fillRect(0,0,w,h);c.strokeStyle='rgba(80,120,100,.28)';c.lineWidth=1;for(let y=18;y<h-18;y+=Math.max(18,(h-36)/6)){c.beginPath();c.moveTo(14,y);c.lineTo(w-8,y);c.stroke();}for(let x=14;x<w-8;x+=Math.max(20,(w-22)/24)){c.beginPath();c.moveTo(x,8);c.lineTo(x,h-18);c.stroke();}c.fillStyle='#dce2de';c.font='9px Arial';c.fillText('+12',2,14);c.fillText('+6',5,h*.31);c.fillText('0',8,h*.52);c.fillText('-6',5,h*.72);c.fillText('-12',2,h-17);}
+  drawAnalyzer(){cancelAnimationFrame(this.visualFrame);const draw=()=>{const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;this.drawAnalyzerGrid(c,w,h);if(this.analyser){const bins=new Uint8Array(this.analyser.frequencyBinCount);this.analyser.getByteFrequencyData(bins);const bw=(w-28)/24;for(let i=0;i<24;i++){const target=EQ_FREQS[i];const idx=Math.min(bins.length-1,Math.round(target/(this.audioCtx.sampleRate/2)*(bins.length-1)));let val=0,count=0;for(let j=Math.max(0,idx-2);j<=Math.min(bins.length-1,idx+2);j++){val+=bins[j];count++;}val=count?val/count:0;const bh=Math.max(2,(h-36)*(val/255));c.fillStyle='#18cf55';c.fillRect(16+i*bw,h-18-bh,Math.max(2,bw-3),bh);}}this.visualFrame=requestAnimationFrame(draw);};draw();}
+  async refreshDevices(){try{if(!navigator.mediaDevices?.enumerateDevices)return;const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audiooutput');devices.forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||'Saída de áudio';this.device.appendChild(o);});}catch(_){}}
+  async setOutputDevice(id){try{if(this.audioCtx&&typeof this.audioCtx.setSinkId==='function')await this.audioCtx.setSinkId(id||'');else if(typeof this.audio.setSinkId==='function')await this.audio.setSinkId(id);this.toast('Saída de áudio alterada.');}catch(_){this.toast('O navegador não permitiu trocar a saída de áudio.');}}
+  startCatalogRotation(){clearInterval(this.rotateZeroTimer);clearInterval(this.rotateReadyTimer);this.rotateZeroTimer=setInterval(()=>this.shiftProduct('zero',1,false),15000);this.rotateReadyTimer=setInterval(()=>this.shiftProduct('ready',1,false),15000);}
+  shiftProduct(kind,delta,restart=true){if(kind==='zero'){const n=this.zeroCatalog.length||1;this.zeroIndex=(this.zeroIndex+delta+n)%n;}else{const n=this.readyCatalog.length||1;this.readyIndex=(this.readyIndex+delta+n)%n;}this.renderProducts();if(restart)this.startCatalogRotation();}
+  renderProducts(){this.renderProduct('zero',this.zeroCatalog[this.zeroIndex%Math.max(1,this.zeroCatalog.length)]||FALLBACK_ZERO[0]);this.renderProduct('ready',this.readyCatalog[this.readyIndex%Math.max(1,this.readyCatalog.length)]||FALLBACK_PRONTO[0]);}
+  renderProduct(kind,item){const visual=this.$(`${kind}Visual`),code=this.$(`${kind}Code`),desc=this.$(`${kind}Desc`);const image=String(item?.image||'').trim();visual.replaceChildren();visual.classList.toggle('noimg',!image);if(image){const img=document.createElement('img');img.src=image;img.alt=item?.title||'Projeto Pelego Box';img.onerror=()=>{visual.classList.add('noimg');visual.textContent='PELEGO BOX';};visual.appendChild(img);}else visual.textContent='PELEGO BOX';if(kind==='zero')code.textContent=`SKU: ${item?.sku||item?.code||'--'}`;else code.textContent=`#${item?.code||'--'}${item?.brand?` · ${item.brand}`:''}`;desc.textContent=item?.title||'Projeto Pelego Box';}
+  buyCurrent(kind){const item=kind==='zero'?this.zeroCatalog[this.zeroIndex]:this.readyCatalog[this.readyIndex];const url=String(item?.buyUrl||'').trim();if(url)window.open(url,'_blank','noopener');else this.toast('Link de compra ainda não disponível para este item.');}
 }
 
-if (!customElements.get("pelego-radio")) {
-  customElements.define("pelego-radio", PelegoRadio);
-}
+if(!customElements.get('pelego-radio'))customElements.define('pelego-radio',PelegoRadio);

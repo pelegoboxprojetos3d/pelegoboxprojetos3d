@@ -1,7 +1,13 @@
 import wixData from 'wix-data';
+import wixLocation from 'wix-location';
 
 const COLECAO_RADIO = 'RadioPelegoBoxProdutos';
 const PLAYER_ID = '#playerradiopelegobox';
+
+const RADIO_CHECKOUT_CODE = {
+  'RADIO-PC': '990001',
+  'RADIO-CELULAR': '990002',
+};
 
 function formatarReal(valor) {
   const numero = Number(valor);
@@ -43,6 +49,46 @@ function imagemPublica(value) {
   return bruto;
 }
 
+function checkoutRadioUrl(item) {
+  const codigo = safe(item?.codigo).toUpperCase();
+  const codigoProjeto = RADIO_CHECKOUT_CODE[codigo];
+  const valor = Number(item?.valor || 0);
+  const titulo = safe(item?.title) || 'Rádio Pelego Box';
+
+  if (!codigoProjeto || !(valor > 0)) return '';
+
+  const params = new URLSearchParams({
+    codigoProjeto,
+    codigo: codigoProjeto,
+    tipoProduto: 'PROJETO_COMPLETO',
+    produto: titulo,
+    titulo: titulo,
+    tituloOriginal: titulo,
+    tituloBase: titulo,
+    valor: String(valor),
+    price: String(valor),
+    radioProduto: '1',
+    radioCodigo: codigo,
+    returnUrl: '/radiopelegobox',
+  });
+
+  return `/checkout-projeto-pronto?${params.toString()}`;
+}
+
+function ligarCheckoutRadio(id, item) {
+  try {
+    const botao = $w(id);
+    const destino = checkoutRadioUrl(item);
+    if (!botao || !destino || typeof botao.onClick !== 'function') return;
+
+    botao.onClick(() => {
+      wixLocation.to(destino);
+    });
+  } catch (erro) {
+    console.warn(`[RADIO] Não foi possível ligar ${id} ao checkout:`, erro?.message || erro);
+  }
+}
+
 async function carregarValoresRadio() {
   try {
     const resultado = await wixData
@@ -61,6 +107,9 @@ async function carregarValoresRadio() {
     if ($w('#valordois')) {
       $w('#valordois').text = formatarReal(celular?.valor);
     }
+
+    ligarCheckoutRadio('#baixarpc', pc);
+    ligarCheckoutRadio('#baixarcelular', celular);
   } catch (erro) {
     console.error('[RADIO] Erro ao carregar valores:', erro);
 

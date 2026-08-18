@@ -32,6 +32,14 @@ jobs:
           $ico = Get-Content tools/pelego-screen-ink/pelego.ico.b64 -Raw
           [IO.File]::WriteAllBytes("tools/pelego-screen-ink/pelego.ico", [Convert]::FromBase64String(($ico -replace '\s','')))
 
+      - name: Patch known C# ambiguity
+        shell: pwsh
+        run: |
+          $path = 'tools/pelego-screen-ink/ProgramV28.cs'
+          $text = Get-Content $path -Raw
+          $text = $text.Replace('Math.Min(220, Color.A)', 'Math.Min(220, (int)Color.A)')
+          Set-Content -Path $path -Value $text -Encoding UTF8
+
       - name: Publish single-file Windows app
         shell: pwsh
         run: |

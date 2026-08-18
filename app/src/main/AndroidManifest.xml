@@ -2,7 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="false"
-        android:debuggable="false"
         android:icon="@drawable/ic_launcher"
         android:label="Pelego Box Rádio Teste"
         android:supportsRtl="true"

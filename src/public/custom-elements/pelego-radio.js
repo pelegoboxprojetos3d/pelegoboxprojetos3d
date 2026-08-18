@@ -1,221 +1,407 @@
-const STATIONS = [
-  ["groovesalad", "Groove Salad", "Ambient / Downtempo"],
-  ["groovesalad2", "Groove Salad 2", "Ambient / Downtempo"],
-  ["dronezone", "Drone Zone", "Ambient / Drone"],
-  ["spacestation", "Space Station Soma", "Eletrônica / Ambient"],
-  ["secretagent", "Secret Agent", "Lounge / Exótica"],
-  ["u80s", "Underground 80s", "Anos 80 / New Wave"],
-  ["seventies", "Left Coast 70s", "Anos 70 / Rock / Pop"],
-  ["indiepop", "Indie Pop Rocks!", "Indie / Pop / Rock"],
-  ["poptron", "PopTron", "Indie Pop / Eletrônica"],
-  ["metal", "Metal Detector", "Metal"],
-  ["doomed", "Doomed", "Doom / Stoner Metal"],
-  ["reggae", "Heavyweight Reggae", "Reggae / Dub"],
-  ["bootliquor", "Boot Liquor", "Americana / Country"],
-  ["sonicuniverse", "Sonic Universe", "Jazz"],
-  ["beatblender", "Beat Blender", "Deep House / Chill"],
-  ["cliqhop", "cliqhop idm", "IDM / Eletrônica"],
-  ["thetrip", "The Trip", "Trance / Eletrônica"],
-  ["dubstep", "Dub Step Beyond", "Dubstep / Bass"],
-  ["fluid", "Fluid", "Instrumental Hip-Hop / Beats"],
-  ["digitalis", "Digitalis", "Indie / Eletrônica"],
-  ["lush", "Lush", "Dream Pop / Vocais"],
-  ["covers", "Covers", "Covers / Alternativo"],
-  ["deepspaceone", "Deep Space One", "Space Ambient"],
-  ["defcon", "DEF CON Radio", "Eletrônica"],
-  ["seven", "Seven Inch Soul", "Soul / Funk"],
-  ["folkfwd", "Folk Forward", "Folk / Indie Folk"],
-  ["illstreet", "Illinois Street Lounge", "Lounge / Exótica"],
-  ["vaporwaves", "Vaporwaves", "Vaporwave / Chill"],
-  ["synphaera", "Synphaera Radio", "Ambient / Eletrônica"]
-].map(([id, name, genre]) => ({ id, name, genre }));
-
-const template = document.createElement("template");
-template.innerHTML = `
+const PELEGO_RADIO_HTML = String.raw`
 <style>
   :host {
-    display:block;
-    width:100%;
-    height:100%;
-    min-height:0;
-    font-family:Arial,Helvetica,sans-serif;
-    color:#f6fff8;
-    --green:#27e36e;
-    --green2:#0c8f3f;
-    --line:rgba(39,227,110,.32);
-    --panel:#09110c;
-    --muted:#96a49b;
+    display: block;
+    width: 100%;
+    color: #f4f7f5;
+    font-family: Arial, Helvetica, sans-serif;
+    --pb-green: #24d66b;
+    --pb-green-dark: #138b45;
+    --pb-bg: #080c0a;
+    --pb-panel: #0e1511;
+    --pb-line: rgba(68, 255, 138, .28);
+    --pb-muted: #8d9991;
   }
-  *{box-sizing:border-box}
-  .app{
-    width:100%;height:100%;min-height:0;
-    padding:10px;
-    border:1px solid rgba(255,255,255,.08);
-    border-radius:16px;
-    overflow:hidden;
+
+  * { box-sizing: border-box; }
+
+  .radio-page {
+    width: 100%;
+    margin: 0 auto;
+    padding: 10px;
     background:
-      radial-gradient(circle at 50% -20%,rgba(39,227,110,.15),transparent 42%),
-      linear-gradient(180deg,#071009 0%,#030604 100%);
+      radial-gradient(circle at 50% -15%, rgba(36, 214, 107, .12), transparent 38%),
+      linear-gradient(180deg, #090e0b 0%, #060806 100%);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 18px;
+    overflow: hidden;
   }
-  .head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 12px 10px;border-bottom:1px solid var(--line)}
-  .brand strong{display:block;font-size:clamp(20px,2.2vw,31px);line-height:1;letter-spacing:.6px}.brand strong span{color:var(--green)}
-  .brand small{display:block;color:var(--muted);font-size:11px;margin-top:6px}
-  .live{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;color:#bdfbd2;font-size:10px;font-weight:800;letter-spacing:.7px;background:rgba(39,227,110,.07)}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}
-  .main{height:calc(100% - 61px);min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px;padding-top:10px}
-  .stage{min-height:0;position:relative;border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#050806;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
-  .gridbg{position:absolute;inset:0;opacity:.55;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:30px 30px;pointer-events:none}
-  .bars{height:105px;display:flex;align-items:flex-end;justify-content:center;gap:6px;position:relative;z-index:1;margin-bottom:12px}
-  .bars i{display:block;width:7px;min-height:8px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,#8bffb7,var(--green));box-shadow:0 0 12px rgba(39,227,110,.22);animation:eq 1s ease-in-out infinite alternate;animation-play-state:paused}
-  .playing .bars i{animation-play-state:running}.bars i:nth-child(2n){animation-delay:-.31s}.bars i:nth-child(3n){animation-delay:-.67s}.bars i:nth-child(5n){animation-delay:-.17s}
-  .station{position:relative;z-index:1;text-align:center}.station h2{margin:0;color:#fff;font-size:clamp(21px,2.1vw,32px);letter-spacing:.5px}.station p{margin:7px 0 0;color:var(--muted);font-size:12px}
-  .controls{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:9px;margin-top:20px;flex-wrap:wrap}
-  button{border:1px solid rgba(255,255,255,.15);border-radius:10px;background:linear-gradient(180deg,#18221b,#0b100d);color:#f5fff7;padding:10px 16px;font-weight:800;cursor:pointer;transition:.15s ease}
-  button:hover{transform:translateY(-1px);border-color:var(--line)}
-  #play{min-width:118px;background:linear-gradient(180deg,#169d49,#08712f);border-color:rgba(39,227,110,.7)}
-  #stop{border-color:rgba(255,75,75,.5);color:#ffaaaa}
-  .volume{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:10px;margin-left:3px}.volume input{accent-color:var(--green);width:120px}
-  .status{position:relative;z-index:1;min-height:15px;margin-top:10px;color:#8fa197;font-size:10px}
-  .side{min-height:0;border:1px solid var(--line);border-radius:13px;background:rgba(8,15,10,.86);overflow:hidden;display:flex;flex-direction:column}
-  .sidehead{padding:12px 13px 9px;border-bottom:1px solid rgba(39,227,110,.18);font-size:12px;font-weight:800;color:var(--green);letter-spacing:.4px}
-  .list{overflow:auto;padding:7px;min-height:0;scrollbar-width:thin;scrollbar-color:#1c8c44 #071009}
-  .stationbtn{width:100%;text-align:left;padding:9px 10px;margin:0 0 5px;border-radius:8px;background:#0b120e;border:1px solid rgba(255,255,255,.07)}
-  .stationbtn b{display:block;font-size:11px}.stationbtn span{display:block;margin-top:3px;color:#7f9186;font-size:9px;font-weight:400}
-  .stationbtn.active{border-color:rgba(39,227,110,.72);background:rgba(39,227,110,.11);color:#caffd9}
-  audio{display:none}
-  @keyframes eq{from{height:10px;opacity:.45}to{height:96px;opacity:1}}
-  @media(max-width:780px){
-    .app{padding:7px;border-radius:11px}.head{padding:7px 8px 9px}.brand small{font-size:9px}.live{padding:6px 8px;font-size:8px}
-    .main{grid-template-columns:1fr;height:calc(100% - 55px);overflow:auto}.stage{min-height:330px}.side{min-height:250px}.list{max-height:240px}
-    .volume{width:100%;justify-content:center;margin:2px 0 0}.volume input{width:150px}
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 12px 16px 14px;
+    border-bottom: 1px solid var(--pb-line);
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand strong {
+    display: block;
+    color: #fff;
+    font-size: clamp(19px, 2vw, 31px);
+    line-height: 1;
+    letter-spacing: .5px;
+  }
+
+  .brand strong span { color: var(--pb-green); }
+
+  .brand small {
+    display: block;
+    margin-top: 7px;
+    color: var(--pb-muted);
+    font-size: clamp(9px, .9vw, 13px);
+  }
+
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    padding: 8px 11px;
+    border: 1px solid rgba(36,214,107,.35);
+    border-radius: 999px;
+    background: rgba(36,214,107,.08);
+    color: #baf6cf;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .6px;
+  }
+
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--pb-green);
+    box-shadow: 0 0 0 0 rgba(36,214,107,.55);
+    animation: pulse 1.25s infinite;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    min-height: 560px;
+    margin-top: 10px;
+    overflow: hidden;
+    border: 1px solid var(--pb-line);
+    border-radius: 14px;
+    background: #050706;
+  }
+
+  .player-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 560px;
+    border: 0;
+    background: #050706;
+  }
+
+  .native-player,
+  .waiting {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 34px;
+    text-align: center;
+    background:
+      linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+      radial-gradient(circle at center, rgba(36,214,107,.10), transparent 50%),
+      #070b08;
+    background-size: 32px 32px, 32px 32px, auto, auto;
+  }
+
+  .waiting-title {
+    margin: 0;
+    color: #f8fff9;
+    font-size: clamp(20px, 2vw, 34px);
+    font-weight: 800;
+    letter-spacing: .7px;
+  }
+
+  .waiting-subtitle {
+    max-width: 700px;
+    margin: 0;
+    color: var(--pb-muted);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .bars {
+    display: flex;
+    height: 86px;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .bars i {
+    display: block;
+    width: 7px;
+    min-height: 10px;
+    border-radius: 5px 5px 2px 2px;
+    background: linear-gradient(180deg, #7cffaa, var(--pb-green));
+    box-shadow: 0 0 13px rgba(36,214,107,.18);
+    animation: eq 1s ease-in-out infinite alternate;
+  }
+
+  .bars i:nth-child(2n) { animation-delay: -.33s; }
+  .bars i:nth-child(3n) { animation-delay: -.68s; }
+  .bars i:nth-child(5n) { animation-delay: -.18s; }
+
+  .native-player audio {
+    width: min(760px, 92%);
+    margin-top: 8px;
+  }
+
+  .downloads {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 0 2px;
+  }
+
+  .download {
+    display: flex;
+    min-height: 74px;
+    align-items: center;
+    justify-content: center;
+    gap: 13px;
+    padding: 12px 18px;
+    border: 1px solid rgba(36,214,107,.35);
+    border-radius: 13px;
+    background: linear-gradient(180deg, rgba(36,214,107,.13), rgba(36,214,107,.055));
+    color: #f8fff9;
+    text-decoration: none;
+    transition: transform .14s ease, border-color .14s ease, background .14s ease;
+  }
+
+  .download:hover {
+    transform: translateY(-2px);
+    border-color: rgba(36,214,107,.75);
+    background: linear-gradient(180deg, rgba(36,214,107,.22), rgba(36,214,107,.08));
+  }
+
+  .download.disabled {
+    cursor: default;
+    opacity: .46;
+    pointer-events: none;
+  }
+
+  .download svg {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    fill: none;
+    stroke: var(--pb-green);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .download-text {
+    min-width: 0;
+  }
+
+  .download-text strong {
+    display: block;
+    font-size: clamp(12px, 1.15vw, 16px);
+    line-height: 1.15;
+  }
+
+  .download-text small {
+    display: block;
+    margin-top: 5px;
+    color: #9ca7a0;
+    font-size: 9px;
+  }
+
+  @keyframes pulse {
+    70% { box-shadow: 0 0 0 8px rgba(36,214,107,0); }
+    100% { box-shadow: 0 0 0 0 rgba(36,214,107,0); }
+  }
+
+  @keyframes eq {
+    from { height: 13px; opacity: .55; }
+    to { height: 78px; opacity: 1; }
+  }
+
+  @media (min-width: 1450px) {
+    .stage,
+    .player-frame { min-height: 720px; }
+  }
+
+  @media (max-width: 780px) {
+    .radio-page { padding: 7px; border-radius: 12px; }
+    .head { padding: 10px 9px 12px; }
+    .live { font-size: 9px; padding: 7px 9px; }
+    .stage,
+    .player-frame { min-height: 610px; }
+    .downloads { grid-template-columns: 1fr; gap: 8px; padding-top: 9px; }
+    .download { min-height: 64px; justify-content: flex-start; }
   }
 </style>
-<section class="app" id="app">
+
+<section class="radio-page">
   <header class="head">
-    <div class="brand"><strong>PELEGO <span>RADIO</span></strong><small>Rádio Pelego Box • Player oficial</small></div>
-    <div class="live"><span class="dot"></span> ONLINE</div>
+    <div class="brand">
+      <strong>PELEGO <span>RADIO</span></strong>
+      <small>Rádio Pelego Box • Player oficial</small>
+    </div>
+    <div class="live"><span class="live-dot"></span> ONLINE</div>
   </header>
-  <div class="main">
-    <main class="stage">
-      <div class="gridbg"></div>
-      <div class="bars" aria-hidden="true">${"<i></i>".repeat(24)}</div>
-      <div class="station"><h2 id="name">Groove Salad</h2><p id="genre">Ambient / Downtempo</p></div>
-      <div class="controls">
-        <button id="prev" type="button">◀ ANTERIOR</button>
-        <button id="play" type="button">▶ TOCAR</button>
-        <button id="next" type="button">PRÓXIMA ▶</button>
-        <button id="stop" type="button">■ PARAR</button>
-        <label class="volume">VOLUME <input id="volume" type="range" min="0" max="100" value="32"></label>
-      </div>
-      <div class="status" id="status">Escolha uma estação e clique em TOCAR.</div>
-      <audio id="audio" preload="none" crossorigin="anonymous"></audio>
-    </main>
-    <aside class="side"><div class="sidehead">ESCOLHA O QUE QUER OUVIR</div><div class="list" id="list"></div></aside>
+
+  <main class="stage" id="stage"></main>
+
+  <div class="downloads">
+    <a class="download disabled" id="desktopDownload" href="#" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+        <path d="M8 20h8M12 16v4"></path>
+        <path d="M12 7v6m0 0 2.5-2.5M12 13l-2.5-2.5"></path>
+      </svg>
+      <span class="download-text">
+        <strong>BAIXAR PARA COMPUTADOR</strong>
+        <small id="desktopStatus">LINK EM CONFIGURAÇÃO</small>
+      </span>
+    </a>
+
+    <a class="download disabled" id="mobileDownload" href="#" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="7" y="2" width="10" height="20" rx="2"></rect>
+        <path d="M10 5h4M11 19h2"></path>
+        <path d="M12 8v6m0 0 2.5-2.5M12 14l-2.5-2.5"></path>
+      </svg>
+      <span class="download-text">
+        <strong>BAIXAR PARA CELULAR</strong>
+        <small id="mobileStatus">LINK EM CONFIGURAÇÃO</small>
+      </span>
+    </a>
   </div>
-</section>`;
+</section>
+`;
 
 class PelegoRadio extends HTMLElement {
-  constructor(){
-    super();
-    this.attachShadow({mode:"open"});
-    this.shadowRoot.appendChild(template.content.cloneNode(true));
-    this.index=0;
-    this.server=5;
+  static get observedAttributes() {
+    return [
+      "player-url",
+      "stream-url",
+      "desktop-download-url",
+      "mobile-download-url",
+    ];
   }
 
-  connectedCallback(){
-    this.app=this.shadowRoot.getElementById("app");
-    this.audio=this.shadowRoot.getElementById("audio");
-    this.nameEl=this.shadowRoot.getElementById("name");
-    this.genreEl=this.shadowRoot.getElementById("genre");
-    this.statusEl=this.shadowRoot.getElementById("status");
-    this.listEl=this.shadowRoot.getElementById("list");
-    this.playEl=this.shadowRoot.getElementById("play");
-    this.renderList();
-    this.select(0,false);
-
-    this.shadowRoot.getElementById("prev").onclick=()=>this.select((this.index-1+STATIONS.length)%STATIONS.length,true);
-    this.shadowRoot.getElementById("next").onclick=()=>this.select((this.index+1)%STATIONS.length,true);
-    this.shadowRoot.getElementById("stop").onclick=()=>this.stop();
-    this.playEl.onclick=()=>this.toggle();
-    this.shadowRoot.getElementById("volume").oninput=e=>{this.audio.volume=Number(e.target.value)/100};
-    this.audio.volume=.32;
-    this.audio.addEventListener("playing",()=>this.setPlaying(true));
-    this.audio.addEventListener("pause",()=>this.setPlaying(false));
-    this.audio.addEventListener("waiting",()=>this.setStatus("Conectando à estação..."));
-    this.audio.addEventListener("error",()=>this.handleStreamError());
-  }
-
-  streamUrl(station,server=this.server){
-    return `https://ice${server}.somafm.com/${station.id}-128-mp3`;
-  }
-
-  renderList(){
-    this.listEl.replaceChildren(...STATIONS.map((station,i)=>{
-      const b=document.createElement("button");
-      b.className="stationbtn";
-      b.type="button";
-      b.dataset.index=String(i);
-      b.innerHTML=`<b>${station.name}</b><span>${station.genre}</span>`;
-      b.onclick=()=>this.select(i,true);
-      return b;
-    }));
-  }
-
-  select(index,autoplay=false){
-    this.index=index;
-    this.server=5;
-    const station=STATIONS[index];
-    this.nameEl.textContent=station.name;
-    this.genreEl.textContent=station.genre;
-    this.listEl.querySelectorAll(".stationbtn").forEach((el,i)=>el.classList.toggle("active",i===index));
-    this.audio.src=this.streamUrl(station,5);
-    this.audio.load();
-    this.setStatus(autoplay?"Conectando à estação...":"Escolha uma estação e clique em TOCAR.");
-    if(autoplay)this.play().catch(()=>{});
-  }
-
-  async play(){
-    try{
-      await this.audio.play();
-      this.setStatus(`Tocando agora: ${STATIONS[this.index].name}`);
-    }catch(error){
-      this.setStatus("Clique em TOCAR para liberar o áudio no navegador.");
-      throw error;
+  connectedCallback() {
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.innerHTML = PELEGO_RADIO_HTML;
     }
+
+    this.renderPlayer();
+    this.renderDownloads();
   }
 
-  toggle(){
-    if(this.audio.paused)this.play().catch(()=>{});else this.audio.pause();
+  attributeChangedCallback() {
+    if (!this.isConnected || !this.shadowRoot) return;
+    this.renderPlayer();
+    this.renderDownloads();
   }
 
-  stop(){
-    this.audio.pause();
-    try{this.audio.currentTime=0}catch(_){}
-    this.setStatus("Rádio parada.");
-  }
+  renderPlayer() {
+    const stage = this.shadowRoot?.getElementById("stage");
+    if (!stage) return;
 
-  handleStreamError(){
-    if(this.server===5){
-      this.server=2;
-      const wasPlaying=!this.audio.paused;
-      this.audio.src=this.streamUrl(STATIONS[this.index],2);
-      this.audio.load();
-      this.setStatus("Trocando para servidor alternativo...");
-      if(wasPlaying)this.play().catch(()=>{});
+    const playerUrl = String(this.getAttribute("player-url") || "").trim();
+    const streamUrl = String(this.getAttribute("stream-url") || "").trim();
+
+    stage.replaceChildren();
+
+    if (playerUrl) {
+      const iframe = document.createElement("iframe");
+      iframe.className = "player-frame";
+      iframe.src = playerUrl;
+      iframe.title = "Rádio Pelego Box";
+      iframe.loading = "eager";
+      iframe.allow = "autoplay; fullscreen; picture-in-picture";
+      iframe.allowFullscreen = true;
+      stage.appendChild(iframe);
       return;
     }
-    this.setPlaying(false);
-    this.setStatus("Estação indisponível agora. Escolha outra estação.");
+
+    if (streamUrl) {
+      const shell = document.createElement("div");
+      shell.className = "native-player";
+      shell.innerHTML = `
+        <div class="bars" aria-hidden="true">${"<i></i>".repeat(24)}</div>
+        <h2 class="waiting-title">RÁDIO PELEGO BOX</h2>
+        <p class="waiting-subtitle">Transmissão online</p>
+      `;
+
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.preload = "none";
+      audio.src = streamUrl;
+      shell.appendChild(audio);
+      stage.appendChild(shell);
+      return;
+    }
+
+    const waiting = document.createElement("div");
+    waiting.className = "waiting";
+    waiting.innerHTML = `
+      <div class="bars" aria-hidden="true">${"<i></i>".repeat(24)}</div>
+      <h2 class="waiting-title">PELEGO RADIO</h2>
+      <p class="waiting-subtitle">Estrutura da página pronta. O HTML/URL definitivo do player entra aqui sem alterar o restante da página.</p>
+    `;
+    stage.appendChild(waiting);
   }
 
-  setPlaying(playing){
-    this.app.classList.toggle("playing",playing);
-    this.playEl.textContent=playing?"❚❚ PAUSAR":"▶ TOCAR";
-    if(playing)this.setStatus(`Tocando agora: ${STATIONS[this.index].name}`);
+  renderDownloads() {
+    this.configureDownload(
+      "desktopDownload",
+      "desktopStatus",
+      this.getAttribute("desktop-download-url"),
+      "DOWNLOAD PARA WINDOWS",
+    );
+
+    this.configureDownload(
+      "mobileDownload",
+      "mobileStatus",
+      this.getAttribute("mobile-download-url"),
+      "DOWNLOAD PARA CELULAR",
+    );
   }
 
-  setStatus(text){this.statusEl.textContent=text}
+  configureDownload(linkId, statusId, rawUrl, readyLabel) {
+    const link = this.shadowRoot?.getElementById(linkId);
+    const status = this.shadowRoot?.getElementById(statusId);
+    const url = String(rawUrl || "").trim();
+
+    if (!(link instanceof HTMLAnchorElement) || !status) return;
+
+    if (url) {
+      link.href = url;
+      link.classList.remove("disabled");
+      link.setAttribute("target", "_blank");
+      status.textContent = readyLabel;
+    } else {
+      link.href = "#";
+      link.classList.add("disabled");
+      link.removeAttribute("target");
+      status.textContent = "LINK EM CONFIGURAÇÃO";
+    }
+  }
 }
 
-if(!customElements.get("pelego-radio"))customElements.define("pelego-radio",PelegoRadio);
+if (!customElements.get("pelego-radio")) {
+  customElements.define("pelego-radio", PelegoRadio);
+}

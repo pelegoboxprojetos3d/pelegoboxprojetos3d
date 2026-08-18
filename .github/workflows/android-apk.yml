@@ -46,6 +46,7 @@ jobs:
           mkdir signing-tools
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signing-tools/apksigner.jar
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signing-tools/zipalign
+          cp "$(ldd "$ANDROID_HOME/build-tools/35.0.0/zipalign" | awk '/libc\+\+\.so/ {print $3; exit}')" signing-tools/libc++.so
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -55,4 +56,5 @@ jobs:
             PELEGO_BOX_RADIO_LAYOUT_APROVADO_ANDROID.apk
             signing-tools/apksigner.jar
             signing-tools/zipalign
+            signing-tools/libc++.so
           if-no-files-found: error

@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId "br.com.pelegobox.radio.teste548"
         minSdk 21
-        targetSdk 28
+        targetSdk 33
         versionCode 548
         versionName "5.4.8-layout-mobile-r2"
     }

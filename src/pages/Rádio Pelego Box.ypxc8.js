@@ -49,6 +49,13 @@ function imagemPublica(value) {
   return bruto;
 }
 
+function montarQuery(params = {}) {
+  return Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && safe(value) !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&');
+}
+
 function checkoutRadioUrl(item) {
   const codigo = safe(item?.codigo).toUpperCase();
   const codigoProjeto = RADIO_CHECKOUT_CODE[codigo];
@@ -57,12 +64,12 @@ function checkoutRadioUrl(item) {
 
   if (!codigoProjeto || !(valor > 0)) return '';
 
-  const params = new URLSearchParams({
+  const query = montarQuery({
     codigoProjeto,
     codigo: codigoProjeto,
     tipoProduto: 'PROJETO_COMPLETO',
     produto: titulo,
-    titulo: titulo,
+    titulo,
     tituloOriginal: titulo,
     tituloBase: titulo,
     valor: String(valor),
@@ -72,20 +79,29 @@ function checkoutRadioUrl(item) {
     returnUrl: '/radiopelegobox',
   });
 
-  return `/checkout-projeto-pronto?${params.toString()}`;
+  return `/checkout-projeto-pronto?${query}`;
 }
 
 function ligarCheckoutRadio(id, item) {
   try {
     const botao = $w(id);
     const destino = checkoutRadioUrl(item);
-    if (!botao || !destino || typeof botao.onClick !== 'function') return;
+
+    if (!botao || typeof botao.onClick !== 'function') {
+      console.warn(`[RADIO] Elemento ${id} não aceita clique.`);
+      return;
+    }
+
+    if (!destino) {
+      console.warn(`[RADIO] Checkout não configurado para ${safe(item?.codigo) || id}.`);
+      return;
+    }
 
     botao.onClick(() => {
       wixLocation.to(destino);
     });
   } catch (erro) {
-    console.warn(`[RADIO] Não foi possível ligar ${id} ao checkout:`, erro?.message || erro);
+    console.error(`[RADIO] Não foi possível ligar ${id} ao checkout:`, erro?.message || erro);
   }
 }
 

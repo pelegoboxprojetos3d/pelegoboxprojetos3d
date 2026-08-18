@@ -8,7 +8,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AssemblyName>PELEGO.ScreenInk</AssemblyName>
     <RootNamespace>PelegoMarkerV2</RootNamespace>
-    <Version>2.5.0</Version>
+    <Version>2.6.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 </Project>

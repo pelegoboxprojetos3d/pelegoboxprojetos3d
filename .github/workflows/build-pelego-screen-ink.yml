@@ -1,0 +1,57 @@
+name: Build PELEGO Screen Ink
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/pelego-screen-ink/**'
+      - '.github/workflows/build-pelego-screen-ink.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore source file
+        shell: pwsh
+        run: |
+          $b64 = Get-Content tools/pelego-screen-ink/Program.cs.gz.b64 -Raw
+          [IO.File]::WriteAllBytes("tools/pelego-screen-ink/Program.cs.gz", [Convert]::FromBase64String($b64.Trim()))
+          gzip -d -f tools/pelego-screen-ink/Program.cs.gz
+
+      - name: Publish single-file Windows app
+        shell: pwsh
+        run: |
+          dotnet publish tools/pelego-screen-ink/PelegoScreenInk.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o tools/pelego-screen-ink/publish
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\pelego-screen-ink\installer.iss"'
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PELEGO-Screen-Ink-Setup
+          path: tools/pelego-screen-ink/installer-output/PELEGO-Screen-Ink-Setup.exe
+          if-no-files-found: error

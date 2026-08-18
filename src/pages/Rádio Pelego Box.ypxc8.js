@@ -82,13 +82,31 @@ function checkoutRadioUrl(item) {
   return `/checkout-projeto-pronto?${query}`;
 }
 
+async function mostrarElemento(id) {
+  try {
+    const elemento = $w(id);
+    if (!elemento) return;
+    if (typeof elemento.expand === 'function') await elemento.expand();
+    if (typeof elemento.show === 'function') await elemento.show();
+  } catch (_) {}
+}
+
+async function garantirControlesRadioVisiveis() {
+  await Promise.allSettled([
+    mostrarElemento('#baixarpc'),
+    mostrarElemento('#baixarcelular'),
+    mostrarElemento('#valorum'),
+    mostrarElemento('#valordois'),
+  ]);
+}
+
 function ligarCheckoutRadio(id, item) {
   try {
     const botao = $w(id);
     const destino = checkoutRadioUrl(item);
 
-    if (!botao || typeof botao.onClick !== 'function') {
-      console.warn(`[RADIO] Elemento ${id} não aceita clique.`);
+    if (!botao) {
+      console.warn(`[RADIO] Elemento ${id} não encontrado.`);
       return;
     }
 
@@ -97,9 +115,20 @@ function ligarCheckoutRadio(id, item) {
       return;
     }
 
-    botao.onClick(() => {
-      wixLocation.to(destino);
-    });
+    // Link direto no próprio elemento. Isto funciona tanto para botão quanto
+    // para imagem clicável e não depende apenas do evento onClick.
+    try {
+      if ('link' in botao) botao.link = destino;
+      if ('target' in botao) botao.target = '_self';
+      if ('clickAction' in botao) botao.clickAction = 'link';
+    } catch (_) {}
+
+    // Mantemos também o evento como fallback para elementos que não expõem link.
+    if (typeof botao.onClick === 'function') {
+      botao.onClick(() => {
+        wixLocation.to(destino);
+      });
+    }
   } catch (erro) {
     console.error(`[RADIO] Não foi possível ligar ${id} ao checkout:`, erro?.message || erro);
   }
@@ -126,6 +155,7 @@ async function carregarValoresRadio() {
 
     ligarCheckoutRadio('#baixarpc', pc);
     ligarCheckoutRadio('#baixarcelular', celular);
+    await garantirControlesRadioVisiveis();
   } catch (erro) {
     console.error('[RADIO] Erro ao carregar valores:', erro);
 
@@ -221,6 +251,8 @@ async function alimentarPlayer() {
 }
 
 $w.onReady(async function () {
+  await garantirControlesRadioVisiveis();
+
   await Promise.allSettled([
     carregarValoresRadio(),
     alimentarPlayer(),

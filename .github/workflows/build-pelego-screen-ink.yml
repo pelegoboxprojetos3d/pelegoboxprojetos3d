@@ -6,6 +6,10 @@ on:
     paths:
       - 'tools/pelego-screen-ink/**'
       - '.github/workflows/build-pelego-screen-ink.yml'
+  pull_request:
+    paths:
+      - 'tools/pelego-screen-ink/**'
+      - '.github/workflows/build-pelego-screen-ink.yml'
 
 jobs:
   build:

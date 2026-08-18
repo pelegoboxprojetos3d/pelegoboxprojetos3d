@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: |
           $b64 = Get-Content tools/pelego-screen-ink/Program.cs.gz.b64 -Raw
-          [IO.File]::WriteAllBytes("tools/pelego-screen-ink/Program.cs.gz", [Convert]::FromBase64String($b64.Trim()))
+          [IO.File]::WriteAllBytes("tools/pelego-screen-ink/Program.cs.gz", [Convert]::FromBase64String(($b64 -replace '\s','')))
           gzip -d -f tools/pelego-screen-ink/Program.cs.gz
 
       - name: Publish single-file Windows app
@@ -53,11 +53,16 @@ jobs:
         shell: pwsh
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "tools\pelego-screen-ink\installer.iss"'
 
+      - name: Prepare standalone uninstaller
+        shell: pwsh
+        run: |
+          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V2.5.cmd
+
       - name: Upload installer and uninstaller
         uses: actions/upload-artifact@v4
         with:
-          name: PELEGO-Marcador-de-Tela-V2.4
+          name: PELEGO-Marcador-de-Tela-V2.5
           path: |
-            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V2.4.exe
-            tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd
+            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V2.5.exe
+            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V2.5.cmd
           if-no-files-found: error

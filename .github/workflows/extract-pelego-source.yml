@@ -18,6 +18,7 @@ jobs:
       - name: Restore ProgramV27.cs
         shell: pwsh
         run: |
+          # Run extraction
           $src = Get-Content tools/pelego-screen-ink/ProgramV27.cs.gz.b64 -Raw
           $gz = [Convert]::FromBase64String(($src -replace '\s',''))
           $ms = New-Object IO.MemoryStream(,$gz)

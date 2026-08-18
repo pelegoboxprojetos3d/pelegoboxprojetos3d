@@ -1,5 +1,5 @@
 #define MyAppName "PELEGO Marcador de Tela"
-#define MyAppVersion "2.7.0"
+#define MyAppVersion "2.8.0"
 #define MyAppPublisher "PELEGO"
 #define MyAppExeName "PELEGO.ScreenInk.exe"
 
@@ -13,12 +13,12 @@ DefaultGroupName=PELEGO Marcador de Tela
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=installer-output
-OutputBaseFilename=PELEGO-Marcador-de-Tela-Setup-V2.7
+OutputBaseFilename=PELEGO-Marcador-de-Tela-Setup-V2.8
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
-CloseApplications=yes
+CloseApplications=force
 RestartApplications=no
 UsePreviousAppDir=yes
 

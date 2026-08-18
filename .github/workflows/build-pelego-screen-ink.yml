@@ -26,12 +26,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore V2.7 source and icon
+      - name: Restore icon
         shell: pwsh
         run: |
-          $src = Get-Content tools/pelego-screen-ink/ProgramV27.cs.gz.b64 -Raw
-          [IO.File]::WriteAllBytes("tools/pelego-screen-ink/ProgramV27.cs.gz", [Convert]::FromBase64String(($src -replace '\s','')))
-          gzip -d -f tools/pelego-screen-ink/ProgramV27.cs.gz
           $ico = Get-Content tools/pelego-screen-ink/pelego.ico.b64 -Raw
           [IO.File]::WriteAllBytes("tools/pelego-screen-ink/pelego.ico", [Convert]::FromBase64String(($ico -replace '\s','')))
 
@@ -58,13 +55,13 @@ jobs:
       - name: Prepare standalone uninstaller
         shell: pwsh
         run: |
-          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V2.7.cmd
+          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V2.8.cmd
 
       - name: Upload installer and uninstaller
         uses: actions/upload-artifact@v4
         with:
-          name: PELEGO-Marcador-de-Tela-V2.7
+          name: PELEGO-Marcador-de-Tela-V2.8
           path: |
-            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V2.7.exe
-            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V2.7.cmd
+            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V2.8.exe
+            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V2.8.cmd
           if-no-files-found: error

@@ -1,155 +1,149 @@
-const STATIONS = [
-  {id:'groovesalad',name:'Groove Salad',genre:'Ambient / Downtempo'},
-  {id:'groovesalad2',name:'Groove Salad 2',genre:'Ambient / Downtempo'},
-  {id:'dronezone',name:'Drone Zone',genre:'Ambient / Drone'},
-  {id:'spacestation',name:'Space Station Soma',genre:'Eletrônica / Ambient'},
-  {id:'secretagent',name:'Secret Agent',genre:'Lounge / Exótica'},
-  {id:'u80s',name:'Underground 80s',genre:'Anos 80 / New Wave'},
-  {id:'seventies',name:'Left Coast 70s',genre:'Anos 70 / Rock / Pop'},
-  {id:'indiepop',name:'Indie Pop Rocks!',genre:'Indie / Pop / Rock'},
-  {id:'poptron',name:'PopTron',genre:'Indie Pop / Eletrônica'},
-  {id:'metal',name:'Metal Detector',genre:'Metal'},
-  {id:'doomed',name:'Doomed',genre:'Doom / Stoner Metal'},
-  {id:'reggae',name:'Heavyweight Reggae',genre:'Reggae / Dub'},
-  {id:'bootliquor',name:'Boot Liquor',genre:'Americana / Country'},
-  {id:'sonicuniverse',name:'Sonic Universe',genre:'Jazz'},
-  {id:'beatblender',name:'Beat Blender',genre:'Deep House / Chill'},
-  {id:'cliqhop',name:'cliqhop idm',genre:'IDM / Eletrônica'},
-  {id:'thetrip',name:'The Trip',genre:'Trance / Eletrônica'},
-  {id:'dubstep',name:'Dub Step Beyond',genre:'Dubstep / Bass'},
-  {id:'fluid',name:'Fluid',genre:'Instrumental Hip-Hop / Beats'},
-  {id:'digitalis',name:'Digitalis',genre:'Indie / Eletrônica'},
-  {id:'lush',name:'Lush',genre:'Dream Pop / Vocais'},
-  {id:'covers',name:'Covers',genre:'Covers / Alternativo'},
-  {id:'deepspaceone',name:'Deep Space One',genre:'Space Ambient'},
-  {id:'defcon',name:'DEF CON Radio',genre:'Eletrônica'},
-  {id:'seven',name:'Seven Inch Soul',genre:'Soul / Funk'},
-  {id:'folkfwd',name:'Folk Forward',genre:'Folk / Indie Folk'},
-  {id:'illstreet',name:'Illinois Street Lounge',genre:'Lounge / Exótica'},
-  {id:'vaporwaves',name:'Vaporwaves',genre:'Vaporwave / Chill'},
-  {id:'synphaera',name:'Synphaera Radio',genre:'Ambient / Eletrônica'}
-];
+import './pelego-radio-core.js';
 
-const GENRES = [
-  'ROCK','CLASSIC ROCK','HARD ROCK','METAL','POP','DANCE','JAZZ','BLUES','COUNTRY',
-  'ELETRÔNICA','HOUSE','REGGAE','TECHNO','TRANCE','LOUNGE','FUNK','SOUL','R&B',
-  'RAP','HIP HOP','GOSPEL','CLÁSSICA','INSTRUMENTAL','MPB','POP BR','ROCK NACIONAL',
-  'SERTANEJO','SERTANEJO RAIZ','MODÃO','PAGODE','SAMBA','FORRÓ','PISEIRO','BREGA','ARROCHA',
-  'FUNK','PANCADÃO / MEGA FUNK','TRAP BR','RAP NACIONAL','AXÉ','BREGA FUNK','FLASHBACK BR'
-];
+const CUBE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Zm0 0v9m8-4.5-8 4.5-8-4.5m8 4.5v9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
+const BARS = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m4 10V6m4 14V3m4 17V8m4 12v-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const HEADPHONES = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-2a8 8 0 0 1 16 0v2M4 13h3v7H5a1 1 0 0 1-1-1v-6Zm16 0h-3v7h2a1 1 0 0 0 1-1v-6Z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>`;
+const GLOBE = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 12h17M12 3c2.3 2.4 3.5 5.4 3.5 9S14.3 18.6 12 21c-2.3-2.4-3.5-5.4-3.5-9S9.7 5.4 12 3Z" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>`;
+const BRAZIL = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M46 5 57 12 62 23 73 29 68 39 78 50 69 60 61 66 58 78 50 84 45 95 37 85 34 74 23 66 28 55 19 46 25 36 31 24 40 20Z"/></svg>`;
+const SAVE = `<svg viewBox="0 0 24 24"><path d="M5 3h12l2 2v16H5V3Zm3 0v6h8V3M8 21v-7h8v7" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
+const EYE = `<svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m4 4 16 16" stroke="currentColor" stroke-width="2"/></svg>`;
+const TRASH = `<svg viewBox="0 0 24 24"><path d="M5 7h14m-10 0V4h6v3m-8 0 1 14h8l1-14" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
 
-const EQ_NAMES = ['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
-const EQ_FREQS = [40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];
-const PRESETS = {
-  'FLAT':[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  'GRAVE +':[5,5,5,4,4,4,3,3,2,2,1,1,0,0,0,0,0,0,-1,-1,-1,-1,-1,-1],
-  'GRAVE ++':[8,8,7,7,6,6,5,4,3,3,2,1,0,0,0,0,-1,-1,-2,-2,-2,-2,-2,-2],
-  'HOME THEATER':[7,7,6,6,5,4,3,2,1,0,-1,-1,-1,0,0,1,1,2,2,3,3,3,2,2],
-  'ROCK':[4,4,3,3,2,1,0,-1,-1,0,1,2,2,2,1,1,2,3,3,3,2,2,3,3],
-  'POP':[2,2,2,1,1,0,0,0,1,1,1,2,2,2,2,2,2,2,2,2,2,3,3,2],
-  'VOZ':[-3,-3,-3,-2,-2,-1,0,1,2,3,4,4,4,4,3,3,2,1,0,-1,-1,-1,-2,-2],
-  'AUTOMOTIVO':[9,9,8,8,7,6,5,4,3,2,1,0,-1,-1,-1,-1,0,1,2,2,2,2,1,0],
-  'BRILHO':[-2,-2,-2,-1,-1,0,0,0,0,0,0,0,0,1,1,1,2,2,3,3,4,5,6,6]
-};
+const SKIN = `
+:host{width:100%!important;height:100%!important;max-height:none!important;min-height:0!important;overflow:hidden!important}
+*{box-sizing:border-box}
+.shell{
+  width:100%!important;height:100%!important;max-height:none!important;min-height:0!important;overflow:hidden!important;
+  border:0!important;border-radius:0!important;background:#010504!important;box-shadow:none!important;
+  padding:6px!important;gap:7px!important;
+  grid-template-rows:40px 248px 152px 149px 46px!important;
+}
+.topbar{padding:0 8px!important;min-height:0!important}
+.brandrow{gap:12px!important}.logo-bars{width:30px!important;height:29px!important}.title{font-size:24px!important;font-weight:400!important;letter-spacing:.2px!important}.title .green{font-weight:500!important}.subtitle{font-size:8px!important;margin-top:4px!important}.win{gap:25px!important;font-size:17px!important;padding-right:4px!important}
+.grid-top{grid-template-columns:1fr 1fr 1.04fr!important;gap:12px!important;min-height:0!important;overflow:hidden!important}
+.panel{background:linear-gradient(180deg,#020806,#010504)!important;border:1px solid #13d94f!important;border-radius:10px!important;box-shadow:0 0 9px rgba(0,255,75,.08) inset!important}
+.panel-title{height:27px!important;padding:0 10px!important;gap:8px!important;color:#19ef5d!important;font-size:12px!important;font-weight:700!important;letter-spacing:.2px!important}
+.panel-title .pb-icon{width:18px!important;height:18px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;flex:0 0 18px!important;color:#19ef5d!important}.panel-title .pb-icon svg{width:18px!important;height:18px!important;display:block!important}
+.product{height:calc(100% - 27px)!important;padding:0 11px 9px!important;grid-template-rows:minmax(0,1fr) 68px!important;min-height:0!important}
+.product>div:last-child{display:grid!important;grid-template-rows:43px 25px!important;min-height:0!important}
+.product-visual{min-height:0!important;border:0!important;border-radius:6px!important;overflow:hidden!important;display:flex!important;align-items:stretch!important;justify-content:center!important;background:#020706!important}
+.product-visual img{display:block!important;object-fit:contain!important}
+.grid-top>.panel:nth-child(1) .product-visual img{width:42%!important;height:100%!important;background:#f4f4f4!important}
+.grid-top>.panel:nth-child(2) .product-visual{background:#f2f2f2!important}.grid-top>.panel:nth-child(2) .product-visual img{width:100%!important;height:100%!important;background:#f2f2f2!important}
+.product-meta{padding:7px 1px 0!important;min-height:0!important;overflow:hidden!important}.product-code{font-size:12px!important;line-height:1.15!important;color:#19ef5d!important}.product-desc{font-size:9px!important;line-height:1.15!important;margin-top:5px!important;color:#fff!important}
+.grid-top>.panel:nth-child(1) .product-code,.grid-top>.panel:nth-child(1) .product-desc{text-align:center!important}
+.navrow{grid-template-columns:1fr 1fr 1.08fr!important;gap:5px!important;margin-top:0!important;align-items:end!important}.vbtn{height:25px!important;border-radius:6px!important;padding:0 5px!important;font-size:10px!important;background:linear-gradient(#15201b,#070b09)!important;border:1px solid #33423b!important}.vbtn.buy{background:linear-gradient(#10c94c,#089134)!important;border-color:#16e75b!important;font-size:10px!important}
+.analyzer{grid-template-rows:27px minmax(0,1fr) 22px!important}.analyzer canvas{width:calc(100% - 28px)!important;height:100%!important;margin:0 14px!important;border:1px solid #486058!important;background:#020707!important}.bands-label{font-size:8px!important;border-top:0!important}.bands-label span{border-right:1px solid #33443c!important}
+.grid-middle{grid-template-columns:2fr 1fr!important;gap:12px!important;min-height:0!important;overflow:hidden!important}.filters{padding-bottom:0!important}.filterbody{grid-template-columns:112px minmax(0,1fr)!important;gap:9px!important;padding:0 11px 10px!important;height:calc(100% - 27px)!important}.scopebuttons{gap:8px!important}.scope{border-radius:6px!important;font-size:9px!important;gap:5px!important;background:linear-gradient(#0b1510,#050a07)!important;border-color:#30453b!important}.scope.active{background:linear-gradient(#0ec648,#078a31)!important;border-color:#18ef5d!important}.scope .scope-icon{width:35px!important;height:30px!important;font-size:0!important;color:#c5cbc8!important;display:flex!important;align-items:center!important;justify-content:center!important}.scope.active .scope-icon{color:#fff!important}.scope .scope-icon svg{width:100%!important;height:100%!important;display:block!important;fill:currentColor!important}
+.genres{grid-template-columns:repeat(9,minmax(0,1fr))!important;grid-template-rows:repeat(6,1fr)!important;grid-auto-rows:auto!important;gap:5px!important;padding-top:1px!important;overflow:hidden!important}.genre{height:auto!important;min-height:0!important;border-radius:5px!important;font-size:7px!important;border-color:#35483f!important;background:linear-gradient(#131c18,#070b09)!important}.genre.active{background:linear-gradient(#0fbd47,#087d30)!important;border-color:#12de53!important}
+.playbox{grid-template-rows:27px minmax(0,1fr)!important}.playbody{padding:0 14px 10px!important;grid-template-rows:9px 23px 18px 32px 8px 27px!important;gap:1px!important}.label{font-size:8px!important}.playbody select{height:23px!important;font-size:9px!important}.volrow{grid-template-columns:22px minmax(0,1fr) 32px!important;font-size:8px!important}.randomrow{gap:14px!important}.randomrow label{grid-template-rows:9px 21px!important}.randomrow label:first-child .label{background:#049a32!important;border:1px solid #16d954!important;text-align:center!important;padding-top:1px!important}.randomrow .label{font-size:7px!important}.hint{font-size:7px!important}.controls{gap:12px!important}.controls button{height:27px!important;font-size:10px!important;border-radius:5px!important}.controls .play{background:linear-gradient(#0fc14a,#087f31)!important}.controls .stop{background:linear-gradient(#d73931,#9b1c17)!important}
+.eqpanel{position:relative!important;grid-template-rows:29px minmax(0,1fr) 23px!important;padding:0 11px 8px!important;min-height:0!important}.eqhead{min-height:0!important}.eqtitle{font-size:12px!important;font-weight:700!important}.preset{font-size:8px!important}.preset select{width:110px!important;height:23px!important;min-width:110px!important}.eqgrid{padding:0 8px 0 38px!important;gap:3px!important;min-height:0!important;overflow:hidden!important}.band{grid-template-rows:12px minmax(0,1fr) 13px!important;font-size:7px!important}.sliderwrap:before{height:88%!important;width:3px!important;background:linear-gradient(#335349,#17e75a,#335349)!important}.band input[type=range]{width:72px!important;height:16px!important}.band input::-webkit-slider-thumb{width:15px!important;height:15px!important;border-radius:1px!important}.eqgroups{margin-left:38px!important;height:23px!important}.eqgroups span{font-size:9px!important;padding-top:4px!important}.eqpanel:before{content:'+12\A 0\A -12';white-space:pre;position:absolute;left:17px;top:47px;bottom:42px;width:22px;display:flex;flex-direction:column;justify-content:space-between;color:#fff;font-size:7px;line-height:31px;pointer-events:none}
+.footer{grid-template-columns:1fr 1fr 1.55fr 1.6fr!important;gap:10px!important;min-height:0!important}.footer button,.versionbox{height:100%!important;border:1px solid #293b33!important;border-radius:6px!important;background:linear-gradient(#17201d,#0b0f0d)!important}.footer button{font-size:13px!important;gap:14px!important}.footer .pb-foot-icon{width:23px;height:23px;display:inline-flex}.footer .pb-foot-icon svg{width:23px;height:23px;display:block}.footer .danger{color:#ff5d58!important}.versionbox{font-size:8px!important;color:#b4beb8!important}
+@media(max-width:640px){.shell{height:auto!important;min-height:1100px!important;grid-template-rows:auto auto auto auto auto!important}.grid-top,.grid-middle{grid-template-columns:1fr!important}.eqpanel{min-height:280px!important}.footer{grid-template-columns:1fr 1fr!important}}
+`;
 
-const DEFAULT_CONFIG = {
-  volume:32,
-  eqPreset:'FLAT',
-  eqGains:PRESETS.FLAT.slice(),
-  allowInternational:true,
-  allowNational:false,
-  selectedGenres:['ROCK','POP','RAP','CLÁSSICA','SERTANEJO','SAMBA'],
-  randomMode:'TEMPO',
-  randomTimeMinutes:30,
-  randomSongCount:5,
-  crossfadeSeconds:2
-};
+function title(el, html){ if(el) el.innerHTML = html; }
 
-const FALLBACK_ZERO = [
-  {sku:'1260',brand:'PELEGO BOX',title:'LINE ARRAY 4X10\" PELEGO BOX LA 410',buyUrl:'https://www.pelegobox.com.br/product-page/projeto-caixa-line-array-cornetada-trapezoidal-com-al%C3%A7a-pelego-box-005'}
-];
-const FALLBACK_PRONTO = [
-  {code:'1804',brand:'JBL',title:'CAIXA BASS REFLEX LOW BASS 1X15\" JBL TORNADO 2200 15SWT2200',buyUrl:'https://www.pelegobox.com.br/checkoutprojetosprontos?codigo=1804'}
-];
+function applySkin(el){
+  const root = el?.shadowRoot;
+  if(!root) return;
+  if(!root.getElementById('pb-v548-reference-skin')){
+    const style = document.createElement('style');
+    style.id = 'pb-v548-reference-skin';
+    style.textContent = SKIN;
+    root.appendChild(style);
+  }
 
-const HTML = String.raw`
-<style>
-:host{display:block;width:100%;height:100%;max-height:705px;min-height:0;overflow:hidden;color:#effff4;font-family:Arial,Helvetica,sans-serif;--g:#20ef64;--gd:#079632;--bg:#030706;--panel:#07100b;--line:rgba(31,239,99,.75);--muted:#a4ada8;--red:#dc241d}*{box-sizing:border-box}
-.shell{width:100%;height:100%;max-height:705px;min-height:0;overflow:hidden;border:1px solid #52615a;border-radius:11px;background:radial-gradient(circle at 48% 0,rgba(0,255,80,.07),transparent 38%),linear-gradient(180deg,#020605,#060a08);box-shadow:0 0 0 1px #000 inset;color:#f4fff7;padding:6px;display:grid;grid-template-rows:37px 235px 157px minmax(0,1fr) 40px;gap:6px}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 9px;min-height:0}.brandrow{display:flex;align-items:center;gap:10px;min-width:0}.logo-bars{display:flex;gap:2px;align-items:flex-end;width:36px;height:25px}.logo-bars i{width:2px;background:var(--g);box-shadow:0 0 7px rgba(32,239,100,.5)}.logo-bars i:nth-child(1){height:7px}.logo-bars i:nth-child(2){height:12px}.logo-bars i:nth-child(3){height:19px}.logo-bars i:nth-child(4){height:24px}.logo-bars i:nth-child(5){height:18px}.logo-bars i:nth-child(6){height:13px}.logo-bars i:nth-child(7){height:9px}.title{font-size:clamp(15px,1.55vw,27px);font-weight:800;letter-spacing:.3px;white-space:nowrap}.title .green{color:var(--g)}.subtitle{margin-top:2px;font-size:clamp(7px,.6vw,10px);color:#c2c7c4;white-space:nowrap}.win{display:flex;gap:20px;font-size:clamp(12px,1.25vw,20px);color:#ecfff2;align-items:center}.win span:nth-child(-n+2){color:var(--g)}
-.grid-top{display:grid;grid-template-columns:1fr 1fr 1.08fr;gap:7px;min-height:0;overflow:hidden}.panel{min-width:0;min-height:0;border:1px solid var(--line);border-radius:9px;background:linear-gradient(180deg,rgba(8,21,13,.94),rgba(3,8,5,.98));box-shadow:0 0 18px rgba(0,255,82,.08) inset,0 0 8px rgba(0,255,82,.08);overflow:hidden}.panel-title{height:25px;display:flex;align-items:center;gap:7px;padding:0 10px;color:var(--g);font-size:clamp(8px,.76vw,12px);letter-spacing:.5px}.ico{font-size:1.08em}.product{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0;height:calc(100% - 25px);padding:0 9px 6px}.product-visual{min-height:0;border:1px solid #27342e;border-radius:5px;background:#f3f3f3;overflow:hidden;position:relative}.product-visual img{width:100%;height:100%;object-fit:contain;display:block;background:#f1f1f1}.product-visual.noimg{display:flex;align-items:center;justify-content:center;color:#0c8c39;font-weight:900;text-align:center;font-size:clamp(11px,1.2vw,21px);padding:10px}.product-meta{padding:4px 3px 0;min-height:26px}.product-code{color:var(--g);font-weight:800;font-size:clamp(8px,.7vw,12px)}.product-desc{font-size:clamp(7px,.59vw,10px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d1d7d3;margin-top:1px}.navrow{display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:6px;margin-top:3px;padding:0}.vbtn{width:100%;height:24px;padding:0 5px;border:1px solid #53605a;border-radius:4px;background:linear-gradient(#17201c,#080d0b);color:#f2f5f3;font-size:clamp(6px,.55vw,9px);font-weight:700;white-space:nowrap;cursor:pointer;overflow:hidden;text-overflow:ellipsis}.vbtn:hover{border-color:var(--g)}.vbtn.buy{background:linear-gradient(#10a442,#08772f);border-color:#12dc56;font-size:clamp(7px,.6vw,10px)}
-.analyzer{display:grid;grid-template-rows:25px minmax(0,1fr) 18px;min-height:0;height:100%}.analyzer canvas{display:block;width:calc(100% - 18px);height:100%;min-height:0;margin:0 9px;border:1px solid #506159;border-radius:4px;background:#050908}.bands-label{display:flex;justify-content:space-around;align-items:center;font-size:clamp(7px,.55vw,9px);border-top:1px solid #34433c}.bands-label span{width:33%;text-align:center;border-right:1px solid #405149}.bands-label span:last-child{border:0}
-.grid-middle{display:grid;grid-template-columns:1.97fr 1fr;gap:7px;min-height:0;overflow:hidden}.filters{padding-bottom:6px}.filterbody{display:grid;grid-template-columns:122px 1fr;gap:8px;padding:0 9px;height:calc(100% - 25px);min-height:0}.scopebuttons{display:grid;grid-template-rows:1fr 1fr;gap:6px;min-height:0}.scope{width:100%;min-width:0;border:1px solid #375148;border-radius:7px;background:linear-gradient(#0d1813,#08110d);color:#dfe7e2;cursor:pointer;font-size:clamp(7px,.62vw,10px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;line-height:1.05;padding:3px}.scope .scope-icon{height:24px;display:flex;align-items:center;justify-content:center;font-size:22px;line-height:1}.scope .scope-icon svg{display:block;width:36px;height:26px;fill:currentColor}.scope.active{border-color:#12e957;background:linear-gradient(#1bc455,#07852f);color:#fff;box-shadow:0 0 12px rgba(0,255,80,.18)}.genres{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));grid-auto-rows:20px;gap:4px;align-content:start;min-width:0;min-height:0;overflow:hidden;padding-top:1px}.genre{width:100%;min-width:0;height:20px;padding:0 2px;border:1px solid #44534d;border-radius:4px;background:linear-gradient(#141d19,#080d0b);color:#dadfdd;font-size:clamp(6px,.47vw,8px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}.genre.active{background:linear-gradient(#11a842,#08732e);border-color:#10d752;color:#fff}
-.playbox{display:grid;grid-template-rows:25px minmax(0,1fr);min-height:0}.playbody{padding:3px 9px 4px;display:grid;grid-template-rows:9px 23px 18px 32px 8px 27px;gap:1px;font-size:clamp(7px,.58vw,9px);min-height:0;overflow:hidden}.label{color:#dadeda;font-size:clamp(7px,.56vw,9px);line-height:1;white-space:nowrap}select{width:100%;min-width:0;height:23px;background:#eee;color:#111;border-radius:3px;border:1px solid #adb2af;font-size:clamp(7px,.6vw,9px);padding:0 5px}.volrow{display:grid;grid-template-columns:18px minmax(0,1fr) 30px;align-items:center;gap:6px;min-height:0}.volrow input{accent-color:var(--g);width:100%;margin:0}.randomrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;min-height:0}.randomrow label{display:grid;grid-template-rows:9px 21px;gap:1px;min-width:0;min-height:0;overflow:hidden}.randomrow .label{font-size:7px;overflow:hidden;text-overflow:ellipsis}.randomrow select{height:21px;padding:0 3px;font-size:8px}.hint{font-size:clamp(6px,.46vw,8px);color:#b1b8b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:8px}.controls{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;min-height:0}.controls button{width:100%;height:27px;padding:0 4px;border-radius:5px;border:1px solid #4d5c55;background:linear-gradient(#15201b,#080e0b);color:#e7ece9;font-size:clamp(8px,.65vw,10px);font-weight:700;white-space:nowrap;cursor:pointer}.controls .play{background:linear-gradient(#12a842,#087831);border-color:#12e258}.controls .stop{background:linear-gradient(#d62d25,#941a16);border-color:#f34a41}
-.eqpanel{display:grid;grid-template-rows:25px minmax(0,1fr) 19px;min-height:0;padding:0 9px 7px}.eqhead{display:flex;align-items:center;justify-content:space-between;gap:12px}.eqtitle{color:var(--g);font-size:clamp(8px,.72vw,12px);letter-spacing:.4px}.preset{display:flex;align-items:center;gap:7px;font-size:clamp(7px,.54vw,9px);white-space:nowrap}.preset select{width:110px;height:21px;min-width:110px}.eqgrid{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;align-items:stretch;min-height:0;overflow:hidden}.band{min-width:0;display:grid;grid-template-rows:13px minmax(0,1fr) 13px;text-align:center;align-items:center;font-size:clamp(6px,.48vw,8px)}.band .db{color:#f1f4f2}.sliderwrap{height:100%;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}.sliderwrap:before{content:'';position:absolute;width:3px;height:90%;border-radius:2px;background:linear-gradient(#2aff72,#0d7434)}.band input[type=range]{appearance:none;-webkit-appearance:none;width:126px;height:18px;transform:rotate(-90deg);background:transparent;position:relative;z-index:2}.band input::-webkit-slider-runnable-track{height:3px;background:transparent}.band input::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:4px;background:linear-gradient(#fff,#cfd2d0);border:1px solid #aaa;margin-top:-6px}.band .freq{white-space:nowrap;color:#d9dfdc}.eqgroups{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #435149;border-radius:4px;overflow:hidden}.eqgroups span{text-align:center;color:var(--g);font-size:clamp(7px,.6vw,10px);border-right:1px solid #435149;padding-top:2px}.eqgroups span:last-child{border:0}
-.footer{display:grid;grid-template-columns:1fr 1fr 1.55fr 1.35fr;gap:8px;min-height:0}.footer button,.versionbox{width:100%;min-width:0;height:100%;border:1px solid #405049;border-radius:5px;background:linear-gradient(#111a16,#070b09);color:#eef4f0;font-size:clamp(9px,.88vw,14px);display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.footer button{cursor:pointer;padding:0 8px}.footer .danger{color:#fff}.footer .danger b{color:#ff3c36}.versionbox{color:#9da6a0;font-size:clamp(7px,.6vw,9px);padding:0 8px}
-.toast{position:absolute;left:50%;bottom:12px;transform:translateX(-50%) translateY(14px);opacity:0;pointer-events:none;background:#101a15;border:1px solid var(--g);color:#dcffe6;border-radius:7px;padding:7px 13px;font-size:11px;transition:.2s;z-index:30}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.shell.hidden-ui .grid-top,.shell.hidden-ui .grid-middle,.shell.hidden-ui .eqpanel{display:none}.shell.hidden-ui{grid-template-rows:auto 1fr auto}.shell.hidden-ui:after{content:'PELEGO RADIO ONLINE • ÁUDIO CONTINUA TOCANDO';display:flex;align-items:center;justify-content:center;color:var(--g);font-size:clamp(14px,2vw,28px)}
-@media(max-width:640px){:host{max-height:none}.shell{overflow:auto;height:100%;max-height:none;min-height:0;grid-template-rows:auto auto auto auto auto}.grid-top{grid-template-columns:1fr}.grid-middle{grid-template-columns:1fr}.product{min-height:250px}.analyzer{min-height:220px}.filters{min-height:330px}.playbox{min-height:250px}.eqpanel{min-height:260px}.footer{grid-template-columns:1fr 1fr}.eqgrid{min-width:900px}.eqpanel{overflow-x:auto}.win{display:none}.subtitle{white-space:normal}.filterbody{grid-template-columns:100px 1fr}.genres{display:flex;flex-wrap:wrap;align-content:flex-start}.genre{flex:1 1 75px}}
-</style>
-<div class="shell" id="shell">
-  <div class="topbar">
-    <div class="brandrow"><div class="logo-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><div class="title"><span class="green">PELEGO RADIO</span> V5.4.8 PREMIUM LAB</div><div class="subtitle">Vitrine de Projetos Prontos &nbsp;•&nbsp; Analisador 24 Bandas &nbsp;•&nbsp; Equalizador &nbsp;•&nbsp; Rádio Automática</div></div></div>
-    <div class="win"><span>−</span><span>□</span><span>×</span></div>
-  </div>
+  const top = root.querySelectorAll('.grid-top .panel-title');
+  title(top[0], `<span class="pb-icon">${CUBE}</span>PROJETOS FEITOS DO ZERO`);
+  title(top[1], `<span class="pb-icon">${CUBE}</span>PROJETOS PRONTOS`);
+  title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - 24 BANDAS`);
+  title(root.querySelector('.filters .panel-title'), `<span class="pb-icon">${HEADPHONES}</span>ESCOLHA O QUE QUER OUVIR`);
+  title(root.querySelector('.playbox .panel-title'), `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
 
-  <div class="grid-top">
-    <section class="panel"><div class="panel-title"><span class="ico">◇</span> PROJETOS FEITOS DO ZERO</div><div class="product"><div class="product-visual noimg" id="zeroVisual">PELEGO BOX</div><div><div class="product-meta"><div class="product-code" id="zeroCode">SKU: 1260</div><div class="product-desc" id="zeroDesc">LINE ARRAY 4X10\" PELEGO BOX LA 410</div></div><div class="navrow"><button class="vbtn" id="zeroPrev">◀ VOLTAR</button><button class="vbtn" id="zeroNext">PRÓXIMO ▶</button><button class="vbtn buy" id="zeroBuy">🛒 COMPRAR</button></div></div></div></section>
-    <section class="panel"><div class="panel-title"><span class="ico">◇</span> PROJETOS PRONTOS</div><div class="product"><div class="product-visual noimg" id="readyVisual">PELEGO BOX</div><div><div class="product-meta"><div class="product-code" id="readyCode">#1804 · JBL</div><div class="product-desc" id="readyDesc">CAIXA BASS REFLEX LOW BASS 1X15\" JBL TORNADO 2200</div></div><div class="navrow"><button class="vbtn" id="readyPrev">◀ VOLTAR</button><button class="vbtn" id="readyNext">PRÓXIMO ▶</button><button class="vbtn buy" id="readyBuy">🛒 COMPRAR</button></div></div></div></section>
-    <section class="panel analyzer"><div class="panel-title">〽 ANALISADOR - 24 BANDAS</div><canvas id="analyzer"></canvas><div class="bands-label"><span>GRAVE</span><span>MÉDIO</span><span>AGUDO</span></div></section>
-  </div>
+  const international = root.querySelector('#international .scope-icon');
+  if(international) international.innerHTML = GLOBE;
+  const national = root.querySelector('#national .scope-icon');
+  if(national) national.innerHTML = BRAZIL;
 
-  <div class="grid-middle">
-    <section class="panel filters"><div class="panel-title">🎧 ESCOLHA O QUE QUER OUVIR</div><div class="filterbody"><div class="scopebuttons"><button class="scope" id="international"><span class="scope-icon">🌐</span><span>INTERNACIONAL</span></button><button class="scope" id="national"><span class="scope-icon"><svg viewBox="0 0 44 32" aria-hidden="true"><path d="M19 2l5 3 6 1 2 4 5 2-1 5 3 3-2 4-4 2-1 4-5 1-3 5-5-2-2-4-4-1-2-5-4-2 1-5-3-3 4-4 1-4 6-1 5 2z"/></svg></span><span>NACIONAL</span></button></div><div class="genres" id="genres"></div></div></section>
-    <section class="panel playbox"><div class="panel-title">♫ TOCANDO</div><div class="playbody"><div class="label">SAÍDA DE ÁUDIO</div><select id="device"><option value="">Saída padrão do navegador</option></select><div class="volrow"><span>🔊</span><input id="volume" type="range" min="0" max="50" value="32"><span id="volumeValue">32%</span></div><div class="randomrow"><label><span class="label">ALEATORIEDADE<br>POR TEMPO</span><select id="time"><option>5 minutos</option><option>10 minutos</option><option>15 minutos</option><option>20 minutos</option><option selected>30 minutos</option><option>40 minutos</option><option>45 minutos</option><option>60 minutos</option><option>90 minutos</option><option>120 minutos</option><option>180 minutos</option></select></label><label><span class="label">POR MÚSICAS</span><select id="songs"><option>1 músicas</option><option>2 músicas</option><option>3 músicas</option><option>4 músicas</option><option selected>5 músicas</option><option>6 músicas</option><option>8 músicas</option><option>10 músicas</option><option>15 músicas</option><option>20 músicas</option></select></label><label><span class="label">TRANSIÇÃO</span><select id="transition"><option>1 s</option><option selected>2 s</option><option>3 s</option><option>4 s</option><option>5 s</option><option>6 s</option><option>8 s</option></select></label></div><div class="hint" id="status">Tempo: ao atingir o limite, aguarda a faixa quando houver metadata; fallback suave evita corte seco.</div><div class="controls"><button class="play" id="play">▶ TOCAR</button><button id="next">PRÓXIMA ▶</button><button class="stop" id="stop">■ PARAR</button></div></div></section>
-  </div>
+  const save = root.getElementById('save');
+  if(save) save.innerHTML = `<span class="pb-foot-icon">${SAVE}</span><span>SALVAR</span>`;
+  const hide = root.getElementById('hide');
+  if(hide && !hide.dataset.pbSkin){ hide.innerHTML = `<span class="pb-foot-icon">${EYE}</span><span>OCULTAR</span>`; hide.dataset.pbSkin='1'; }
+  const uninstall = root.getElementById('uninstall');
+  if(uninstall) uninstall.innerHTML = `<span class="pb-foot-icon">${TRASH}</span><span>DESINSTALAR APLICATIVO</span>`;
 
-  <section class="panel eqpanel"><div class="eqhead"><div class="eqtitle">⚙ EQUALIZADOR 24 BANDAS</div><div class="preset">PRESET <select id="preset"></select></div></div><div class="eqgrid" id="eqgrid"></div><div class="eqgroups"><span>〰 GRAVE</span><span>‡ MÉDIO</span><span>〰 AGUDO</span></div></section>
-  <div class="footer"><button id="save">▣ &nbsp; SALVAR</button><button id="hide">◉ &nbsp; OCULTAR</button><button class="danger" id="uninstall"><b>♜</b> DESINSTALAR APLICATIVO</button><div class="versionbox">Versão de Teste — V5.4.8 Premium LAB</div></div>
-  <div class="toast" id="toast"></div>
-  <audio id="audio" crossorigin="anonymous" preload="none"></audio>
-</div>`;
-
-class PelegoRadio extends HTMLElement {
-  static get observedAttributes(){return ['catalog-zero-json','catalog-pronto-json','app-version'];}
-  constructor(){super();this.attachShadow({mode:'open'});this.shadowRoot.innerHTML=HTML;this.zeroCatalog=FALLBACK_ZERO.slice();this.readyCatalog=FALLBACK_PRONTO.slice();this.zeroIndex=0;this.readyIndex=0;this.currentStation=null;this.audioCtx=null;this.sourceNode=null;this.filters=[];this.gainNode=null;this.analyser=null;this.visualFrame=0;this.rotateZeroTimer=null;this.rotateReadyTimer=null;this.randomTimer=null;this.server=5;this.config=this.loadConfig();}
-  connectedCallback(){this.cache();this.buildGenres();this.buildEq();this.buildPreset();this.bind();this.applyConfig();this.renderProducts();this.startCatalogRotation();this.setupCanvas();this.refreshDevices();}
-  disconnectedCallback(){cancelAnimationFrame(this.visualFrame);clearInterval(this.rotateZeroTimer);clearInterval(this.rotateReadyTimer);clearTimeout(this.randomTimer);this.canvasObserver?.disconnect?.();}
-  attributeChangedCallback(name,oldValue,newValue){if(oldValue===newValue)return;if(name==='catalog-zero-json')this.zeroCatalog=this.parseCatalog(newValue,FALLBACK_ZERO);if(name==='catalog-pronto-json')this.readyCatalog=this.parseCatalog(newValue,FALLBACK_PRONTO);if(this.isConnected)this.renderProducts();}
-  cache(){const $=id=>this.shadowRoot.getElementById(id);this.$=$;this.shell=$('shell');this.audio=$('audio');this.canvas=$('analyzer');this.ctx2d=this.canvas.getContext('2d');this.status=$('status');this.volume=$('volume');this.volumeValue=$('volumeValue');this.device=$('device');this.preset=$('preset');this.eqgrid=$('eqgrid');this.genresEl=$('genres');this.international=$('international');this.national=$('national');}
-  parseCatalog(raw,fallback){try{const data=JSON.parse(String(raw||''));return Array.isArray(data)&&data.length?data:fallback.slice();}catch(_){return fallback.slice();}}
-  loadConfig(){try{return {...DEFAULT_CONFIG,...JSON.parse(localStorage.getItem('pelego_radio_online_config_v548')||'{}')};}catch(_){return {...DEFAULT_CONFIG,eqGains:DEFAULT_CONFIG.eqGains.slice(),selectedGenres:DEFAULT_CONFIG.selectedGenres.slice()};}}
-  saveConfig(){try{localStorage.setItem('pelego_radio_online_config_v548',JSON.stringify(this.config));this.toast('Configuração salva neste navegador.');}catch(_){this.toast('Não foi possível salvar neste navegador.');}}
-  toast(text){const el=this.$('toast');el.textContent=text;el.classList.add('show');clearTimeout(this.toastTimer);this.toastTimer=setTimeout(()=>el.classList.remove('show'),2200);}
-  buildGenres(){this.genresEl.replaceChildren(...GENRES.map((genre,index)=>{const b=document.createElement('button');b.className='genre';b.textContent=genre;b.dataset.filter=genre;b.dataset.key=genre==='FUNK'?`FUNK-${index}`:genre;b.onclick=()=>{const f=b.dataset.filter;const arr=this.config.selectedGenres||[];if(arr.includes(f))this.config.selectedGenres=arr.filter(x=>x!==f);else this.config.selectedGenres=[...arr,f];this.refreshGenreButtons();};return b;}));}
-  refreshGenreButtons(){this.genresEl.querySelectorAll('.genre').forEach(b=>b.classList.toggle('active',(this.config.selectedGenres||[]).includes(b.dataset.filter)));this.international.classList.toggle('active',!!this.config.allowInternational);this.national.classList.toggle('active',!!this.config.allowNational);}
-  buildPreset(){Object.keys(PRESETS).forEach(name=>{const o=document.createElement('option');o.value=name;o.textContent=name;this.preset.appendChild(o);});}
-  buildEq(){this.eqgrid.replaceChildren(...EQ_NAMES.map((name,i)=>{const band=document.createElement('div');band.className='band';band.innerHTML=`<div class="db" id="db${i}">0</div><div class="sliderwrap"><input aria-label="${name} Hz" data-index="${i}" type="range" min="-12" max="12" step="1" value="0"></div><div class="freq">${name}</div>`;const input=band.querySelector('input');input.oninput=()=>{const val=Number(input.value);this.config.eqGains[i]=val;this.$(`db${i}`).textContent=String(val);this.config.eqPreset='PERSONALIZADO';if([...this.preset.options].every(o=>o.value!=='PERSONALIZADO')){const o=document.createElement('option');o.value='PERSONALIZADO';o.textContent='PERSONALIZADO';this.preset.appendChild(o);}this.preset.value='PERSONALIZADO';if(this.filters[i])this.filters[i].gain.value=val;};return band;}));}
-  applyConfig(){this.volume.value=String(Math.min(50,Number(this.config.volume??32)));this.config.volume=Number(this.volume.value);this.volumeValue.textContent=`${this.volume.value}%`;this.preset.value=this.config.eqPreset||'FLAT';if(!this.preset.value)this.preset.value='FLAT';const gains=Array.isArray(this.config.eqGains)&&this.config.eqGains.length===24?this.config.eqGains:PRESETS.FLAT;this.eqgrid.querySelectorAll('input').forEach((input,i)=>{input.value=String(gains[i]||0);this.$(`db${i}`).textContent=String(gains[i]||0);});this.$('time').value=`${Number(this.config.randomTimeMinutes||30)} minutos`;this.$('songs').value=`${Number(this.config.randomSongCount||5)} músicas`;this.$('transition').value=`${Number(this.config.crossfadeSeconds||2)} s`;this.refreshGenreButtons();}
-  bind(){this.volume.oninput=()=>{this.config.volume=Number(this.volume.value);this.volumeValue.textContent=`${this.config.volume}%`;if(this.gainNode)this.gainNode.gain.value=this.config.volume/100;else this.audio.volume=this.config.volume/100;};this.preset.onchange=()=>this.applyPreset(this.preset.value);this.international.onclick=()=>{this.config.allowInternational=!this.config.allowInternational;this.refreshGenreButtons();};this.national.onclick=()=>{this.config.allowNational=!this.config.allowNational;this.refreshGenreButtons();};this.$('time').onchange=()=>{this.config.randomTimeMinutes=parseInt(this.$('time').value,10)||30;this.config.randomMode='TEMPO';this.scheduleRandom();};this.$('songs').onchange=()=>{this.config.randomSongCount=parseInt(this.$('songs').value,10)||5;this.config.randomMode='MUSICAS';};this.$('transition').onchange=()=>this.config.crossfadeSeconds=parseInt(this.$('transition').value,10)||0;this.$('play').onclick=()=>this.play();this.$('next').onclick=()=>this.nextStation();this.$('stop').onclick=()=>this.stop();this.$('save').onclick=()=>this.saveConfig();this.$('hide').onclick=()=>{this.shell.classList.toggle('hidden-ui');this.$('hide').textContent=this.shell.classList.contains('hidden-ui')?'◉  MOSTRAR':'◉  OCULTAR';};this.$('uninstall').onclick=()=>this.toast('No navegador não existe desinstalação. O botão foi mantido para preservar o layout do aplicativo.');this.audio.addEventListener('playing',()=>{this.status.textContent=`Tocando: ${this.currentStation?.name||'PELEGO RADIO'}`;this.$('play').textContent='❚❚ PAUSAR';this.scheduleRandom();});this.audio.addEventListener('pause',()=>{if(!this.audio.ended)this.$('play').textContent='▶ TOCAR';});this.audio.addEventListener('error',()=>this.handleStreamError());this.device.onchange=()=>this.setOutputDevice(this.device.value);this.$('zeroPrev').onclick=()=>this.shiftProduct('zero',-1);this.$('zeroNext').onclick=()=>this.shiftProduct('zero',1);this.$('readyPrev').onclick=()=>this.shiftProduct('ready',-1);this.$('readyNext').onclick=()=>this.shiftProduct('ready',1);this.$('zeroBuy').onclick=()=>this.buyCurrent('zero');this.$('readyBuy').onclick=()=>this.buyCurrent('ready');}
-  applyPreset(name){const gains=(PRESETS[name]||PRESETS.FLAT).slice();this.config.eqPreset=name;this.config.eqGains=gains;this.eqgrid.querySelectorAll('input').forEach((input,i)=>{input.value=String(gains[i]);this.$(`db${i}`).textContent=String(gains[i]);if(this.filters[i])this.filters[i].gain.value=gains[i];});}
-  stationTags(st){const g=String(st.genre||'').toUpperCase();const tags=[];if(/ROCK|DOOM|STONER/.test(g))tags.push('ROCK');if(/METAL/.test(g))tags.push('METAL');if(/POP|NEW WAVE|ANOS 70|ANOS 80/.test(g))tags.push('POP');if(/JAZZ/.test(g))tags.push('JAZZ');if(/BLUES/.test(g))tags.push('BLUES');if(/COUNTRY|AMERICANA|FOLK/.test(g))tags.push('COUNTRY');if(/REGGAE|DUB/.test(g))tags.push('REGGAE');if(/HIP|HOP|CLIQHOP/.test(g))tags.push('HIP HOP');if(/AMBIENT|DOWNTEMPO|DRONE|LOUNGE|CHILL|LUSH/.test(g))tags.push('LOUNGE');if(/ELETR|TECHNO|TRANCE|HOUSE|DUBSTEP|BEAT|VAPOR/.test(g))tags.push('ELETRÔNICA');if(/INSTRUMENTAL|SPACE|SYNTH/.test(g))tags.push('INSTRUMENTAL');if(/SOUL|FUNK/.test(g))tags.push('SOUL');if(!tags.length)tags.push('POP');return tags;}
-  pickStation(){let pool=[];const selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];if(this.config.allowInternational){pool=STATIONS.filter(st=>this.stationTags(st).some(t=>selected.includes(t)));}if(!pool.length){pool=STATIONS.slice();if(this.config.allowNational&&!this.config.allowInternational){this.config.allowInternational=true;this.refreshGenreButtons();}}if(this.currentStation&&pool.length>1)pool=pool.filter(x=>x.id!==this.currentStation.id);return pool[Math.floor(Math.random()*pool.length)];}
-  streamUrl(st,server=5){return `https://ice${server}.somafm.com/${st.id}-128-mp3`;}
-  async ensureAudioGraph(){if(this.audioCtx)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC){this.audio.volume=this.config.volume/100;return;}this.audioCtx=new AC();this.sourceNode=this.audioCtx.createMediaElementSource(this.audio);let prev=this.sourceNode;this.filters=EQ_FREQS.map((freq,i)=>{const f=this.audioCtx.createBiquadFilter();f.type='peaking';f.frequency.value=freq;f.Q.value=1.05;f.gain.value=Number(this.config.eqGains?.[i]||0);prev.connect(f);prev=f;return f;});this.gainNode=this.audioCtx.createGain();this.gainNode.gain.value=this.config.volume/100;prev.connect(this.gainNode);this.analyser=this.audioCtx.createAnalyser();this.analyser.fftSize=2048;this.analyser.smoothingTimeConstant=.72;this.gainNode.connect(this.analyser);this.analyser.connect(this.audioCtx.destination);this.drawAnalyzer();}
-  async play(){if(!this.audio.paused){this.audio.pause();return;}try{await this.ensureAudioGraph();if(this.audioCtx?.state==='suspended')await this.audioCtx.resume();if(!this.currentStation){this.currentStation=this.pickStation();this.server=5;this.audio.src=this.streamUrl(this.currentStation,this.server);this.audio.load();}this.status.textContent='Conectando à estação...';await this.fadeTo(0,.01);await this.audio.play();await this.fadeTo(this.config.volume/100,Math.max(.15,Number(this.config.crossfadeSeconds||0)));}catch(e){this.status.textContent='O navegador bloqueou ou a estação não respondeu. Clique em TOCAR novamente.';}}
-  async nextStation(){const next=this.pickStation();if(!next)return;const sec=Math.max(0,Number(this.config.crossfadeSeconds||0));await this.fadeTo(0,sec/2);this.currentStation=next;this.server=5;this.audio.src=this.streamUrl(next,5);this.audio.load();this.status.textContent=`Conectando: ${next.name}`;try{await this.audio.play();await this.fadeTo(this.config.volume/100,sec/2);}catch(_){}}
-  stop(){clearTimeout(this.randomTimer);this.audio.pause();this.audio.removeAttribute('src');this.audio.load();this.currentStation=null;this.$('play').textContent='▶ TOCAR';this.status.textContent='Rádio parada.';this.drawIdleAnalyzer();}
-  fadeTo(target,seconds){if(!this.gainNode||!this.audioCtx){this.audio.volume=Math.max(0,Math.min(1,target));return Promise.resolve();}const now=this.audioCtx.currentTime;this.gainNode.gain.cancelScheduledValues(now);this.gainNode.gain.setValueAtTime(this.gainNode.gain.value,now);this.gainNode.gain.linearRampToValueAtTime(Math.max(.0001,target),now+Math.max(.01,seconds));return new Promise(r=>setTimeout(r,Math.max(10,seconds*1000)));}
-  handleStreamError(){if(!this.currentStation)return;if(this.server===5){this.server=6;this.audio.src=this.streamUrl(this.currentStation,6);this.audio.load();this.status.textContent='Trocando para servidor alternativo...';this.audio.play().catch(()=>{});return;}if(this.server===6){this.server=2;this.audio.src=this.streamUrl(this.currentStation,2);this.audio.load();this.status.textContent='Trocando para segundo servidor alternativo...';this.audio.play().catch(()=>{});return;}this.status.textContent='Estação indisponível agora. Indo para a próxima...';setTimeout(()=>this.nextStation(),900);}
-  scheduleRandom(){clearTimeout(this.randomTimer);if(this.audio.paused)return;if(this.config.randomMode==='TEMPO'){const min=Math.max(1,Number(this.config.randomTimeMinutes||30));this.randomTimer=setTimeout(()=>this.nextStation(),min*60000);}}
-  setupCanvas(){const ro=new ResizeObserver(()=>{this.resizeCanvas();if(!this.analyser)this.drawIdleAnalyzer();});ro.observe(this.canvas);this.canvasObserver=ro;this.resizeCanvas();requestAnimationFrame(()=>this.drawIdleAnalyzer());}
-  resizeCanvas(){const dpr=Math.max(1,window.devicePixelRatio||1);const r=this.canvas.getBoundingClientRect();this.canvas.width=Math.max(1,Math.floor(r.width*dpr));this.canvas.height=Math.max(1,Math.floor(r.height*dpr));this.ctx2d.setTransform(dpr,0,0,dpr,0,0);}
-  drawIdleAnalyzer(){if(!this.ctx2d)return;const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;if(w<2||h<2)return;c.clearRect(0,0,w,h);this.drawAnalyzerGrid(c,w,h);for(let i=0;i<24;i++){const bw=(w-28)/24;const amp=.18+.28*Math.abs(Math.sin(i*1.91));const bh=Math.max(4,(h-36)*amp);c.fillStyle='#19c958';c.fillRect(16+i*bw,h-18-bh,Math.max(2,bw-3),bh);}}
-  drawAnalyzerGrid(c,w,h){c.fillStyle='#050908';c.fillRect(0,0,w,h);c.strokeStyle='rgba(80,120,100,.28)';c.lineWidth=1;for(let y=18;y<h-18;y+=Math.max(18,(h-36)/6)){c.beginPath();c.moveTo(14,y);c.lineTo(w-8,y);c.stroke();}for(let x=14;x<w-8;x+=Math.max(20,(w-22)/24)){c.beginPath();c.moveTo(x,8);c.lineTo(x,h-18);c.stroke();}c.fillStyle='#dce2de';c.font='9px Arial';c.fillText('+12',2,14);c.fillText('+6',5,h*.31);c.fillText('0',8,h*.52);c.fillText('-6',5,h*.72);c.fillText('-12',2,h-17);}
-  drawAnalyzer(){cancelAnimationFrame(this.visualFrame);const draw=()=>{const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;this.drawAnalyzerGrid(c,w,h);if(this.analyser){const bins=new Uint8Array(this.analyser.frequencyBinCount);this.analyser.getByteFrequencyData(bins);const bw=(w-28)/24;for(let i=0;i<24;i++){const target=EQ_FREQS[i];const idx=Math.min(bins.length-1,Math.round(target/(this.audioCtx.sampleRate/2)*(bins.length-1)));let val=0,count=0;for(let j=Math.max(0,idx-2);j<=Math.min(bins.length-1,idx+2);j++){val+=bins[j];count++;}val=count?val/count:0;const bh=Math.max(2,(h-36)*(val/255));c.fillStyle='#18cf55';c.fillRect(16+i*bw,h-18-bh,Math.max(2,bw-3),bh);}}this.visualFrame=requestAnimationFrame(draw);};draw();}
-  async refreshDevices(){try{if(!navigator.mediaDevices?.enumerateDevices)return;const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audiooutput');devices.forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||'Saída de áudio';this.device.appendChild(o);});}catch(_){}}
-  async setOutputDevice(id){try{if(this.audioCtx&&typeof this.audioCtx.setSinkId==='function')await this.audioCtx.setSinkId(id||'');else if(typeof this.audio.setSinkId==='function')await this.audio.setSinkId(id);this.toast('Saída de áudio alterada.');}catch(_){this.toast('O navegador não permitiu trocar a saída de áudio.');}}
-  startCatalogRotation(){clearInterval(this.rotateZeroTimer);clearInterval(this.rotateReadyTimer);this.rotateZeroTimer=setInterval(()=>this.shiftProduct('zero',1,false),15000);this.rotateReadyTimer=setInterval(()=>this.shiftProduct('ready',1,false),15000);}
-  shiftProduct(kind,delta,restart=true){if(kind==='zero'){const n=this.zeroCatalog.length||1;this.zeroIndex=(this.zeroIndex+delta+n)%n;}else{const n=this.readyCatalog.length||1;this.readyIndex=(this.readyIndex+delta+n)%n;}this.renderProducts();if(restart)this.startCatalogRotation();}
-  renderProducts(){this.renderProduct('zero',this.zeroCatalog[this.zeroIndex%Math.max(1,this.zeroCatalog.length)]||FALLBACK_ZERO[0]);this.renderProduct('ready',this.readyCatalog[this.readyIndex%Math.max(1,this.readyCatalog.length)]||FALLBACK_PRONTO[0]);}
-  renderProduct(kind,item){const visual=this.$(`${kind}Visual`),code=this.$(`${kind}Code`),desc=this.$(`${kind}Desc`);const image=String(item?.image||'').trim();visual.replaceChildren();visual.classList.toggle('noimg',!image);if(image){const img=document.createElement('img');img.src=image;img.alt=item?.title||'Projeto Pelego Box';img.onerror=()=>{visual.classList.add('noimg');visual.textContent='PELEGO BOX';};visual.appendChild(img);}else visual.textContent='PELEGO BOX';if(kind==='zero')code.textContent=`SKU: ${item?.sku||item?.code||'--'}`;else code.textContent=`#${item?.code||'--'}${item?.brand?` · ${item.brand}`:''}`;desc.textContent=item?.title||'Projeto Pelego Box';}
-  buyCurrent(kind){const item=kind==='zero'?this.zeroCatalog[this.zeroIndex]:this.readyCatalog[this.readyIndex];const url=String(item?.buyUrl||'').trim();if(url)window.open(url,'_blank','noopener');else this.toast('Link de compra ainda não disponível para este item.');}
+  requestAnimationFrame(()=>{ try{ el.resizeCanvas?.(); el.drawIdleAnalyzer?.(); }catch(_){} });
 }
 
-if(!customElements.get('pelego-radio'))customElements.define('pelego-radio',PelegoRadio);
+function patchAnalyzer(Klass){
+  if(!Klass || Klass.prototype.__pbReferencePatched) return;
+  const p = Klass.prototype;
+  p.__pbReferencePatched = true;
+
+  p.drawAnalyzerGrid = function(c,w,h){
+    c.fillStyle='#020707'; c.fillRect(0,0,w,h);
+    const left=34,right=9,top=14,bottom=29;
+    c.strokeStyle='rgba(69,103,90,.50)'; c.lineWidth=1;
+    for(let i=0;i<=24;i++){ const x=left+(w-left-right)*(i/24); c.beginPath(); c.moveTo(x,top); c.lineTo(x,h-bottom); c.stroke(); }
+    for(let i=0;i<=12;i++){ const y=top+(h-top-bottom)*(i/12); c.beginPath(); c.moveTo(left,y); c.lineTo(w-right,y); c.stroke(); }
+    c.fillStyle='#e8eeea'; c.font='7px Arial';
+    c.fillText('+12',2,15); c.fillText('+6',5,Math.round(h*.28)); c.fillText('0',8,Math.round(h*.51)); c.fillText('-6',5,Math.round(h*.72)); c.fillText('-12',2,h-26);
+    const labels=['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
+    labels.forEach((t,i)=>{ const x=left+(w-left-right)*((i+.5)/24); c.fillText(t,x-5,h-16); });
+  };
+
+  p.__pbDrawSegments = function(values){
+    if(!this.ctx2d || !this.canvas) return;
+    const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;
+    if(w<2||h<2) return;
+    this.drawAnalyzerGrid(c,w,h);
+    const left=34,right=9,top=14,bottom=30,usableW=w-left-right,usableH=h-top-bottom,bw=usableW/24,segs=12,gap=2,segH=Math.max(2,(usableH-(segs-1)*gap)/segs);
+    for(let i=0;i<24;i++){
+      const level=Math.max(1,Math.min(segs,Math.round((values[i]||0)*segs)));
+      for(let s=0;s<level;s++){
+        const y=h-bottom-(s+1)*segH-s*gap;
+        c.fillStyle=s>=10?'#4cff7a':'#12d84d';
+        c.fillRect(left+i*bw+2,y,Math.max(3,bw-4),segH);
+      }
+    }
+  };
+
+  p.drawIdleAnalyzer = function(){
+    const vals=Array.from({length:24},(_,i)=>.25+.45*(.55+.45*Math.sin(i*.55+1.2)));
+    this.__pbDrawSegments(vals);
+  };
+
+  p.drawAnalyzer = function(){
+    cancelAnimationFrame(this.visualFrame);
+    const loop=()=>{
+      const values=Array(24).fill(.05);
+      if(this.analyser && this.audioCtx){
+        const bins=new Uint8Array(this.analyser.frequencyBinCount);
+        this.analyser.getByteFrequencyData(bins);
+        const freqs=[40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];
+        for(let i=0;i<24;i++){
+          const idx=Math.min(bins.length-1,Math.round(freqs[i]/(this.audioCtx.sampleRate/2)*(bins.length-1)));
+          let sum=0,count=0;
+          for(let j=Math.max(0,idx-2);j<=Math.min(bins.length-1,idx+2);j++){sum+=bins[j];count++;}
+          values[i]=(count?sum/count:0)/255;
+        }
+      }
+      this.__pbDrawSegments(values);
+      this.visualFrame=requestAnimationFrame(loop);
+    };
+    loop();
+  };
+
+  const originalConnected = p.connectedCallback;
+  p.connectedCallback = function(){
+    originalConnected?.call(this);
+    applySkin(this);
+  };
+}
+
+const RadioClass = customElements.get('pelego-radio');
+patchAnalyzer(RadioClass);
+queueMicrotask(()=>{
+  document.querySelectorAll('pelego-radio').forEach(el=>applySkin(el));
+});

@@ -7,11 +7,11 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "br.com.pelegobox.radio"
-        minSdk 23
-        targetSdk 35
-        versionCode 1
-        versionName "5.4.8-layout"
+        applicationId "br.com.pelegobox.radio.teste548"
+        minSdk 21
+        targetSdk 28
+        versionCode 548
+        versionName "5.4.8-layout-mobile-r2"
     }
 
     buildTypes {

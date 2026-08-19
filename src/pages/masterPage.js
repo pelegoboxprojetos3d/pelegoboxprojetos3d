@@ -20,10 +20,7 @@ $w.onReady(async function () {
     } catch (_) {}
   }
 
-  if (pagina === 'radiopelegobox') {
-    await Promise.allSettled([
-      ocultarElementoGlobal('#botaoradio'),
-      ocultarElementoGlobal('#image107'),
-    ]);
-  }
+  // O mini player lateral substitui o antigo botão global da Rádio Pelego.
+  // Mantemos os demais elementos globais intactos.
+  await ocultarElementoGlobal('#botaoradio');
 });

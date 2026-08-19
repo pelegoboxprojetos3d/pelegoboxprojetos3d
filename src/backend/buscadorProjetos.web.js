@@ -81,10 +81,10 @@ function extractTerms(searchText) {
   const deduped = unique(terms);
 
   if (deduped.length) {
-    return deduped.slice(0, 8);
+    return deduped;
   }
 
-  return unique(normalized.split(" ")).slice(0, 8);
+  return unique(normalized.split(" "));
 }
 
 function variantsFor(term) {
@@ -136,18 +136,28 @@ function publicProject(itemData) {
   };
 }
 
-async function queryField(field, value) {
+async function queryAcrossFields(value) {
   try {
-    const result = await wixData
+    let query = wixData
       .query(PROJECTS_COLLECTION)
-      .contains(field, value)
+      .contains(SEARCH_FIELDS[0], value);
+
+    for (const field of SEARCH_FIELDS.slice(1)) {
+      query = query.or(
+        wixData
+          .query(PROJECTS_COLLECTION)
+          .contains(field, value)
+      );
+    }
+
+    const result = await query
       .limit(1000)
       .find(DB_OPTS);
 
     return result.items || [];
   } catch (error) {
     console.warn(
-      `Buscador: falha ao pesquisar ${field} por ${value}:`,
+      `Buscador: falha ao pesquisar por ${value}:`,
       error?.message || error
     );
 
@@ -157,15 +167,10 @@ async function queryField(field, value) {
 
 async function findProjectsForTerm(term) {
   const variants = variantsFor(term);
-  const calls = [];
+  const groups = await Promise.all(
+    variants.map(queryAcrossFields)
+  );
 
-  for (const field of SEARCH_FIELDS) {
-    for (const variant of variants) {
-      calls.push(queryField(field, variant));
-    }
-  }
-
-  const groups = await Promise.all(calls);
   const map = new Map();
 
   for (const group of groups) {
@@ -342,9 +347,13 @@ export const buscarProjetosBasico =
       }
 
       const normalizedSearch = normalize(searchText);
-      const terms = extractTerms(searchText);
-      const sessionId = makeSessionId(input?.sessionId);
       const brandContext = safe(input?.marca);
+      const terms = unique([
+        ...extractTerms(searchText),
+        ...extractTerms(brandContext)
+      ]).slice(0, 6);
+
+      const sessionId = makeSessionId(input?.sessionId);
 
       const termMaps = await Promise.all(
         terms.map(findProjectsForTerm)
@@ -354,7 +363,7 @@ export const buscarProjetosBasico =
       let matchMode = "todos_os_termos";
 
       // Se a frase ficou específica demais, ainda mostramos os candidatos que
-      // bateram em pelo menos um termo, mas informamos o modo ao frontend.
+      // bateram em pelo menos um termo. Depois a IA vai assumir essa decisão.
       if (!matched.size && termMaps.length > 1) {
         matched = union(termMaps);
         matchMode = "termos_parciais";

@@ -317,7 +317,8 @@ body{padding:4px 7px}
   .method{min-height:52px}
   .pixBody{grid-template-columns:1fr;gap:10px;padding:8px}
   .qrBox{width:min(230px,78vw);height:min(230px,78vw);margin:0 auto}
-  #tetrisCanvas{width:min(190px,64vw);height:min(190px,64vw)}
+  /* TETRIS_MOBILE_FILL_QR_V3 */
+  #tetrisCanvas{width:100%;height:100%}
   .mobileDeferred.active{display:flex;flex-direction:column;gap:7px;margin-top:8px}
   .mobileDeferred .paymentNotice{display:block}
   .cardModeGrid{grid-template-columns:1fr;gap:10px}

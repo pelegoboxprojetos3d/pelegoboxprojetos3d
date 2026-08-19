@@ -32,6 +32,19 @@ jobs:
           $ico = Get-Content tools/pelego-screen-ink/pelego.ico.b64 -Raw
           [IO.File]::WriteAllBytes("tools/pelego-screen-ink/pelego.ico", [Convert]::FromBase64String(($ico -replace '\s','')))
 
+      - name: Restore V3.2 source
+        shell: pwsh
+        run: |
+          $b64 = Get-Content tools/pelego-screen-ink/ProgramV32.cs.gz.b64 -Raw
+          $bytes = [Convert]::FromBase64String(($b64 -replace '\s',''))
+          $input = [IO.MemoryStream]::new($bytes)
+          $gzip = [IO.Compression.GZipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
+          $output = [IO.File]::Create("tools/pelego-screen-ink/ProgramV32.cs")
+          $gzip.CopyTo($output)
+          $output.Dispose()
+          $gzip.Dispose()
+          $input.Dispose()
+
       - name: Publish single-file Windows app
         shell: pwsh
         run: |
@@ -55,15 +68,15 @@ jobs:
       - name: Prepare standalone uninstaller
         shell: pwsh
         run: |
-          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.1.cmd
+          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.2.cmd
 
       - name: Upload installer and uninstaller
         uses: actions/upload-artifact@v4
         with:
-          name: PELEGO-Marcador-de-Tela-V3.1
+          name: PELEGO-Marcador-de-Tela-V3.2
           path: |
-            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.1.exe
-            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.1.cmd
+            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.2.exe
+            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.2.cmd
           if-no-files-found: error
 
       - name: Register build run id

@@ -1,0 +1,73 @@
+name: Ajustar Rádio Pelego - Tocando e altura
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ajustar-radio-tocando-altura-2026-08-19.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Aplicar ajuste da Rádio Pelego
+        run: node scripts/ajustar-radio-tocando-altura-2026-08-19.cjs
+
+      - name: Validar alterações
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          grep -q 'height:835px!important' "$file"
+          grep -q 'grid-template-rows:40px 280px 245px 180px 50px!important' "$file"
+          grep -q 'height:260px!important;align-self:start!important' "$file"
+          grep -q 'margin-top:-27px!important;height:calc(100% + 27px)!important' "$file"
+          grep -q 'font-size:9px!important;line-height:11px!important' "$file"
+          echo 'Validação concluída.'
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          if git diff --quiet -- "$file"; then
+            echo 'Ajuste já aplicado.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$file"
+            git commit -m 'Ajustar tamanho do analisador e painel Tocando da Rádio Pelego'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub → Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

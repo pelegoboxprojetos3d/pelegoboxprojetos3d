@@ -248,3 +248,71 @@ function pbxCriarPatchVideos_(sheet, cabecalhos, linha) {
 
   return { dataItemId: id, fieldModifications: mods };
 }
+
+/**
+ * Cria um item novo na coleção Videosprojetos a partir de uma linha da planilha.
+ * Esta função é isolada de propósito: por enquanto ela NÃO é chamada pelo fluxo automático.
+ * Assim conseguimos adicionar e validar a peça nova sem alterar o comportamento que já funciona.
+ */
+function pbxCriarItemWix_(sheet, cabecalhos, linha, apiKey) {
+  const mapa = mapaCabecalhos(cabecalhos);
+
+  const valor = campo => {
+    const col = mapa[campo];
+    return col ? sheet.getRange(linha, col).getValue() : '';
+  };
+
+  const numero = campo => normalizarNumero(valor(campo));
+
+  const data = {
+    ordem_video: numero('ordem_video'),
+    titulo_video: String(valor('titulo_video') || ''),
+    thumbnail: String(valor('thumbnail') || ''),
+    link_video: String(valor('link_video') || ''),
+    marca_1: String(valor('marca_1') || ''),
+    marca_2: String(valor('marca_2') || ''),
+    marca_3: String(valor('marca_3') || ''),
+    valor_etapa_1: numero('valor_etapa_1'),
+    valor_etapa_2: numero('valor_etapa_2'),
+    valor_etapa_3: numero('valor_etapa_3'),
+    slug_checkout: String(valor('slug_checkout') || ''),
+    ativo_checkout: String(valor('ativo_checkout') || '')
+  };
+
+  const response = UrlFetchApp.fetch(
+    'https://www.wixapis.com/wix-data/v2/items',
+    {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: apiKey,
+        'wix-site-id': WIX_SITE_ID,
+        Accept: 'application/json'
+      },
+      payload: JSON.stringify({
+        dataCollectionId: WIX_COLLECTION_ID,
+        dataItem: { data }
+      }),
+      muteHttpExceptions: true
+    }
+  );
+
+  const status = response.getResponseCode();
+  const texto = response.getContentText();
+
+  if (status < 200 || status >= 300) {
+    throw new Error(`Criar projeto Wix: HTTP ${status} - ${texto.slice(0, 500)}`);
+  }
+
+  const body = JSON.parse(texto || '{}');
+  const id =
+    (body.dataItem && (body.dataItem.id || body.dataItem._id)) ||
+    body.id ||
+    '';
+
+  if (!id) {
+    throw new Error('Wix criou o projeto, mas não devolveu o ID.');
+  }
+
+  return String(id);
+}

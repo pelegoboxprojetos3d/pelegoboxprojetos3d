@@ -103,12 +103,21 @@ function copyPix(){`;
     code = code.replace(qrRegex, qrBlock);
   }
 
-  for (const marker of ["TETRIS_AUTOPLAY_LINHAS_RESTART_V2", "QR_MOBILE_RETRY_PROVIDER_IMAGE_V2", "lines*1200", "attempt<50"]) {
+  const mobileTetrisOld = "  #tetrisCanvas{width:min(190px,64vw);height:min(190px,64vw)}";
+  const mobileTetrisNew = "  /* TETRIS_MOBILE_FILL_QR_V3 */\n  #tetrisCanvas{width:100%;height:100%}";
+  if (!code.includes("TETRIS_MOBILE_FILL_QR_V3")) {
+    if (!code.includes(mobileTetrisOld)) {
+      throw new Error("Custom Element: regra mobile antiga do Tetris não encontrada; nada foi alterado.");
+    }
+    code = code.replace(mobileTetrisOld, mobileTetrisNew);
+  }
+
+  for (const marker of ["TETRIS_AUTOPLAY_LINHAS_RESTART_V2", "QR_MOBILE_RETRY_PROVIDER_IMAGE_V2", "TETRIS_MOBILE_FILL_QR_V3", "lines*1200", "attempt<50"]) {
     if (!code.includes(marker)) throw new Error(`Custom Element: validação falhou em ${marker}.`);
   }
 
   write(ELEMENT, code);
-  console.log("Custom Element corrigido: QR resiliente no mobile e Tetris com linhas/restart.");
+  console.log("Custom Element corrigido: QR resiliente e Tetris preenchendo toda a área no mobile.");
 }
 
 patchPage();

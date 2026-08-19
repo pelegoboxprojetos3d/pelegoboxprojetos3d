@@ -91,6 +91,25 @@ async function mostrarElemento(id) {
   } catch (_) {}
 }
 
+async function ocultarElemento(id) {
+  try {
+    const elemento = $w(id);
+    if (!elemento) return;
+    if (typeof elemento.hide === 'function') await elemento.hide();
+    if (typeof elemento.collapse === 'function') await elemento.collapse();
+  } catch (_) {}
+}
+
+async function ocultarBotaoRadioNestaPagina() {
+  // O atalho flutuante da Rádio faz sentido no restante do site, mas não dentro
+  // da própria página da Rádio. Tentamos os dois IDs para cobrir o nome atual
+  // no Editor e o ID anterior da imagem sem afetar nenhuma outra página.
+  await Promise.allSettled([
+    ocultarElemento('#botaoradio'),
+    ocultarElemento('#image107'),
+  ]);
+}
+
 async function garantirControlesRadioVisiveis() {
   await Promise.allSettled([
     mostrarElemento('#baixarpc'),
@@ -251,6 +270,7 @@ async function alimentarPlayer() {
 }
 
 $w.onReady(async function () {
+  await ocultarBotaoRadioNestaPagina();
   await garantirControlesRadioVisiveis();
 
   await Promise.allSettled([

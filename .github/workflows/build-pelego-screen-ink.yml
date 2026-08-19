@@ -55,15 +55,15 @@ jobs:
       - name: Prepare standalone uninstaller
         shell: pwsh
         run: |
-          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.0.cmd
+          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.1.cmd
 
       - name: Upload installer and uninstaller
         uses: actions/upload-artifact@v4
         with:
-          name: PELEGO-Marcador-de-Tela-V3.0
+          name: PELEGO-Marcador-de-Tela-V3.1
           path: |
-            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.0.exe
-            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.0.cmd
+            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.1.exe
+            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.1.cmd
           if-no-files-found: error
 
       - name: Register build run id

@@ -1,0 +1,72 @@
+name: Remover rodape e ajustar maximizar da Radio Pelego
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/remover-footer-ajustar-maximizar-radio-2026-08-19.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Aplicar ajustes
+        run: node scripts/remover-footer-ajustar-maximizar-radio-2026-08-19.cjs
+
+      - name: Validar alteracoes
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          grep -q 'height:748px!important' "$file"
+          grep -q 'grid-template-rows:40px 260px 250px 165px!important' "$file"
+          grep -q '.footer{display:none!important' "$file"
+          grep -q 'width:16px!important;height:16px!important;border:2px solid currentColor!important' "$file"
+          echo 'Validacao concluida.'
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          if git diff --quiet -- "$file"; then
+            echo 'Ajustes ja aplicados.'
+          else
+            git config user.name 'PELEGO BOX Automacao'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$file"
+            git commit -m 'Remover barra inferior e ampliar botao maximizar da radio'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronizacao GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

@@ -32,6 +32,14 @@ jobs:
           $ico = Get-Content tools/pelego-screen-ink/pelego.ico.b64 -Raw
           [IO.File]::WriteAllBytes("tools/pelego-screen-ink/pelego.ico", [Convert]::FromBase64String(($ico -replace '\s','')))
 
+      - name: Patch V3.3 source
+        shell: pwsh
+        run: |
+          $p = "tools/pelego-screen-ink/ProgramV33.cs"
+          $s = Get-Content $p -Raw
+          $s = $s.Replace('g.RotateTransform(-35,cx,cy);', 'g.TranslateTransform(cx,cy); g.RotateTransform(-35); g.TranslateTransform(-cx,-cy);')
+          Set-Content -Path $p -Value $s -Encoding UTF8
+
       - name: Publish single-file Windows app
         shell: pwsh
         run: |

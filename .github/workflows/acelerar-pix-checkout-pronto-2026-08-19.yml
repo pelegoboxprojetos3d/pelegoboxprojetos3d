@@ -1,0 +1,76 @@
+name: Acelerar Pix checkout projeto pronto
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/acelerar-pix-checkout-pronto-2026-08-19.cjs"
+      - ".github/workflows/acelerar-pix-checkout-pronto-2026-08-19.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: acelerar-pix-checkout-pronto-2026-08-19
+  cancel-in-progress: false
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Aplicar correção cirúrgica
+        run: |
+          set -euo pipefail
+          node scripts/acelerar-pix-checkout-pronto-2026-08-19.cjs
+          node --check scripts/acelerar-pix-checkout-pronto-2026-08-19.cjs
+          git diff --check
+          grep -q 'PIX_CREATE_FAST_RETURN_V1' src/backend/validaPayPixProjetosProntosCore.jsw
+          grep -q 'PIX_CREATE_NO_EXTRA_DEEP_READ_V1' src/backend/validaPayPixProjetosProntosCoreR2.jsw
+          grep -q 'return enrich(await consultarBase(input));' src/backend/validaPayPixProjetosProntosCoreR2.jsw
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git config user.name "PELEGO BOX Automacao"
+          git config user.email "pelegobox82@gmail.com"
+          git add -- src/backend/validaPayPixProjetosProntosCore.jsw src/backend/validaPayPixProjetosProntosCoreR2.jsw
+          if ! git diff --cached --quiet; then
+            git commit -m "Acelerar geração do QR Pix no checkout pronto"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          else
+            echo "Correção já aplicada."
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          cat "$response_file"
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300
+          echo "Publicado: criação do Pix retorna rápido e o polling continua buscando QR/EMV."

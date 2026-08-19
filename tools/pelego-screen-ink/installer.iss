@@ -1,9 +1,10 @@
 #define MyAppName "PELEGO Marcador de Tela"
-#define MyAppVersion "2.8.0"
+#define MyAppVersion "2.9.0"
 #define MyAppPublisher "PELEGO"
 #define MyAppExeName "PELEGO.ScreenInk.exe"
 
 [Setup]
+; AppId e pasta permanecem iguais à V2.8 para instalar por cima sem criar outro aplicativo.
 AppId={{1A03BFD1-46F8-4AA7-97DE-EB299E07D355}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -13,7 +14,7 @@ DefaultGroupName=PELEGO Marcador de Tela
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=installer-output
-OutputBaseFilename=PELEGO-Marcador-de-Tela-Setup-V2.8
+OutputBaseFilename=PELEGO-Marcador-de-Tela-Setup-V2.9
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -1,5 +1,5 @@
 import wixLocation from 'wix-location';
-import 'public/buscadorPopupPelegoBox.js';
+import 'public/buscadorPopupPelegoBoxV2.js';
 import 'public/radioPelegoPersistente.js';
 
 async function ocultarElementoGlobal(id) {

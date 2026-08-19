@@ -6,7 +6,8 @@
  * 2) novas linhas vindas do Make têm preco_total arredondado para múltiplo de R$ 5;
  * 3) valor_etapa_1/2/3 são calculados na planilha e enviados direto ao Wix;
  * 4) não depende do cenário 036 para sincronizar preços;
- * 5) mantém a aba Clientes usando a sincronização direta que já existia.
+ * 5) mantém a aba Clientes usando a sincronização direta que já existia;
+ * 6) nova linha sem ID é criada/vinculada no Wix pela própria planilha.
  *
  * Este arquivo usa as constantes e funções já existentes em codigo.gs.
  */
@@ -108,6 +109,8 @@ function processarNovasLinhasPendentesDiretoWix() {
   const mapa = mapaCabecalhos(cabecalhos);
 
   const colId = mapa.ID;
+  const colOrdem = mapa.ordem_video;
+  const colTitulo = mapa.titulo_video;
   const colTotal = mapa[CAB_PRECO_TOTAL];
   const col1 = mapa[CAB_ETAPA_1];
   const col2 = mapa[CAB_ETAPA_2];
@@ -115,7 +118,7 @@ function processarNovasLinhasPendentesDiretoWix() {
   const colAjuste = mapa[CAB_AJUSTE_PERCENTUAL];
   const colBase = mapa[CAB_PRECO_TOTAL_BASE];
 
-  if (!colId || !colTotal || !col1 || !col2 || !col3 || !colAjuste || !colBase) {
+  if (!colId || !colOrdem || !colTitulo || !colTotal || !col1 || !col2 || !col3 || !colAjuste || !colBase) {
     throw new Error('Não encontrei as colunas necessárias para processar novas linhas.');
   }
 
@@ -125,35 +128,73 @@ function processarNovasLinhasPendentesDiretoWix() {
   const primeiraLinhaBusca = Math.max(2, ultimaLinha - 99);
   const qtd = ultimaLinha - primeiraLinhaBusca + 1;
   const dados = sheet.getRange(primeiraLinhaBusca, 1, qtd, sheet.getLastColumn()).getValues();
+
+  const apiKey = obterWixApiKey_();
+  if (!apiKey) throw new Error('API Wix não configurada.');
+
   const linhasProcessadas = [];
+  const linhasParaPatch = new Set();
 
   for (let i = 0; i < dados.length; i++) {
     const linha = primeiraLinhaBusca + i;
     const row = dados[i];
 
-    const id = String(row[colId - 1] ?? '').trim();
+    let id = String(row[colId - 1] ?? '').trim();
+    const ordem = normalizarNumero(row[colOrdem - 1]);
+    const titulo = String(row[colTitulo - 1] ?? '').trim();
     const totalBruto = normalizarNumero(row[colTotal - 1]);
+
     const vazio1 = row[col1 - 1] === '' || row[col1 - 1] === null;
     const vazio2 = row[col2 - 1] === '' || row[col2 - 1] === null;
     const vazio3 = row[col3 - 1] === '' || row[col3 - 1] === null;
+    const etapasVazias = vazio1 && vazio2 && vazio3;
 
-    if (!id || !(totalBruto > 0)) continue;
-    if (!(vazio1 && vazio2 && vazio3)) continue;
+    // Linha válida de projeto: precisa ter número, título e preço.
+    if (!(ordem > 0) || !titulo || !(totalBruto > 0)) continue;
 
-    const totalRedondo = arredondarParaMultiplo(totalBruto, MULTIPLO_PRECO);
-    sheet.getRange(linha, colTotal).setValue(totalRedondo);
-    sheet.getRange(linha, colBase).setValue(totalRedondo);
+    // Se já tem ID e preços calculados, não há nada pendente.
+    if (id && !etapasVazias) continue;
 
-    if (row[colAjuste - 1] === '' || row[colAjuste - 1] === null) {
-      sheet.getRange(linha, colAjuste).setValue(0);
+    // Novas linhas recebem preço arredondado e etapas calculadas.
+    // Se uma tentativa anterior já calculou as etapas mas falhou antes de gravar o ID,
+    // não recalculamos; apenas retomamos a criação/vinculação com o Wix.
+    if (etapasVazias) {
+      const totalRedondo = arredondarParaMultiplo(totalBruto, MULTIPLO_PRECO);
+      sheet.getRange(linha, colTotal).setValue(totalRedondo);
+      sheet.getRange(linha, colBase).setValue(totalRedondo);
+
+      if (row[colAjuste - 1] === '' || row[colAjuste - 1] === null) {
+        sheet.getRange(linha, colAjuste).setValue(0);
+      }
+
+      aplicarRegrasDaLinha(
+        sheet,
+        cabecalhos,
+        linha,
+        new Set([CAB_PRECO_TOTAL])
+      );
     }
 
-    aplicarRegrasDaLinha(
-      sheet,
-      cabecalhos,
-      linha,
-      new Set([CAB_PRECO_TOTAL])
-    );
+    SpreadsheetApp.flush();
+
+    if (!id) {
+      // Anti-duplicidade: antes de criar, procura o mesmo ordem_video no Wix.
+      // Se já existir, apenas vincula a linha da planilha ao item existente.
+      id = pbxBuscarIdWixPorOrdem_(ordem, apiKey);
+
+      if (id) {
+        sheet.getRange(linha, colId).setValue(id);
+        linhasParaPatch.add(linha);
+      } else {
+        id = pbxCriarItemWix_(sheet, cabecalhos, linha, apiKey);
+        sheet.getRange(linha, colId).setValue(id);
+      }
+
+      SpreadsheetApp.flush();
+    } else if (etapasVazias) {
+      // Linha que já nasceu com ID (fluxo antigo): só atualiza os campos calculados.
+      linhasParaPatch.add(linha);
+    }
 
     linhasProcessadas.push(linha);
   }
@@ -162,10 +203,7 @@ function processarNovasLinhasPendentesDiretoWix() {
 
   SpreadsheetApp.flush();
 
-  const apiKey = obterWixApiKey_();
-  if (!apiKey) throw new Error('API Wix não configurada.');
-
-  const patches = linhasProcessadas
+  const patches = Array.from(linhasParaPatch)
     .map(linha => pbxCriarPatchVideos_(sheet, cabecalhos, linha))
     .filter(Boolean);
 
@@ -250,9 +288,67 @@ function pbxCriarPatchVideos_(sheet, cabecalhos, linha) {
 }
 
 /**
+ * Procura no Wix um projeto pelo ordem_video.
+ * É a trava contra duplicidade quando uma linha sem ID chega da planilha.
+ */
+function pbxBuscarIdWixPorOrdem_(ordemVideo, apiKey) {
+  if (!(ordemVideo > 0)) return '';
+
+  const response = UrlFetchApp.fetch(
+    'https://www.wixapis.com/wix-data/v2/items/query',
+    {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: apiKey,
+        'wix-site-id': WIX_SITE_ID,
+        Accept: 'application/json'
+      },
+      payload: JSON.stringify({
+        dataCollectionId: WIX_COLLECTION_ID,
+        query: {
+          filter: {
+            ordem_video: {
+              '$eq': ordemVideo
+            }
+          },
+          fields: ['ordem_video'],
+          paging: {
+            limit: 1,
+            offset: 0
+          }
+        }
+      }),
+      muteHttpExceptions: true
+    }
+  );
+
+  const status = response.getResponseCode();
+  const texto = response.getContentText();
+
+  if (status < 200 || status >= 300) {
+    throw new Error(`Buscar projeto Wix: HTTP ${status} - ${texto.slice(0, 500)}`);
+  }
+
+  let body = {};
+  try {
+    body = texto ? JSON.parse(texto) : {};
+  } catch (_) {
+    throw new Error('Buscar projeto Wix: resposta JSON inválida.');
+  }
+
+  const itens = Array.isArray(body.dataItems)
+    ? body.dataItems
+    : (body.data && Array.isArray(body.data.dataItems) ? body.data.dataItems : []);
+
+  if (!itens.length) return '';
+
+  const item = itens[0] || {};
+  return String(item.id || item._id || item.dataItemId || '').trim();
+}
+
+/**
  * Cria um item novo na coleção Videosprojetos a partir de uma linha da planilha.
- * Esta função é isolada de propósito: por enquanto ela NÃO é chamada pelo fluxo automático.
- * Assim conseguimos adicionar e validar a peça nova sem alterar o comportamento que já funciona.
  */
 function pbxCriarItemWix_(sheet, cabecalhos, linha, apiKey) {
   const mapa = mapaCabecalhos(cabecalhos);

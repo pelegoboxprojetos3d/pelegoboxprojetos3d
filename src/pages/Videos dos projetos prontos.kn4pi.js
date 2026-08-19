@@ -3,7 +3,7 @@ import wixLocation from "wix-location";
 
 // TÍTULO NO WIX: Videos dos projetos prontos
 //
-// R9
+// R10
 //
 // BOTÃO VERDE:
 // projeto feito do zero -> /checkout-mp
@@ -16,6 +16,12 @@ import wixLocation from "wix-location";
 //
 // BOTÃO AZUL:
 // vídeo no YouTube.
+//
+// NAVEGAÇÃO:
+// 2 projetos por página, usando as setas
+// #setaProjetoAnterior e #setaProjetoProximo.
+
+const PROJECTS_PER_PAGE = 2;
 
 function safe(value) {
   return String(value ?? "").trim();
@@ -365,6 +371,87 @@ async function applyBrandFilter() {
     .setFilter(filter);
 }
 
+function updateNavigationState() {
+  const dataset = $w("#dataset1");
+  const previousButton = $w("#setaProjetoAnterior");
+  const nextButton = $w("#setaProjetoProximo");
+
+  try {
+    if (dataset.hasPreviousPage()) {
+      previousButton.enable();
+    } else {
+      previousButton.disable();
+    }
+
+    if (dataset.hasNextPage()) {
+      nextButton.enable();
+    } else {
+      nextButton.disable();
+    }
+  } catch (error) {
+    console.warn(
+      "Não foi possível atualizar o estado das setas:",
+      error?.message || error
+    );
+  }
+}
+
+function configureProjectNavigation() {
+  const dataset = $w("#dataset1");
+  const previousButton = $w("#setaProjetoAnterior");
+  const nextButton = $w("#setaProjetoProximo");
+
+  previousButton.onClick(
+    async () => {
+      if (!dataset.hasPreviousPage()) {
+        updateNavigationState();
+        return;
+      }
+
+      previousButton.disable();
+      nextButton.disable();
+
+      try {
+        await dataset.previousPage();
+      } catch (error) {
+        console.error(
+          "Erro ao voltar projetos:",
+          error?.message || error,
+          error
+        );
+      } finally {
+        updateNavigationState();
+      }
+    }
+  );
+
+  nextButton.onClick(
+    async () => {
+      if (!dataset.hasNextPage()) {
+        updateNavigationState();
+        return;
+      }
+
+      previousButton.disable();
+      nextButton.disable();
+
+      try {
+        await dataset.nextPage();
+      } catch (error) {
+        console.error(
+          "Erro ao avançar projetos:",
+          error?.message || error,
+          error
+        );
+      } finally {
+        updateNavigationState();
+      }
+    }
+  );
+
+  updateNavigationState();
+}
+
 function configureRepeater() {
   $w("#repeater1").onItemReady(
     ($item, itemData) => {
@@ -478,10 +565,21 @@ $w.onReady(
     configureRepeater();
 
     try {
+      await new Promise(
+        (resolve) => {
+          $w("#dataset1").onReady(resolve);
+        }
+      );
+
+      await $w("#dataset1")
+        .setPageSize(PROJECTS_PER_PAGE);
+
       await applyBrandFilter();
+
+      configureProjectNavigation();
     } catch (error) {
       console.error(
-        "Erro ao filtrar projetos pela marca:",
+        "Erro ao preparar projetos e navegação:",
         error?.message || error,
         error
       );

@@ -173,20 +173,29 @@ function bestVocabularyMatch(token, vocabulary) {
   const exact = vocabulary.find((entry) => entry.normalized === token);
   if (exact) return { ...exact, distance: 0, score: 1 };
 
-  const allowed = maxDistanceFor(token);
-  if (!allowed) return null;
+  const baseAllowed = maxDistanceFor(token);
+  if (!baseAllowed) return null;
 
   let best = null;
 
   for (const entry of vocabulary) {
     const candidate = entry.normalized;
+
+    // Marcas têm prioridade 5 e recebem uma margem extra. É proposital:
+    // clientes digitam Pioneer/Pioner/Paioner, Selenium/Selenio etc. com frequência.
+    const brandLike = entry.priority >= 5;
+    const allowed = brandLike
+      ? Math.min(4, baseAllowed + 1)
+      : baseAllowed;
+
     if (Math.abs(candidate.length - token.length) > allowed) continue;
 
     const distance = levenshtein(token, candidate);
     if (distance > allowed) continue;
 
     const score = 1 - distance / Math.max(token.length, candidate.length);
-    if (score < 0.66) continue;
+    const minScore = brandLike ? 0.55 : 0.66;
+    if (score < minScore) continue;
 
     if (
       !best ||

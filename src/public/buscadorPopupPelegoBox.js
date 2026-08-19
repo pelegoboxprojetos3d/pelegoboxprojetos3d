@@ -6,11 +6,9 @@
   ]);
   const SEARCH_PATH = "/buscador-projetos-prontos";
   const IMAGE_URL = "https://static.wixstatic.com/media/354683_1f33596da86e47a08bb651e97b4a4676~mv2.png";
-  const VISIBLE_MS = 9000;
-  const MIN_HIDDEN_MS = 16000;
-  const MAX_HIDDEN_MS = 26000;
+  const INITIAL_SHOW_DELAY_MS = 1800;
 
-  let cycleTimer = null;
+  let showTimer = null;
 
   function normalizedPath() {
     const path = (window.location.pathname || "/")
@@ -25,17 +23,10 @@
   }
 
   function clearTimer() {
-    if (cycleTimer) {
-      window.clearTimeout(cycleTimer);
-      cycleTimer = null;
+    if (showTimer) {
+      window.clearTimeout(showTimer);
+      showTimer = null;
     }
-  }
-
-  function randomHiddenDelay() {
-    return Math.floor(
-      MIN_HIDDEN_MS +
-      Math.random() * (MAX_HIDDEN_MS - MIN_HIDDEN_MS)
-    );
   }
 
   function navigateToSearch(term) {
@@ -341,26 +332,12 @@
       clearTimer();
       host.classList.remove("is-peeking");
       host.classList.add("is-visible");
-
-      cycleTimer = window.setTimeout(
-        hideAndSchedule,
-        VISIBLE_MS
-      );
     }
 
-    function peek() {
+    function closeByCustomer() {
+      clearTimer();
       host.classList.remove("is-visible");
       host.classList.add("is-peeking");
-    }
-
-    function hideAndSchedule() {
-      clearTimer();
-      peek();
-
-      cycleTimer = window.setTimeout(
-        show,
-        randomHiddenDelay()
-      );
     }
 
     function submitSearch() {
@@ -389,18 +366,7 @@
       }
     );
 
-    input.addEventListener("focus", () => {
-      clearTimer();
-      host.classList.remove("is-peeking");
-      host.classList.add("is-visible");
-    });
-
-    input.addEventListener("blur", () => {
-      cycleTimer = window.setTimeout(
-        hideAndSchedule,
-        VISIBLE_MS
-      );
-    });
+    input.addEventListener("focus", show);
 
     mic.addEventListener("click", () => {
       showToast(
@@ -410,7 +376,7 @@
 
     close.addEventListener(
       "click",
-      hideAndSchedule
+      closeByCustomer
     );
 
     tab.addEventListener(
@@ -418,11 +384,11 @@
       show
     );
 
-    peek();
+    host.classList.add("is-peeking");
 
-    cycleTimer = window.setTimeout(
+    showTimer = window.setTimeout(
       show,
-      1800
+      INITIAL_SHOW_DELAY_MS
     );
   }
 

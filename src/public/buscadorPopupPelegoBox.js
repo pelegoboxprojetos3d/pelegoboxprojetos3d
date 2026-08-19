@@ -1,3 +1,5 @@
+import { maisBuscadosHoje } from "backend/buscasProjetos.web";
+
 (() => {
   const ROOT_ID = "pelego-search-flyout";
   const TARGET_PATHS = new Set(["/ranking", "/videos-dos-projetos-prontos"]);
@@ -7,6 +9,24 @@
   const FIRST_OPEN_MS = 1800;
   const NEXT_MIN_MS = 26000;
   const NEXT_MAX_MS = 44000;
+
+  const FALLBACK_TERMS = [
+    "Tornado",
+    "Eros",
+    "WPU",
+    "Line Array",
+    "T15",
+    "JBL",
+    "Pioneer",
+    "Selenium",
+    "Oversound",
+    "Canhão",
+    "Subwoofer",
+    "Bass Reflex",
+    "Triton",
+    "15SW",
+    "18SW"
+  ];
 
   let autoOpenTimer = null;
   let autoCloseTimer = null;
@@ -62,15 +82,10 @@
         #${ROOT_ID} .pbx-brand{font-size:10px;font-weight:900}.pbx-brand b{color:#ff3647}
         #${ROOT_ID} .pbx-chevrons{font-size:27px;line-height:.7;font-weight:300}
 
-        #${ROOT_ID} .pbx-panel{position:fixed;left:72px;top:50%;width:min(560px,calc(100vw - 92px));transform:translate(calc(-100% - 82px),-50%);opacity:0;visibility:hidden;pointer-events:auto;transition:transform .68s cubic-bezier(.2,.9,.25,1),opacity .22s ease;z-index:4}
+        #${ROOT_ID} .pbx-panel{position:fixed;left:72px;top:50%;width:min(620px,calc(100vw - 92px));transform:translate(calc(-100% - 82px),-50%);opacity:0;visibility:hidden;pointer-events:auto;transition:transform .68s cubic-bezier(.2,.9,.25,1),opacity .22s ease;z-index:4}
         #${ROOT_ID} .pbx-panel.is-open{transform:translate(0,-50%);opacity:1;visibility:visible}
-        #${ROOT_ID} .pbx-card{position:relative;background:rgba(255,255,255,.985);border:1px solid #d8e6ff;border-radius:28px;padding:30px 28px 20px;box-shadow:0 20px 48px rgba(11,35,91,.22),0 0 30px rgba(36,106,255,.10);overflow:visible}
+        #${ROOT_ID} .pbx-card{position:relative;background:rgba(255,255,255,.985);border:1px solid #d8e6ff;border-radius:28px;padding:30px 28px 22px;box-shadow:0 20px 48px rgba(11,35,91,.22),0 0 30px rgba(36,106,255,.10);overflow:visible}
 
-        /*
-          A arte original do mascote veio de um layout maior e trazia uma pequena
-          sobra azul/branca no canto inferior esquerdo. Mantemos a mesma imagem,
-          mas deslocamos o recorte para a direita e mascaramos só a área inútil.
-        */
         #${ROOT_ID} .pbx-mascot{position:absolute;left:-6px;top:-114px;width:232px;height:194px;overflow:hidden;pointer-events:none;z-index:2;clip-path:polygon(9% 0,100% 0,100% 100%,18% 100%,18% 91%,0 91%,0 19%,9% 19%)}
         #${ROOT_ID} .pbx-mascot img{position:absolute;max-width:none;width:590px;height:auto;left:-72px;top:-2px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.10))}
 
@@ -85,9 +100,11 @@
         #${ROOT_ID} .pbx-mic{width:38px;height:38px;flex:0 0 38px;border:0;border-radius:50%;background:#edf3ff;color:#2468e8;cursor:pointer;display:grid;place-items:center}
         #${ROOT_ID} .pbx-mic svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none}
         #${ROOT_ID} .pbx-submit{height:40px;padding:0 20px;border:0;border-radius:999px;background:linear-gradient(90deg,#185ff1,#1551d8);color:#fff;font-weight:800;cursor:pointer;box-shadow:0 6px 14px rgba(24,91,224,.25)}
-        #${ROOT_ID} .pbx-popular{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:13px;font-size:11px;color:#5b6787}
-        #${ROOT_ID} .pbx-chip{border:1px solid #dbe6fb;border-radius:999px;background:#fff;color:#34466f;padding:6px 10px;font-weight:700;cursor:pointer}
-        #${ROOT_ID} .pbx-tip{margin-top:12px;border-radius:12px;background:#f3f7ff;padding:8px 11px;color:#5d6e91;font-size:11px}
+        #${ROOT_ID} .pbx-popular{display:flex;align-items:flex-start;flex-wrap:wrap;gap:7px;margin-top:15px;font-size:11px;color:#5b6787}
+        #${ROOT_ID} .pbx-popular-label{width:100%;font-size:11px;font-weight:900;letter-spacing:.35px;color:#213768;margin-bottom:1px}
+        #${ROOT_ID} .pbx-chips{display:flex;flex-wrap:wrap;gap:7px;width:100%}
+        #${ROOT_ID} .pbx-chip{border:1px solid #dbe6fb;border-radius:999px;background:#fff;color:#34466f;padding:6px 10px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(27,67,145,.06)}
+        #${ROOT_ID} .pbx-chip:hover{border-color:#80b8ff;color:#1257df;background:#f8fbff}
         #${ROOT_ID} .pbx-toast{position:absolute;left:50%;bottom:-42px;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:#0b1f55;color:#fff;font-size:12px;white-space:nowrap;opacity:0;transition:opacity .2s ease;pointer-events:none}.pbx-toast.show{opacity:1}
         #${ROOT_ID}.pbx-shake .pbx-card{animation:pbxShake .28s linear 1}
         @keyframes pbxShake{0%,100%{transform:translateX(0)}30%{transform:translateX(-6px)}70%{transform:translateX(6px)}}
@@ -116,8 +133,10 @@
             <button class="pbx-mic" type="button" aria-label="Busca por voz em breve"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"></path></svg></button>
             <button class="pbx-submit" type="button">Buscar</button>
           </div>
-          <div class="pbx-popular"><span>Buscas rápidas:</span><button class="pbx-chip" data-term="Tornado">Tornado</button><button class="pbx-chip" data-term="Canhão">Canhão</button><button class="pbx-chip" data-term="JBL">JBL</button><button class="pbx-chip" data-term="Line Array">Line Array</button><button class="pbx-chip" data-term="Subwoofer">Subwoofer</button></div>
-          <div class="pbx-tip">Dica: você pode pesquisar por marca, modelo ou tipo de caixa.</div>
+          <div class="pbx-popular">
+            <div class="pbx-popular-label">OS MAIS PROCURADOS DE HOJE:</div>
+            <div class="pbx-chips"></div>
+          </div>
           <div class="pbx-toast" aria-live="polite"></div>
         </div>
       </section>`;
@@ -131,7 +150,7 @@
     const mic = root.querySelector(".pbx-mic");
     const close = root.querySelector(".pbx-close");
     const toast = root.querySelector(".pbx-toast");
-    const chips = [...root.querySelectorAll(".pbx-chip")];
+    const chipsWrap = root.querySelector(".pbx-chips");
     let pointerInside = false;
     let toastTimer = null;
 
@@ -140,6 +159,47 @@
       toast.textContent = message;
       toast.classList.add("show");
       toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2200);
+    }
+
+    function renderPopularTerms(terms) {
+      const cleaned = (Array.isArray(terms) ? terms : [])
+        .map((item) => typeof item === "string" ? item : item?.termo)
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .slice(0, 15);
+
+      const finalTerms = cleaned.length
+        ? [...cleaned, ...FALLBACK_TERMS.filter((term) => !cleaned.some((current) => current.toLocaleLowerCase("pt-BR") === term.toLocaleLowerCase("pt-BR")))]
+            .slice(0, 15)
+        : FALLBACK_TERMS;
+
+      chipsWrap.innerHTML = "";
+
+      finalTerms.forEach((term) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "pbx-chip";
+        button.textContent = term;
+        button.dataset.term = term;
+        button.addEventListener("click", () => {
+          input.value = term;
+          submitSearch();
+        });
+        chipsWrap.appendChild(button);
+      });
+    }
+
+    async function loadPopularTerms() {
+      renderPopularTerms(FALLBACK_TERMS);
+
+      try {
+        const rows = await maisBuscadosHoje(15);
+        if (Array.isArray(rows) && rows.length) {
+          renderPopularTerms(rows);
+        }
+      } catch (error) {
+        console.warn("Não foi possível carregar os mais procurados de hoje:", error?.message || error);
+      }
     }
 
     function scheduleNext() {
@@ -192,13 +252,10 @@
       }
     });
     mic.addEventListener("click", () => toastMessage("Busca por voz entra na próxima etapa."));
-    chips.forEach((chip) => chip.addEventListener("click", () => {
-      input.value = chip.dataset.term || "";
-      submitSearch();
-    }));
     panel.addEventListener("mouseenter", () => { pointerInside = true; });
     panel.addEventListener("mouseleave", () => { pointerInside = false; });
 
+    loadPopularTerms();
     autoOpenTimer = window.setTimeout(() => openPanel(true), FIRST_OPEN_MS);
   }
 

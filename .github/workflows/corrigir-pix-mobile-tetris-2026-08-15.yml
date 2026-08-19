@@ -7,6 +7,13 @@ on:
     paths:
       - "scripts/corrigir-pix-mobile-tetris-2026-08-15.cjs"
       - ".github/workflows/corrigir-pix-mobile-tetris-2026-08-15.yml"
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
   workflow_dispatch:
 
 permissions:
@@ -24,6 +31,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4

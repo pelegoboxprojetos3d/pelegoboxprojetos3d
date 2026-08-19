@@ -45,6 +45,18 @@ jobs:
           $gzip.Dispose()
           $input.Dispose()
 
+      - name: Persist decoded V3.2 source
+        if: github.event_name == 'push' && github.ref == 'refs/heads/pelego-marker-v33-test'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f tools/pelego-screen-ink/ProgramV32.cs
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) { exit 0 }
+          git commit -m "Expõe fonte V3.2 para ajustes V3.3 [skip ci]"
+          git push
+
       - name: Publish single-file Windows app
         shell: pwsh
         run: |
@@ -78,17 +90,3 @@ jobs:
             tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.2.exe
             tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.2.cmd
           if-no-files-found: error
-
-      - name: Register build run id
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path .build | Out-Null
-          "$env:GITHUB_RUN_ID" | Set-Content .build/pelego-last-run.txt -NoNewline
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .build/pelego-last-run.txt
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) { exit 0 }
-          git commit -m "Registra último build PELEGO [skip ci]"
-          git push

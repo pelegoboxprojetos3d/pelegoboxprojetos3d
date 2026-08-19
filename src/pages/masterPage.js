@@ -21,8 +21,20 @@ $w.onReady(async function () {
           return false;
         }
       };
+
+      if (!window.__PELEGO_WIX_RADIO_MESSAGE_BRIDGE__) {
+        window.__PELEGO_WIX_RADIO_MESSAGE_BRIDGE__ = true;
+        window.addEventListener('message', (event) => {
+          try {
+            if (event?.data?.type === 'PELEGO_OPEN_RADIO') {
+              window.__PELEGO_WIX_NAVIGATE_RADIO__?.();
+            }
+          } catch (_) {}
+        });
+      }
     }
   } catch (_) {}
+
   const pagina = String(wixLocation.path?.[0] || '').toLowerCase();
 
   if (pagina === 'video') {

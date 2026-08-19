@@ -59,12 +59,14 @@ function title(el, html){ if(el) el.innerHTML = html; }
 function applySkin(el){
   const root = el?.shadowRoot;
   if(!root) return;
-  if(!root.getElementById('pb-v548-reference-skin')){
-    const style = document.createElement('style');
+  let style = root.getElementById('pb-v548-reference-skin');
+  if(!style){
+    style = document.createElement('style');
     style.id = 'pb-v548-reference-skin';
-    style.textContent = SKIN;
     root.appendChild(style);
   }
+  if(style.textContent !== SKIN) style.textContent = SKIN;
+  style.dataset.pelegoSkinRev = '20260819-final';
 
   const top = root.querySelectorAll('.grid-top .panel-title');
   title(top[0], `<span class="pb-icon">${CUBE}</span>PROJETOS FEITOS DO ZERO`);
@@ -156,6 +158,38 @@ function patchAnalyzer(Klass){
 
 const RadioClass = customElements.get('pelego-radio');
 patchAnalyzer(RadioClass);
-queueMicrotask(()=>{
-  document.querySelectorAll('pelego-radio').forEach(el=>applySkin(el));
-});
+
+const applyAllSkins = ()=>{
+  document.querySelectorAll('pelego-radio').forEach(el=>{
+    try{ applySkin(el); }catch(_){}
+  });
+};
+const scheduleSkinSweep = ()=>{
+  queueMicrotask(applyAllSkins);
+  requestAnimationFrame(()=>applyAllSkins());
+  setTimeout(applyAllSkins, 80);
+  setTimeout(applyAllSkins, 350);
+};
+
+scheduleSkinSweep();
+
+if(!window.__PELEGO_RADIO_SKIN_OBSERVER__){
+  window.__PELEGO_RADIO_SKIN_OBSERVER__ = new MutationObserver((mutations)=>{
+    for(const mutation of mutations){
+      for(const node of mutation.addedNodes || []){
+        if(node?.nodeType !== 1) continue;
+        if(node.matches?.('pelego-radio') || node.querySelector?.('pelego-radio')){
+          scheduleSkinSweep();
+          return;
+        }
+      }
+    }
+  });
+  window.__PELEGO_RADIO_SKIN_OBSERVER__.observe(document.documentElement,{childList:true,subtree:true});
+  window.addEventListener('pageshow',scheduleSkinSweep);
+  window.addEventListener('popstate',scheduleSkinSweep);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState === 'visible') scheduleSkinSweep();
+  });
+  window.__PELEGO_RADIO_SKIN_HEALER__ = setInterval(applyAllSkins,1200);
+}

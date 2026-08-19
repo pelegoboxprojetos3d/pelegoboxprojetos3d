@@ -1,4 +1,3 @@
-import '../radioPelegoPersistente.js';
 import './pelego-radio-core.js';
 
 const CUBE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Zm0 0v9m8-4.5-8 4.5-8-4.5m8 4.5v9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;

@@ -1,6 +1,5 @@
 import wixLocation from 'wix-location';
 import 'public/buscadorPopupPelegoBoxV2.js';
-import 'public/radioPelegoPersistente.js';
 
 async function ocultarElementoGlobal(id) {
   try {
@@ -12,6 +11,18 @@ async function ocultarElementoGlobal(id) {
 }
 
 $w.onReady(async function () {
+  try {
+    if (typeof window !== 'undefined') {
+      window.__PELEGO_WIX_NAVIGATE_RADIO__ = () => {
+        try {
+          wixLocation.to('/radiopelegobox');
+          return true;
+        } catch (_) {
+          return false;
+        }
+      };
+    }
+  } catch (_) {}
   const pagina = String(wixLocation.path?.[0] || '').toLowerCase();
 
   if (pagina === 'video') {

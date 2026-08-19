@@ -1,10 +1,9 @@
 #define MyAppName "PELEGO Marcador de Tela"
-#define MyAppVersion "3.0.0"
+#define MyAppVersion "3.1.0"
 #define MyAppPublisher "PELEGO"
 #define MyAppExeName "PELEGO.ScreenInk.exe"
 
 [Setup]
-; Mesmo AppId e mesma pasta: instala por cima sem criar aplicativo duplicado.
 AppId={{1A03BFD1-46F8-4AA7-97DE-EB299E07D355}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -14,7 +13,7 @@ DefaultGroupName=PELEGO Marcador de Tela
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=installer-output
-OutputBaseFilename=PELEGO-Marcador-de-Tela-Setup-V3.0
+OutputBaseFilename=PELEGO-Marcador-de-Tela-Setup-V3.1
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

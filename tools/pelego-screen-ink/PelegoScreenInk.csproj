@@ -8,13 +8,13 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyName>PELEGO.ScreenInk</AssemblyName>
-    <RootNamespace>PelegoMarkerV2</RootNamespace>
-    <Version>2.9.0</Version>
+    <RootNamespace>PelegoMarkerV3</RootNamespace>
+    <Version>3.0.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>pelego.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="TimerAlias.cs" />
-    <Compile Include="ProgramV29.cs" />
+    <Compile Include="ProgramV30.cs" />
   </ItemGroup>
 </Project>

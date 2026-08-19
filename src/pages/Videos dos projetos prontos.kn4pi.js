@@ -3,25 +3,7 @@ import wixLocation from "wix-location";
 import wixWindowFrontend from "wix-window-frontend";
 
 // TÍTULO NO WIX: Videos dos projetos prontos
-//
-// R11
-//
-// BOTÃO VERDE:
-// projeto feito do zero -> /checkout-mp
-// envia título da coleção, thumbnail e preço.
-// NÃO depende de SKU nem de codigo_checkout.
-//
-// BOTÃO ROXO:
-// projeto pronto -> /checkoutprojetosprontos
-// usando o código público do projeto.
-//
-// BOTÃO AZUL:
-// vídeo no YouTube.
-//
-// NAVEGAÇÃO:
-// desktop/tablet: 2 projetos por página.
-// celular: 1 projeto por página.
-// usando as setas #setaProjetoAnterior e #setaProjetoProximo.
+// R12 - catálogo por marca + busca básica por texto
 
 const DESKTOP_PROJECTS_PER_PAGE = 2;
 const MOBILE_PROJECTS_PER_PAGE = 1;
@@ -42,11 +24,7 @@ function onlyDigits(value) {
 
 function numberValue(...values) {
   for (const value of values) {
-    if (
-      value === undefined ||
-      value === null ||
-      safe(value) === ""
-    ) {
+    if (value === undefined || value === null || safe(value) === "") {
       continue;
     }
 
@@ -60,31 +38,29 @@ function numberValue(...values) {
   return 0;
 }
 
-function normalizeBrand(value) {
+function decodeQueryValue(value) {
   try {
-    return decodeURIComponent(
-      safe(value)
-    )
+    return decodeURIComponent(safe(value))
       .replace(/\+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
   } catch (error) {
     return safe(value)
       .replace(/\+/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
   }
+}
+
+function normalizeBrand(value) {
+  return decodeQueryValue(value);
 }
 
 function decodeTitle(value) {
   return safe(value)
     .replace(/&amp;quot;/gi, '"')
-    .replace(
-      /&quot;|&#34;|&#x22;/gi,
-      '"'
-    )
-    .replace(
-      /&apos;|&#39;/gi,
-      "'"
-    )
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
     .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim();
@@ -100,11 +76,7 @@ function mediaUrl(value) {
   }
 
   if (typeof value === "object") {
-    return safe(
-      value.src ||
-      value.url ||
-      value.fileUrl
-    );
+    return safe(value.src || value.url || value.fileUrl);
   }
 
   return "";
@@ -126,31 +98,20 @@ function checkoutDisplayTitle(value, itemData = {}) {
 
   const brandWords = new Map();
 
-  [
-    itemData?.marca_1,
-    itemData?.marca_2,
-    itemData?.marca_3
-  ]
+  [itemData?.marca_1, itemData?.marca_2, itemData?.marca_3]
     .filter(Boolean)
     .forEach((brand) => {
       safe(brand)
         .split(/\s+/)
         .filter(Boolean)
         .forEach((word) => {
-          brandWords.set(
-            word.toLocaleLowerCase("pt-BR"),
-            word
-          );
+          brandWords.set(word.toLocaleLowerCase("pt-BR"), word);
         });
     });
 
   return decoded
     .split(/\s+/)
     .map((token, index) => {
-      /*
-        Códigos, potências, medidas e modelos ficam intactos:
-        #1818, 1X, 15SWV3.8, 1900W, 3D, 003 etc.
-      */
       if (/\d/.test(token)) {
         return token;
       }
@@ -167,7 +128,6 @@ function checkoutDisplayTitle(value, itemData = {}) {
       const word = match[2];
       const suffix = match[3];
       const lower = word.toLocaleLowerCase("pt-BR");
-
       const brandWord = brandWords.get(lower);
 
       if (brandWord) {
@@ -192,9 +152,7 @@ function checkoutDisplayTitle(value, itemData = {}) {
 
 function cleanTitle(value) {
   return decodeTitle(value)
-    .split(
-      /\bPELEGO(?:\s*BOX)?\b/i
-    )[0]
+    .split(/\bPELEGO(?:\s*BOX)?\b/i)[0]
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -210,94 +168,47 @@ function projectCode(itemData) {
     return direct;
   }
 
-  const title = cleanTitle(
-    itemData?.titulo_video
-  );
+  const title = cleanTitle(itemData?.titulo_video);
+  const match = title.match(/^\s*#?\s*(\d+)/);
 
-  const match = title.match(
-    /^\s*#?\s*(\d+)/
-  );
-
-  return match
-    ? match[1]
-    : "";
+  return match ? match[1] : "";
 }
 
 function totalProjectValue(itemData) {
-  const measures = numberValue(
-    itemData?.valor_medidas,
-    itemData?.valor_etapa_1
-  );
+  const measures = numberValue(itemData?.valor_medidas, itemData?.valor_etapa_1);
+  const graphics = numberValue(itemData?.valor_graficos, itemData?.valor_etapa_2);
+  const complete = numberValue(itemData?.valor_projeto, itemData?.valor_etapa_3);
 
-  const graphics = numberValue(
-    itemData?.valor_graficos,
-    itemData?.valor_etapa_2
-  );
-
-  const complete = numberValue(
-    itemData?.valor_projeto,
-    itemData?.valor_etapa_3
-  );
-
-  return (
-    measures +
-    graphics +
-    complete
-  );
+  return measures + graphics + complete;
 }
 
-function buildZeroCheckoutUrl({
-  itemData,
-  title,
-  code
-}) {
-  /*
-    Fluxo exclusivo do botão COMPRAR PROJETO FEITO DO ZERO.
-
-    - título: titulo_video completo, incluindo código do questionário;
-    - imagem: thumbnail da coleção;
-    - preço: soma das três etapas;
-    - SKU: não é enviado;
-    - codigo_checkout: não é usado.
-  */
+function buildZeroCheckoutUrl({ itemData, title, code }) {
   const checkoutTitle = checkoutDisplayTitle(
     itemData?.titulo_video || title,
     itemData
   );
 
   const image = mediaUrl(
-    itemData?.thumbnail ||
-    itemData?.imagem ||
-    itemData?.image
+    itemData?.thumbnail || itemData?.imagem || itemData?.image
   );
 
-  const price = totalProjectValue(
-    itemData
-  );
+  const price = totalProjectValue(itemData);
 
   if (!checkoutTitle) {
-    console.error(
-      "titulo_video não informado para o checkout de projeto feito do zero:",
-      {
-        projeto: code,
-        itemId: safe(itemData?._id)
-      }
-    );
-
+    console.error("titulo_video não informado para o checkout de projeto feito do zero:", {
+      projeto: code,
+      itemId: safe(itemData?._id)
+    });
     return "";
   }
 
   if (!(price > 0)) {
-    console.error(
-      "Preço inválido para o checkout de projeto feito do zero:",
-      {
-        projeto: code,
-        itemId: safe(itemData?._id),
-        titulo: checkoutTitle,
-        price
-      }
-    );
-
+    console.error("Preço inválido para o checkout de projeto feito do zero:", {
+      projeto: code,
+      itemId: safe(itemData?._id),
+      titulo: checkoutTitle,
+      price
+    });
     return "";
   }
 
@@ -314,25 +225,11 @@ function buildZeroCheckoutUrl({
   );
 }
 
-function buildReadyCheckoutUrl(
-  itemData
-) {
-  /*
-    Para comprar o projeto pronto, usamos
-    o código público do projeto.
-
-    Exemplo:
-    projeto 1816
-    -> /checkoutprojetosprontos?codigo=1816
-  */
-
-  const code =
-    projectCode(itemData);
+function buildReadyCheckoutUrl(itemData) {
+  const code = projectCode(itemData);
 
   const brand =
-    normalizeBrand(
-      wixLocation.query.marca
-    ) ||
+    normalizeBrand(wixLocation.query.marca) ||
     normalizeBrand(itemData?.marca_1) ||
     normalizeBrand(itemData?.marca_2) ||
     normalizeBrand(itemData?.marca_3);
@@ -344,40 +241,122 @@ function buildReadyCheckoutUrl(
   return (
     "/checkoutprojetosprontos" +
     `?codigo=${encodeURIComponent(code)}` +
-    (brand
-      ? `&marca=${encodeURIComponent(brand)}`
-      : "")
+    (brand ? `&marca=${encodeURIComponent(brand)}` : "")
   );
 }
 
-async function applyBrandFilter() {
-  const brand = normalizeBrand(
-    wixLocation.query.marca
-  );
+const SEARCH_STOPWORDS = new Set([
+  "a", "as", "o", "os", "um", "uma", "uns", "umas",
+  "de", "da", "das", "do", "dos", "e", "em", "no", "na", "nos", "nas",
+  "para", "pra", "pro", "por", "com", "sem", "quero", "queria", "preciso",
+  "procuro", "procurando", "gostaria", "me", "meu", "minha", "meus", "minhas",
+  "eu", "que", "qual", "tipo", "tem", "ter", "caixa"
+]);
 
-  if (!brand) {
-    return;
+function searchTerms(value) {
+  return decodeQueryValue(value)
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9à-öø-ÿ#.'\"-]+/gi, " ")
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .filter((term) => !SEARCH_STOPWORDS.has(term))
+    .filter((term) => term.length > 1 || /\d/.test(term))
+    .slice(0, 6);
+}
+
+function termVariants(term) {
+  const variants = new Set([
+    term,
+    term.toLocaleUpperCase("pt-BR"),
+    term.charAt(0).toLocaleUpperCase("pt-BR") + term.slice(1)
+  ]);
+
+  const accentMap = {
+    canhao: ["canhão", "CANHÃO", "Canhão"],
+    cornetao: ["cornetão", "CORNETÃO", "Cornetão"],
+    trio: ["trio", "TRIO", "Trio"]
+  };
+
+  (accentMap[term] || []).forEach((item) => variants.add(item));
+  return [...variants];
+}
+
+function containsAnyField(variant) {
+  return wixData
+    .filter()
+    .contains("titulo_video", variant)
+    .or(wixData.filter().contains("marca_1", variant))
+    .or(wixData.filter().contains("marca_2", variant))
+    .or(wixData.filter().contains("marca_3", variant));
+}
+
+function filterForTerm(term) {
+  const variants = termVariants(term);
+  let filter = containsAnyField(variants[0]);
+
+  for (let index = 1; index < variants.length; index += 1) {
+    filter = filter.or(containsAnyField(variants[index]));
   }
 
-  $w("#txtTituloPagina").text =
-    `Projetos prontos para alto-falantes da marca ${brand}`;
+  return filter;
+}
 
-  const filter = wixData
+function buildSearchFilter(value) {
+  const terms = searchTerms(value);
+
+  if (!terms.length) {
+    return null;
+  }
+
+  let filter = filterForTerm(terms[0]);
+
+  for (let index = 1; index < terms.length; index += 1) {
+    filter = filter.and(filterForTerm(terms[index]));
+  }
+
+  return filter;
+}
+
+function buildBrandFilter(brand) {
+  if (!brand) {
+    return null;
+  }
+
+  return wixData
     .filter()
     .eq("marca_1", brand)
-    .or(
-      wixData
-        .filter()
-        .eq("marca_2", brand)
-    )
-    .or(
-      wixData
-        .filter()
-        .eq("marca_3", brand)
-    );
+    .or(wixData.filter().eq("marca_2", brand))
+    .or(wixData.filter().eq("marca_3", brand));
+}
 
-  await $w("#dataset1")
-    .setFilter(filter);
+async function applyCatalogFilter() {
+  const brand = normalizeBrand(wixLocation.query.marca);
+  const search = decodeQueryValue(wixLocation.query.busca);
+
+  const brandFilter = buildBrandFilter(brand);
+  const searchFilter = buildSearchFilter(search);
+
+  let filter = null;
+
+  if (brandFilter && searchFilter) {
+    filter = brandFilter.and(searchFilter);
+  } else {
+    filter = brandFilter || searchFilter;
+  }
+
+  if (search) {
+    $w("#txtTituloPagina").text = brand
+      ? `Projetos encontrados para sua busca: “${search}” • ${brand}`
+      : `Projetos encontrados para sua busca: “${search}”`;
+  } else if (brand) {
+    $w("#txtTituloPagina").text =
+      `Projetos prontos para alto-falantes da marca ${brand}`;
+  }
+
+  if (filter) {
+    await $w("#dataset1").setFilter(filter);
+  }
 }
 
 function updateNavigationState() {
@@ -386,22 +365,15 @@ function updateNavigationState() {
   const nextButton = $w("#setaProjetoProximo");
 
   try {
-    if (dataset.hasPreviousPage()) {
-      previousButton.enable();
-    } else {
-      previousButton.disable();
-    }
+    dataset.hasPreviousPage()
+      ? previousButton.enable()
+      : previousButton.disable();
 
-    if (dataset.hasNextPage()) {
-      nextButton.enable();
-    } else {
-      nextButton.disable();
-    }
+    dataset.hasNextPage()
+      ? nextButton.enable()
+      : nextButton.disable();
   } catch (error) {
-    console.warn(
-      "Não foi possível atualizar o estado das setas:",
-      error?.message || error
-    );
+    console.warn("Não foi possível atualizar o estado das setas:", error?.message || error);
   }
 }
 
@@ -410,188 +382,114 @@ function configureProjectNavigation() {
   const previousButton = $w("#setaProjetoAnterior");
   const nextButton = $w("#setaProjetoProximo");
 
-  previousButton.onClick(
-    async () => {
-      if (!dataset.hasPreviousPage()) {
-        updateNavigationState();
-        return;
-      }
-
-      previousButton.disable();
-      nextButton.disable();
-
-      try {
-        await dataset.previousPage();
-      } catch (error) {
-        console.error(
-          "Erro ao voltar projetos:",
-          error?.message || error,
-          error
-        );
-      } finally {
-        updateNavigationState();
-      }
+  previousButton.onClick(async () => {
+    if (!dataset.hasPreviousPage()) {
+      updateNavigationState();
+      return;
     }
-  );
 
-  nextButton.onClick(
-    async () => {
-      if (!dataset.hasNextPage()) {
-        updateNavigationState();
-        return;
-      }
+    previousButton.disable();
+    nextButton.disable();
 
-      previousButton.disable();
-      nextButton.disable();
-
-      try {
-        await dataset.nextPage();
-      } catch (error) {
-        console.error(
-          "Erro ao avançar projetos:",
-          error?.message || error,
-          error
-        );
-      } finally {
-        updateNavigationState();
-      }
+    try {
+      await dataset.previousPage();
+    } catch (error) {
+      console.error("Erro ao voltar projetos:", error?.message || error, error);
+    } finally {
+      updateNavigationState();
     }
-  );
+  });
+
+  nextButton.onClick(async () => {
+    if (!dataset.hasNextPage()) {
+      updateNavigationState();
+      return;
+    }
+
+    previousButton.disable();
+    nextButton.disable();
+
+    try {
+      await dataset.nextPage();
+    } catch (error) {
+      console.error("Erro ao avançar projetos:", error?.message || error, error);
+    } finally {
+      updateNavigationState();
+    }
+  });
 
   updateNavigationState();
 }
 
 function configureRepeater() {
-  $w("#repeater1").onItemReady(
-    ($item, itemData) => {
-      const title = cleanTitle(
-        itemData?.titulo_video
-      );
+  $w("#repeater1").onItemReady(($item, itemData) => {
+    const title = cleanTitle(itemData?.titulo_video);
+    const code = projectCode(itemData);
 
-      const code = projectCode(
-        itemData
-      );
+    $item("#text103").text = title;
 
-      $item("#text103").text =
-        title;
+    $item("#checkVideo").checked = false;
+    $item("#checkVideo").hide();
 
-      // ========================================
-      // BOTÃO AZUL — VÍDEO
-      // ========================================
+    const videoUrl = safe(itemData?.link_video);
 
-      $item("#checkVideo").checked =
-        false;
+    if (videoUrl) {
+      $item("#btnProjetos").show();
+      $item("#btnProjetos").enable();
+      $item("#btnProjetos").link = videoUrl;
+      $item("#btnProjetos").target = "_blank";
 
-      $item("#checkVideo").hide();
-
-      const videoUrl = safe(
-        itemData?.link_video
-      );
-
-      if (videoUrl) {
-        $item("#btnProjetos").show();
-        $item("#btnProjetos").enable();
-
-        $item("#btnProjetos").link =
-          videoUrl;
-
-        $item("#btnProjetos").target =
-          "_blank";
-
-        $item("#btnProjetos").onClick(
-          () => {
-            $item("#checkVideo").show("fade");
-
-            $item("#checkVideo").checked =
-              true;
-          }
-        );
-      } else {
-        $item("#btnProjetos").disable();
-      }
-
-      // ========================================
-      // BOTÃO VERDE — PROJETO FEITO DO ZERO
-      // ID: #btnOrcamento
-      //
-      // título = titulo_video completo da coleção
-      // imagem = thumbnail
-      // preço = soma dos valores configurados
-      // sem SKU / sem codigo_checkout
-      // ========================================
-
-      const zeroCheckoutUrl =
-        buildZeroCheckoutUrl({
-          itemData,
-          title,
-          code
-        });
-
-      $item("#btnOrcamento").show();
-
-      if (zeroCheckoutUrl) {
-        $item("#btnOrcamento").enable();
-
-        $item("#btnOrcamento").link =
-          zeroCheckoutUrl;
-
-        $item("#btnOrcamento").target =
-          "_self";
-      } else {
-        $item("#btnOrcamento").disable();
-        $item("#btnOrcamento").link = "";
-      }
-
-      // ========================================
-      // BOTÃO ROXO — PROJETO PRONTO
-      // ID: #buttonCOMPRAR
-      // ========================================
-
-      const readyCheckoutUrl =
-        buildReadyCheckoutUrl(
-          itemData
-        );
-
-      $item("#buttonCOMPRAR").show();
-
-      if (readyCheckoutUrl) {
-        $item("#buttonCOMPRAR").enable();
-
-        $item("#buttonCOMPRAR").link =
-          readyCheckoutUrl;
-
-        $item("#buttonCOMPRAR").target =
-          "_self";
-      } else {
-        $item("#buttonCOMPRAR").disable();
-      }
+      $item("#btnProjetos").onClick(() => {
+        $item("#checkVideo").show("fade");
+        $item("#checkVideo").checked = true;
+      });
+    } else {
+      $item("#btnProjetos").disable();
     }
-  );
+
+    const zeroCheckoutUrl = buildZeroCheckoutUrl({ itemData, title, code });
+
+    $item("#btnOrcamento").show();
+
+    if (zeroCheckoutUrl) {
+      $item("#btnOrcamento").enable();
+      $item("#btnOrcamento").link = zeroCheckoutUrl;
+      $item("#btnOrcamento").target = "_self";
+    } else {
+      $item("#btnOrcamento").disable();
+      $item("#btnOrcamento").link = "";
+    }
+
+    const readyCheckoutUrl = buildReadyCheckoutUrl(itemData);
+
+    $item("#buttonCOMPRAR").show();
+
+    if (readyCheckoutUrl) {
+      $item("#buttonCOMPRAR").enable();
+      $item("#buttonCOMPRAR").link = readyCheckoutUrl;
+      $item("#buttonCOMPRAR").target = "_self";
+    } else {
+      $item("#buttonCOMPRAR").disable();
+    }
+  });
 }
 
-$w.onReady(
-  async function () {
-    configureRepeater();
+$w.onReady(async function () {
+  configureRepeater();
 
-    try {
-      await new Promise(
-        (resolve) => {
-          $w("#dataset1").onReady(resolve);
-        }
-      );
+  try {
+    await new Promise((resolve) => {
+      $w("#dataset1").onReady(resolve);
+    });
 
-      await $w("#dataset1")
-        .setPageSize(projectsPerPage());
-
-      await applyBrandFilter();
-
-      configureProjectNavigation();
-    } catch (error) {
-      console.error(
-        "Erro ao preparar projetos e navegação:",
-        error?.message || error,
-        error
-      );
-    }
+    await $w("#dataset1").setPageSize(projectsPerPage());
+    await applyCatalogFilter();
+    configureProjectNavigation();
+  } catch (error) {
+    console.error(
+      "Erro ao preparar projetos e navegação:",
+      error?.message || error,
+      error
+    );
   }
-);
+});

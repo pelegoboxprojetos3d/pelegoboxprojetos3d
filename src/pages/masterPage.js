@@ -1,11 +1,27 @@
 import wixLocation from 'wix-location';
 
-$w.onReady(function () {
+async function ocultarElementoGlobal(id) {
+  try {
+    const elemento = $w(id);
+    if (!elemento) return;
+    if (typeof elemento.hide === 'function') await elemento.hide();
+    if (typeof elemento.collapse === 'function') await elemento.collapse();
+  } catch (_) {}
+}
 
-  const pagina = wixLocation.path[0];
+$w.onReady(async function () {
+  const pagina = String(wixLocation.path?.[0] || '').toLowerCase();
 
-  if (pagina === "video") {
-    $w('#searchAppController3').hide();
+  if (pagina === 'video') {
+    try {
+      $w('#searchAppController3').hide();
+    } catch (_) {}
   }
 
+  if (pagina === 'radiopelegobox') {
+    await Promise.allSettled([
+      ocultarElementoGlobal('#botaoradio'),
+      ocultarElementoGlobal('#image107'),
+    ]);
+  }
 });

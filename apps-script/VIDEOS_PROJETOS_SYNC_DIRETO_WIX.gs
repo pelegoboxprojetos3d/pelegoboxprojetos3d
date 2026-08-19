@@ -226,7 +226,7 @@ function pbxCriarPatchVideos_(sheet, cabecalhos, linha) {
     mods.push({
       fieldPath: campo,
       action: 'SET_FIELD',
-      setFieldOptions: { value }
+      setFieldOptions: { value: valor }
     });
   };
 

@@ -1,0 +1,36 @@
+name: Aplicar import persistente Rádio Pelego agora
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/aplicar-import-radio-persistente-agora-2026-08-19.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Aplicar import
+        run: node scripts/corrigir-contexto-radio-persistente-2026-08-19.cjs
+      - name: Gravar
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          grep -q "import '../radioPelegoPersistente.js';" "$file"
+          if git diff --quiet -- "$file"; then
+            echo 'Import já aplicado.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$file"
+            git commit -m 'Carregar motor persistente no contexto da Rádio Pelego'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi

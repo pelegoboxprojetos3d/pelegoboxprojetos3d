@@ -65,8 +65,15 @@
         #${ROOT_ID} .pbx-panel{position:fixed;left:72px;top:50%;width:min(560px,calc(100vw - 92px));transform:translate(calc(-100% - 82px),-50%);opacity:0;visibility:hidden;pointer-events:auto;transition:transform .68s cubic-bezier(.2,.9,.25,1),opacity .22s ease;z-index:4}
         #${ROOT_ID} .pbx-panel.is-open{transform:translate(0,-50%);opacity:1;visibility:visible}
         #${ROOT_ID} .pbx-card{position:relative;background:rgba(255,255,255,.985);border:1px solid #d8e6ff;border-radius:28px;padding:30px 28px 20px;box-shadow:0 20px 48px rgba(11,35,91,.22),0 0 30px rgba(36,106,255,.10);overflow:visible}
-        #${ROOT_ID} .pbx-mascot{position:absolute;left:-12px;top:-112px;width:225px;height:190px;overflow:hidden;pointer-events:none;z-index:2}
-        #${ROOT_ID} .pbx-mascot img{position:absolute;max-width:none;width:590px;height:auto;left:-38px;top:-2px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.10))}
+
+        /*
+          A arte original do mascote veio de um layout maior e trazia uma pequena
+          sobra azul/branca no canto inferior esquerdo. Mantemos a mesma imagem,
+          mas deslocamos o recorte para a direita e mascaramos só a área inútil.
+        */
+        #${ROOT_ID} .pbx-mascot{position:absolute;left:-6px;top:-114px;width:232px;height:194px;overflow:hidden;pointer-events:none;z-index:2;clip-path:polygon(9% 0,100% 0,100% 100%,18% 100%,18% 91%,0 91%,0 19%,9% 19%)}
+        #${ROOT_ID} .pbx-mascot img{position:absolute;max-width:none;width:590px;height:auto;left:-72px;top:-2px;filter:drop-shadow(0 8px 10px rgba(0,0,0,.10))}
+
         #${ROOT_ID} .pbx-close{position:absolute;right:14px;top:14px;width:34px;height:34px;border:0;border-radius:50%;background:#eef3ff;color:#183b86;font-size:24px;line-height:1;cursor:pointer}
         #${ROOT_ID} .pbx-head{padding-left:165px;min-height:72px;padding-right:26px}
         #${ROOT_ID} .pbx-title{margin:0;font-size:30px;line-height:1.05;font-weight:900;color:#0b1f55}.pbx-title span{color:#1568ef}

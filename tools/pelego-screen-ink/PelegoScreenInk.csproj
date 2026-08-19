@@ -9,12 +9,12 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AssemblyName>PELEGO.ScreenInk</AssemblyName>
     <RootNamespace>PelegoMarkerV2</RootNamespace>
-    <Version>2.8.0</Version>
+    <Version>2.9.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>pelego.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="TimerAlias.cs" />
-    <Compile Include="ProgramV28.cs" />
+    <Compile Include="ProgramV29.cs" />
   </ItemGroup>
 </Project>

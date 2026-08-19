@@ -74,3 +74,5 @@ jobs:
           echo
           test "$status" -ge 200 -a "$status" -lt 300
           echo "Publicado: criação do Pix retorna rápido e o polling continua buscando QR/EMV."
+
+# trigger manual 2026-08-19

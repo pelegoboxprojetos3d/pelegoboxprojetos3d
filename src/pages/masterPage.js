@@ -1,5 +1,4 @@
 import wixLocation from 'wix-location';
-import 'public/buscadorPopupPelegoBoxV2.js';
 
 async function ocultarElementoGlobal(id) {
   try {

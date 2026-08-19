@@ -122,7 +122,9 @@ async function enrich(result = {}) {
 }
 
 export async function criarCobrancaPixTransparente(input = {}) {
-  return enrich(await criarBase(input));
+  // PIX_CREATE_NO_EXTRA_DEEP_READ_V1: criação retorna assim que o core cria a cobrança.
+  // A leitura profunda fica somente no consultarCobrancaPix, sem bloquear a tela inicial.
+  return criarBase(input);
 }
 
 export async function consultarCobrancaPix(input = {}) {

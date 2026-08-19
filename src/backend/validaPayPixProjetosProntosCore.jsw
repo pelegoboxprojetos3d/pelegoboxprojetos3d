@@ -667,7 +667,9 @@ export async function criarCobrancaPixTransparente(input = {}) {
 
     const immediate = publicCharge(checkoutId, chargeId, created || {}, valor);
     if (immediate.emv || immediate.approved) return immediate;
-    return readChargeReady(checkoutId, chargeId, valor, 4);
+    // PIX_CREATE_FAST_RETURN_V1: não segura o clique esperando várias leituras do provedor.
+    // O polling já consulta a cobrança a cada 2s e continua responsável por obter QR/EMV.
+    return immediate;
 
   } catch (error) {
     console.error("ERRO PIX VALIDAPAY:", error?.message || error, error);

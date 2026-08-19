@@ -3,7 +3,7 @@ import wixLocation from "wix-location";
 import wixWindowFrontend from "wix-window-frontend";
 
 // TÍTULO NO WIX: Videos dos projetos prontos
-// R12 - catálogo por marca + busca básica por texto
+// R13 - catálogo por marca + busca global por texto
 
 const DESKTOP_PROJECTS_PER_PAGE = 2;
 const MOBILE_PROJECTS_PER_PAGE = 1;
@@ -331,31 +331,39 @@ function buildBrandFilter(brand) {
 }
 
 async function applyCatalogFilter() {
+  const dataset = $w("#dataset1");
   const brand = normalizeBrand(wixLocation.query.marca);
   const search = decodeQueryValue(wixLocation.query.busca);
 
   const brandFilter = buildBrandFilter(brand);
   const searchFilter = buildSearchFilter(search);
 
-  let filter = null;
-
-  if (brandFilter && searchFilter) {
-    filter = brandFilter.and(searchFilter);
-  } else {
-    filter = brandFilter || searchFilter;
-  }
+  // Regra do buscador: uma nova busca sempre manda no catálogo inteiro.
+  // Se o cliente entrou por JBL e pesquisar Eros/Pioneer/etc., a marca anterior é ignorada.
+  const filter = search
+    ? searchFilter
+    : brandFilter;
 
   if (search) {
-    $w("#txtTituloPagina").text = brand
-      ? `Projetos encontrados para sua busca: “${search}” • ${brand}`
-      : `Projetos encontrados para sua busca: “${search}”`;
+    $w("#txtTituloPagina").text =
+      `Projetos encontrados para sua busca: “${search}”`;
   } else if (brand) {
     $w("#txtTituloPagina").text =
       `Projetos prontos para alto-falantes da marca ${brand}`;
   }
 
-  if (filter) {
-    await $w("#dataset1").setFilter(filter);
+  // Sempre substitui qualquer filtro anterior, inclusive quando o filtro novo é vazio.
+  await dataset.setFilter(filter || wixData.filter());
+
+  // Garante que uma busca com poucos resultados nunca fique presa numa página antiga.
+  // loadPage(1) também atualiza os elementos conectados ao dataset.
+  try {
+    await dataset.loadPage(1);
+  } catch (error) {
+    console.warn(
+      "Não foi possível voltar o catálogo para a primeira página:",
+      error?.message || error
+    );
   }
 }
 

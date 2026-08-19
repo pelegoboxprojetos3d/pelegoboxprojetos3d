@@ -1,6 +1,6 @@
 (() => {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  if (window.PelegoRadioPersistent?.version === '2.0.0') return;
+  if (window.PelegoRadioPersistent) return;
 
   const VERSION = '2.0.0';
   const CHANNEL_NAME = 'pelego-radio-persistent-v2';

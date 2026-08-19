@@ -1,9 +1,10 @@
 import wixData from "wix-data";
 import wixLocation from "wix-location";
+import wixWindowFrontend from "wix-window-frontend";
 
 // TÍTULO NO WIX: Videos dos projetos prontos
 //
-// R10
+// R11
 //
 // BOTÃO VERDE:
 // projeto feito do zero -> /checkout-mp
@@ -18,10 +19,18 @@ import wixLocation from "wix-location";
 // vídeo no YouTube.
 //
 // NAVEGAÇÃO:
-// 2 projetos por página, usando as setas
-// #setaProjetoAnterior e #setaProjetoProximo.
+// desktop/tablet: 2 projetos por página.
+// celular: 1 projeto por página.
+// usando as setas #setaProjetoAnterior e #setaProjetoProximo.
 
-const PROJECTS_PER_PAGE = 2;
+const DESKTOP_PROJECTS_PER_PAGE = 2;
+const MOBILE_PROJECTS_PER_PAGE = 1;
+
+function projectsPerPage() {
+  return wixWindowFrontend.formFactor === "Mobile"
+    ? MOBILE_PROJECTS_PER_PAGE
+    : DESKTOP_PROJECTS_PER_PAGE;
+}
 
 function safe(value) {
   return String(value ?? "").trim();
@@ -572,7 +581,7 @@ $w.onReady(
       );
 
       await $w("#dataset1")
-        .setPageSize(PROJECTS_PER_PAGE);
+        .setPageSize(projectsPerPage());
 
       await applyBrandFilter();
 

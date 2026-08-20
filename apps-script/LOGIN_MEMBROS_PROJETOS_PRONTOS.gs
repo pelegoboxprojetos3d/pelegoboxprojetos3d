@@ -65,8 +65,8 @@ function pbxInstalarMonitorLoginsProjetosProntos() {
 }
 
 function pbxMonitorarLoginsProjetosProntos() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) return { ok: true, skipped: 'LOCKED' };
+  const lock = LockService.getUserLock();
+  if (!lock.tryLock(10000)) return { ok: true, skipped: 'LOGIN_MONITOR_LOCKED' };
 
   try {
     const apiKey = obterWixApiKey_();

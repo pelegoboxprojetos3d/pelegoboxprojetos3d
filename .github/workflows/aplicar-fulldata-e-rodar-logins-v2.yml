@@ -1,0 +1,228 @@
+name: Aplicar FullData e Rodar Monitor V2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/aplicar-fulldata-e-rodar-logins-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm install -g @google/clasp@3.3.0
+
+      - name: Restore clasp login
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+      - name: Replace Members API with Members FullData
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps-script/LOGIN_MEMBROS_PROJETOS_PRONTOS.gs')
+          s = p.read_text(encoding='utf-8')
+          start_marker = 'function pbxBuscarTodosMembrosWix_(apiKey) {'
+          end_marker = 'function pbxPrepararAbasLoginProjetosProntos_(ss) {'
+          start = s.index(start_marker)
+          end = s.index(end_marker, start)
+          block = r'''function pbxBuscarTodosMembrosWix_(apiKey) {
+  const url = 'https://www.wixapis.com/wix-data/v2/items/query';
+  const todos = [];
+  let offset = 0;
+  const limit = 100;
+
+  while (true) {
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: apiKey,
+        'wix-site-id': PBX_LOGIN_WIX_SITE_ID,
+        Accept: 'application/json'
+      },
+      payload: JSON.stringify({
+        dataCollectionId: 'Members/FullData',
+        query: { paging: { limit: limit, offset: offset } }
+      }),
+      muteHttpExceptions: true
+    });
+
+    const status = response.getResponseCode();
+    const texto = response.getContentText();
+    if (status < 200 || status >= 300) {
+      throw new Error(`Wix Members/FullData: HTTP ${status} - ${texto.slice(0, 800)}`);
+    }
+
+    let body = {};
+    try { body = texto ? JSON.parse(texto) : {}; }
+    catch (_) { throw new Error('Wix Members/FullData: resposta JSON invalida.'); }
+
+    const itens = Array.isArray(body.dataItems)
+      ? body.dataItems
+      : (body.data && Array.isArray(body.data.dataItems) ? body.data.dataItems : []);
+
+    itens.forEach(item => {
+      const d = item && item.data ? item.data : (item || {});
+      const id = String(item.id || d._id || '').trim();
+      if (!id) return;
+
+      const fotoRaw = d.profilePhoto || '';
+      let fotoUrl = '';
+      if (fotoRaw && typeof fotoRaw === 'object') fotoUrl = String(fotoRaw.url || fotoRaw.src || fotoRaw.id || '');
+      else fotoUrl = String(fotoRaw || '');
+
+      const telefone = String(d.phone || '').trim();
+      const emailContato = String(d.email || '').trim();
+
+      todos.push({
+        id: id,
+        loginEmail: String(d.loginEmail || ''),
+        loginEmailVerified: '',
+        status: String(d.status || ''),
+        contactId: '',
+        contact: {
+          contactId: '',
+          firstName: String(d.firstName || ''),
+          lastName: String(d.lastName || ''),
+          phones: telefone ? [telefone] : [],
+          emails: emailContato ? [emailContato] : [],
+          addresses: [],
+          customFields: {}
+        },
+        profile: {
+          nickname: String(d.nickname || ''),
+          slug: String(d.slug || ''),
+          title: String(d.title || ''),
+          photo: { url: fotoUrl }
+        },
+        privacyStatus: String(d.privacyStatus || ''),
+        activityStatus: String(d.activityStatus || ''),
+        createdDate: pbxWixDataIsoLogin_(d._createdDate || item.createdDate),
+        updatedDate: pbxWixDataIsoLogin_(d._updatedDate || item.updatedDate),
+        lastLoginDate: pbxWixDataIsoLogin_(d.lastLoginDate)
+      });
+    });
+
+    offset += itens.length;
+    const total = Number(
+      (body.pagingMetadata && body.pagingMetadata.total) ||
+      (body.metadata && body.metadata.total) ||
+      0
+    );
+
+    if (!itens.length || itens.length < limit || (total > 0 && offset >= total)) break;
+  }
+
+  return todos;
+}
+
+function pbxWixDataIsoLogin_(valor) {
+  if (!valor) return '';
+  if (typeof valor === 'string') return valor;
+  if (typeof valor === 'object') {
+    if (valor.$date) return String(valor.$date);
+    if (valor.date) return String(valor.date);
+  }
+  return String(valor || '');
+}
+
+'''
+          p.write_text(s[:start] + block + s[end:], encoding='utf-8')
+          PY
+
+      - name: Commit permanent source patch
+        run: |
+          git config user.name "PELEGO BOX Login Monitor"
+          git config user.email "pelegobox82@gmail.com"
+          git add apps-script/LOGIN_MEMBROS_PROJETOS_PRONTOS.gs
+          git diff --cached --check
+          git commit -m "fix: ler logins pela Members FullData"
+          git push origin HEAD:main
+
+      - name: Deploy Apps Script and execute monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(python - <<'PY'
+          import secrets
+          print(secrets.token_urlsafe(32))
+          PY
+          )"
+          DEPLOY_ID=""
+          cleanup() {
+            set +e
+            if [ -n "${DEPLOY_ID:-}" ]; then clasp delete-deployment "$DEPLOY_ID" >/dev/null 2>&1 || true; fi
+            git checkout -- apps-script/appsscript.json >/dev/null 2>&1 || true
+            rm -f apps-script/PBX_LOGIN_FULLDATA_RUN_WEB.gs
+            clasp push --force >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          clasp push --force
+
+          cat > apps-script/PBX_LOGIN_FULLDATA_RUN_WEB.gs <<EOF
+          function doGet(e) {
+            var token = e && e.parameter ? String(e.parameter.token || '') : '';
+            if (token !== '${TOKEN}') return ContentService.createTextOutput(JSON.stringify({ok:false,error:'FORBIDDEN'})).setMimeType(ContentService.MimeType.JSON);
+            try {
+              var result = pbxMonitorarLoginsProjetosProntos();
+              return ContentService.createTextOutput(JSON.stringify({ok:true,result:result})).setMimeType(ContentService.MimeType.JSON);
+            } catch (err) {
+              return ContentService.createTextOutput(JSON.stringify({ok:false,error:String(err && err.message ? err.message : err),stack:String(err && err.stack ? err.stack : '')})).setMimeType(ContentService.MimeType.JSON);
+            }
+          }
+          EOF
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('apps-script/appsscript.json')
+          obj=json.loads(p.read_text(encoding='utf-8'))
+          obj['webapp']={'access':'ANYONE_ANONYMOUS','executeAs':'USER_DEPLOYING'}
+          p.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+          clasp push --force
+          RAW="$(clasp --json create-deployment --description "PBX FullData login run ${GITHUB_SHA}" 2>&1 || true)"
+          DEPLOY_ID="$(printf '%s' "$RAW" | python -c "import sys,json; s=sys.stdin.read();
+          try:
+           o=json.loads(s); print(o.get('deploymentId','') if isinstance(o,dict) else '')
+          except Exception: print('')" 2>/dev/null | tail -1)"
+          if [ -z "$DEPLOY_ID" ]; then DEPLOY_ID="$(printf '%s' "$RAW" | grep -oE 'AKfy[a-zA-Z0-9_-]+' | tail -1 || true)"; fi
+          test -n "$DEPLOY_ID"
+
+          RESPONSE="$(curl -fsSL --retry 6 --retry-delay 3 --retry-all-errors "https://script.google.com/macros/s/${DEPLOY_ID}/exec?token=${TOKEN}" || true)"
+          printf '%s\n' "$RESPONSE"
+          mkdir -p .deploy
+          printf 'FullData login monitor run: %s\nDeployment: %s\nResponse: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$DEPLOY_ID" "$RESPONSE" > .deploy/login-monitor-fulldata-run.txt
+          printf '%s' "$RESPONSE" | grep -q '"ok":true'
+          printf '%s' "$RESPONSE" | grep -q '"membros":'
+
+          cleanup
+          trap - EXIT
+
+      - name: Record success
+        run: |
+          git pull --rebase origin main
+          git config user.name "PELEGO BOX Login Monitor"
+          git config user.email "pelegobox82@gmail.com"
+          git add .deploy/login-monitor-fulldata-run.txt
+          git commit -m "chore: confirmar carga de logins via FullData" || exit 0
+          git push origin HEAD:main

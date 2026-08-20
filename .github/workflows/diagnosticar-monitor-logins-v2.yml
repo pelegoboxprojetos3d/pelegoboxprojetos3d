@@ -70,7 +70,7 @@ jobs:
           PY
 
           clasp push --force
-          RAW="$(clasp --json create-deployment --description "PBX login diag v2 ${GITHUB_SHA}" 2>&1 || true)"
+          RAW="$(clasp --json create-deployment --description "PBX login diag FullData ${GITHUB_SHA}" 2>&1 || true)"
           DEPLOY_ID="$(printf '%s' "$RAW" | python -c "import sys,json; s=sys.stdin.read();
           try:
            o=json.loads(s); print(o.get('deploymentId','') if isinstance(o,dict) else '')
@@ -90,3 +90,5 @@ jobs:
           git add .deploy/login-monitor-diagnostic-v2.txt
           git commit -m "diag: registrar resposta do monitor de logins" || exit 0
           git push origin HEAD:main
+
+# rerun FullData 2026-08-20

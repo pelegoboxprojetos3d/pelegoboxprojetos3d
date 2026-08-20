@@ -1,0 +1,3 @@
+Login monitor diagnostic V2: 2026-08-20T16:37:15Z
+Deployment: AKfycbxallZ67IvqKifJk8bbX6mQyP_FZ39jxePk3SLLI6zmM4Pk2flCqHYmK3HlPoWKDVE
+Response: {"ok":false,"error":"Wix Members: HTTP 403 - {\"message\":\"MEMBERS.MEMBER_READ\",\"details\":{\"applicationError\":{\"code\":\"PERMISSION_DENIED\"}}}","stack":"Error: Wix Members: HTTP 403 - {\"message\":\"MEMBERS.MEMBER_READ\",\"details\":{\"applicationError\":{\"code\":\"PERMISSION_DENIED\"}}}\n    at pbxBuscarTodosMembrosWix_ (LOGIN_MEMBROS_PROJETOS_PRONTOS:155:13)\n    at pbxMonitorarLoginsProjetosProntos (LOGIN_MEMBROS_PROJETOS_PRONTOS:75:21)\n    at doGet (PBX_LOGIN_DIAG_WEB:5:18)\n    at __GS_INTERNAL_top_function_call__.gs:1:8"}

@@ -1,15 +1,8 @@
 /**
- * PELEGO BOX - CORREÇÃO CIRÚRGICA VIDEOS_PROJETOS -> WIX
+ * PELEGO BOX - VIDEOS_PROJETOS -> WIX DIRETO
  *
- * Objetivos:
- * 1) toda edição manual de preço na aba Videos_projetos atualiza o Wix DIRETO;
- * 2) novas linhas vindas do Make têm preco_total arredondado para múltiplo de R$ 5;
- * 3) valor_etapa_1/2/3 são calculados na planilha e enviados direto ao Wix;
- * 4) não depende do cenário 036 para sincronizar preços;
- * 5) mantém a aba Clientes usando a sincronização direta que já existia;
- * 6) nova linha sem ID é criada/vinculada no Wix pela própria planilha.
- *
- * Este arquivo usa as constantes e funções já existentes em codigo.gs.
+ * Mantem as regras comerciais de Videos_projetos e funciona como ponto de entrada
+ * do sincronizador geral bidirecional da planilha SITE.
  */
 
 function instalarSyncDiretoVideos() {
@@ -37,7 +30,7 @@ function instalarSyncDiretoVideos() {
     .create();
 
   ss.toast(
-    'Sincronização direta Videos_projetos -> Wix instalada. O cenário 036 não é mais necessário para preços.',
+    'Sync direto Videos + sincronizacao geral SITE <-> Wix instalada.',
     'PELEGO BOX',
     8
   );
@@ -47,19 +40,31 @@ function sincronizarEdicaoVideosDiretoWix(e) {
   if (!e || !e.range) return;
 
   const sheet = e.range.getSheet();
+  const nomeAba = sheet.getName();
 
-  // Preserva a lógica que já funcionava na aba Clientes.
-  if (sheet.getName() === NOME_ABA_CLIENTES) {
+  // Clientes conserva as validacoes especificas ja existentes e, em seguida,
+  // passa pelo sincronizador geral para os demais campos da mesma colecao.
+  if (nomeAba === NOME_ABA_CLIENTES) {
     sincronizarEdicaoClientes_(e);
+    if (typeof pbxSincronizarEdicaoAbaGenericaWix_ === 'function') {
+      pbxSincronizarEdicaoAbaGenericaWix_(e);
+    }
     return;
   }
 
-  if (sheet.getName() !== NOME_ABA) return;
+  // Todas as outras abas de dados da planilha SITE sao tratadas pelo sync geral.
+  if (nomeAba !== NOME_ABA) {
+    if (typeof pbxSincronizarEdicaoAbaGenericaWix_ === 'function') {
+      pbxSincronizarEdicaoAbaGenericaWix_(e);
+    }
+    return;
+  }
+
   if (e.range.getRow() < 2) return;
 
   const apiKey = obterWixApiKey_();
   if (!apiKey) {
-    throw new Error('API Wix não configurada. Nada foi enviado ao Wix.');
+    throw new Error('API Wix nao configurada. Nada foi enviado ao Wix.');
   }
 
   const cabecalhos = obterCabecalhos(sheet);
@@ -72,7 +77,14 @@ function sincronizarEdicaoVideosDiretoWix(e) {
     if (CAMPOS_EDITAVEIS.has(nome)) camposEditados.add(nome);
   }
 
-  if (camposEditados.size === 0) return;
+  // Marca, slug, thumbnail, link e outros campos de Videos nao precisam das
+  // regras de preco, mas ainda precisam ir ao Wix.
+  if (camposEditados.size === 0) {
+    if (typeof pbxSincronizarEdicaoAbaGenericaWix_ === 'function') {
+      pbxSincronizarEdicaoAbaGenericaWix_(e);
+    }
+    return;
+  }
 
   const primeiraLinha = e.range.getRow();
   const ultimaLinha = primeiraLinha + e.range.getNumRows() - 1;
@@ -96,6 +108,12 @@ function sincronizarEdicaoVideosDiretoWix(e) {
     throw new Error('Videos_projetos -> Wix: ' + r.erros.join(' | '));
   }
 
+  // Complementa com campos que nao pertencem ao conjunto comercial antigo e
+  // atualiza o estado do sincronizador bidirecional.
+  if (typeof pbxSincronizarEdicaoAbaGenericaWix_ === 'function') {
+    pbxSincronizarEdicaoAbaGenericaWix_(e);
+  }
+
   SpreadsheetApp.getActive().toast(
     `${r.sucessos} projeto(s) sincronizado(s) direto com Wix.`,
     'VIDEOS -> WIX',
@@ -104,6 +122,16 @@ function sincronizarEdicaoVideosDiretoWix(e) {
 }
 
 function processarNovasLinhasPendentesDiretoWix() {
+  // Este gatilho ja roda a cada minuto. Aproveitamos o mesmo relogio para manter
+  // TODAS as abas de dados da planilha SITE e as colecoes Wix reconciliadas.
+  if (typeof pbxSincronizacaoGeralUmCiclo_ === 'function') {
+    try {
+      pbxSincronizacaoGeralUmCiclo_();
+    } catch (err) {
+      console.error('Sincronizacao geral SITE <-> Wix: ' + (err && err.message ? err.message : err));
+    }
+  }
+
   const sheet = obterAba();
   const cabecalhos = obterCabecalhos(sheet);
   const mapa = mapaCabecalhos(cabecalhos);
@@ -119,7 +147,7 @@ function processarNovasLinhasPendentesDiretoWix() {
   const colBase = mapa[CAB_PRECO_TOTAL_BASE];
 
   if (!colId || !colOrdem || !colTitulo || !colTotal || !col1 || !col2 || !col3 || !colAjuste || !colBase) {
-    throw new Error('Não encontrei as colunas necessárias para processar novas linhas.');
+    throw new Error('Nao encontrei as colunas necessarias para processar novas linhas.');
   }
 
   const ultimaLinha = sheet.getLastRow();
@@ -130,7 +158,7 @@ function processarNovasLinhasPendentesDiretoWix() {
   const dados = sheet.getRange(primeiraLinhaBusca, 1, qtd, sheet.getLastColumn()).getValues();
 
   const apiKey = obterWixApiKey_();
-  if (!apiKey) throw new Error('API Wix não configurada.');
+  if (!apiKey) throw new Error('API Wix nao configurada.');
 
   const linhasProcessadas = [];
   const linhasParaPatch = new Set();
@@ -149,37 +177,25 @@ function processarNovasLinhasPendentesDiretoWix() {
     const vazio3 = row[col3 - 1] === '' || row[col3 - 1] === null;
     const etapasVazias = vazio1 && vazio2 && vazio3;
 
-    // Linha válida de projeto: precisa ter número, título e preço.
     if (!(ordem > 0) || !titulo || !(totalBruto > 0)) continue;
-
-    // Se já tem ID e preços calculados, não há nada pendente.
     if (id && !etapasVazias) continue;
 
-    // Novas linhas recebem preço arredondado e etapas calculadas.
-    // Se uma tentativa anterior já calculou as etapas mas falhou antes de gravar o ID,
-    // não recalculamos; apenas retomamos a criação/vinculação com o Wix.
     if (etapasVazias) {
       const totalRedondo = arredondarParaMultiplo(totalBruto, MULTIPLO_PRECO);
       sheet.getRange(linha, colTotal).setValue(totalRedondo);
+      sheet.getRange(linha, colTotal).setNumberFormat('R$ #,##0.00');
       sheet.getRange(linha, colBase).setValue(totalRedondo);
 
       if (row[colAjuste - 1] === '' || row[colAjuste - 1] === null) {
         sheet.getRange(linha, colAjuste).setValue(0);
       }
 
-      aplicarRegrasDaLinha(
-        sheet,
-        cabecalhos,
-        linha,
-        new Set([CAB_PRECO_TOTAL])
-      );
+      aplicarRegrasDaLinha(sheet, cabecalhos, linha, new Set([CAB_PRECO_TOTAL]));
     }
 
     SpreadsheetApp.flush();
 
     if (!id) {
-      // Anti-duplicidade: antes de criar, procura o mesmo ordem_video no Wix.
-      // Se já existir, apenas vincula a linha da planilha ao item existente.
       id = pbxBuscarIdWixPorOrdem_(ordem, apiKey);
 
       if (id) {
@@ -192,14 +208,13 @@ function processarNovasLinhasPendentesDiretoWix() {
 
       SpreadsheetApp.flush();
     } else if (etapasVazias) {
-      // Linha que já nasceu com ID (fluxo antigo): só atualiza os campos calculados.
       linhasParaPatch.add(linha);
     }
 
     linhasProcessadas.push(linha);
   }
 
-  if (!linhasProcessadas.length) return;
+  if (linhasProcessadas.length === 0) return;
 
   SpreadsheetApp.flush();
 
@@ -223,29 +238,26 @@ function pbxAplicarRegrasPrecoMultiplo5_(sheet, cabecalhos, linha, camposEditado
   const col3 = mapa[CAB_ETAPA_3];
 
   if (!colTotal || !col1 || !col2 || !col3) {
-    throw new Error(`Linha ${linha}: colunas de preço não encontradas.`);
+    throw new Error(`Linha ${linha}: colunas de preco nao encontradas.`);
   }
 
-  // Regra comercial: preco_total SEMPRE múltiplo de 5.
   if (camposEditados.has(CAB_PRECO_TOTAL)) {
     const bruto = normalizarNumero(sheet.getRange(linha, colTotal).getValue());
     if (bruto > 0) {
-      sheet.getRange(linha, colTotal).setValue(
-        arredondarParaMultiplo(bruto, MULTIPLO_PRECO)
-      );
+      sheet.getRange(linha, colTotal).setValue(arredondarParaMultiplo(bruto, MULTIPLO_PRECO));
+      sheet.getRange(linha, colTotal).setNumberFormat('R$ #,##0.00');
     }
   }
 
   aplicarRegrasDaLinha(sheet, cabecalhos, linha, camposEditados);
 
-  // Se a etapa 3 foi alterada manualmente, a soma pode gerar total quebrado.
-  // Corrige o total para múltiplo de 5 e absorve a diferença na etapa 3.
   if (camposEditados.has(CAB_ETAPA_3)) {
     const e1 = normalizarNumero(sheet.getRange(linha, col1).getValue());
     const e2 = normalizarNumero(sheet.getRange(linha, col2).getValue());
     const e3 = normalizarNumero(sheet.getRange(linha, col3).getValue());
     const totalRedondo = arredondarParaMultiplo(e1 + e2 + e3, MULTIPLO_PRECO);
     sheet.getRange(linha, colTotal).setValue(totalRedondo);
+    sheet.getRange(linha, colTotal).setNumberFormat('R$ #,##0.00');
     sheet.getRange(linha, col3).setValue(arredondarCentavos(totalRedondo - e1 - e2));
   }
 }
@@ -253,111 +265,67 @@ function pbxAplicarRegrasPrecoMultiplo5_(sheet, cabecalhos, linha, camposEditado
 function pbxCriarPatchVideos_(sheet, cabecalhos, linha) {
   const mapa = mapaCabecalhos(cabecalhos);
   const colId = mapa.ID;
-  if (!colId) throw new Error('Coluna ID não encontrada.');
+  if (!colId) throw new Error('Coluna ID nao encontrada.');
 
   const id = String(sheet.getRange(linha, colId).getValue() || '').trim();
   if (!id) return null;
 
   const mods = [];
-
   const adicionar = (campo, valor) => {
-    mods.push({
-      fieldPath: campo,
-      action: 'SET_FIELD',
-      setFieldOptions: { value: valor }
-    });
+    mods.push({ fieldPath: campo, action: 'SET_FIELD', setFieldOptions: { value: valor } });
   };
 
-  if (mapa.titulo_video) {
-    adicionar('titulo_video', String(sheet.getRange(linha, mapa.titulo_video).getValue() || ''));
-  }
-  if (mapa.valor_etapa_1) {
-    adicionar('valor_etapa_1', normalizarNumero(sheet.getRange(linha, mapa.valor_etapa_1).getValue()));
-  }
-  if (mapa.valor_etapa_2) {
-    adicionar('valor_etapa_2', normalizarNumero(sheet.getRange(linha, mapa.valor_etapa_2).getValue()));
-  }
-  if (mapa.valor_etapa_3) {
-    adicionar('valor_etapa_3', normalizarNumero(sheet.getRange(linha, mapa.valor_etapa_3).getValue()));
-  }
-  if (mapa.ativo_checkout) {
-    adicionar('ativo_checkout', String(sheet.getRange(linha, mapa.ativo_checkout).getValue() || ''));
-  }
+  if (mapa.titulo_video) adicionar('titulo_video', String(sheet.getRange(linha, mapa.titulo_video).getValue() || ''));
+  if (mapa.valor_etapa_1) adicionar('valor_etapa_1', normalizarNumero(sheet.getRange(linha, mapa.valor_etapa_1).getValue()));
+  if (mapa.valor_etapa_2) adicionar('valor_etapa_2', normalizarNumero(sheet.getRange(linha, mapa.valor_etapa_2).getValue()));
+  if (mapa.valor_etapa_3) adicionar('valor_etapa_3', normalizarNumero(sheet.getRange(linha, mapa.valor_etapa_3).getValue()));
+  if (mapa.ativo_checkout) adicionar('ativo_checkout', String(sheet.getRange(linha, mapa.ativo_checkout).getValue() || ''));
 
   return { dataItemId: id, fieldModifications: mods };
 }
 
-/**
- * Procura no Wix um projeto pelo ordem_video.
- * É a trava contra duplicidade quando uma linha sem ID chega da planilha.
- */
 function pbxBuscarIdWixPorOrdem_(ordemVideo, apiKey) {
   if (!(ordemVideo > 0)) return '';
 
-  const response = UrlFetchApp.fetch(
-    'https://www.wixapis.com/wix-data/v2/items/query',
-    {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        Authorization: apiKey,
-        'wix-site-id': WIX_SITE_ID,
-        Accept: 'application/json'
-      },
-      payload: JSON.stringify({
-        dataCollectionId: WIX_COLLECTION_ID,
-        query: {
-          filter: {
-            ordem_video: {
-              '$eq': ordemVideo
-            }
-          },
-          fields: ['ordem_video'],
-          paging: {
-            limit: 1,
-            offset: 0
-          }
-        }
-      }),
-      muteHttpExceptions: true
-    }
-  );
+  const response = UrlFetchApp.fetch('https://www.wixapis.com/wix-data/v2/items/query', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: apiKey, 'wix-site-id': WIX_SITE_ID, Accept: 'application/json' },
+    payload: JSON.stringify({
+      dataCollectionId: WIX_COLLECTION_ID,
+      query: {
+        filter: { ordem_video: { '$eq': ordemVideo } },
+        fields: ['ordem_video'],
+        paging: { limit: 1, offset: 0 }
+      }
+    }),
+    muteHttpExceptions: true
+  });
 
   const status = response.getResponseCode();
   const texto = response.getContentText();
-
   if (status < 200 || status >= 300) {
     throw new Error(`Buscar projeto Wix: HTTP ${status} - ${texto.slice(0, 500)}`);
   }
 
   let body = {};
-  try {
-    body = texto ? JSON.parse(texto) : {};
-  } catch (_) {
-    throw new Error('Buscar projeto Wix: resposta JSON inválida.');
-  }
+  try { body = texto ? JSON.parse(texto) : {}; } catch (_) { throw new Error('Buscar projeto Wix: resposta JSON invalida.'); }
 
   const itens = Array.isArray(body.dataItems)
     ? body.dataItems
     : (body.data && Array.isArray(body.data.dataItems) ? body.data.dataItems : []);
 
   if (!itens.length) return '';
-
   const item = itens[0] || {};
   return String(item.id || item._id || item.dataItemId || '').trim();
 }
 
-/**
- * Cria um item novo na coleção Videosprojetos a partir de uma linha da planilha.
- */
 function pbxCriarItemWix_(sheet, cabecalhos, linha, apiKey) {
   const mapa = mapaCabecalhos(cabecalhos);
-
   const valor = campo => {
     const col = mapa[campo];
     return col ? sheet.getRange(linha, col).getValue() : '';
   };
-
   const numero = campo => normalizarNumero(valor(campo));
 
   const data = {
@@ -375,40 +343,22 @@ function pbxCriarItemWix_(sheet, cabecalhos, linha, apiKey) {
     ativo_checkout: String(valor('ativo_checkout') || '')
   };
 
-  const response = UrlFetchApp.fetch(
-    'https://www.wixapis.com/wix-data/v2/items',
-    {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        Authorization: apiKey,
-        'wix-site-id': WIX_SITE_ID,
-        Accept: 'application/json'
-      },
-      payload: JSON.stringify({
-        dataCollectionId: WIX_COLLECTION_ID,
-        dataItem: { data }
-      }),
-      muteHttpExceptions: true
-    }
-  );
+  const response = UrlFetchApp.fetch('https://www.wixapis.com/wix-data/v2/items', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: apiKey, 'wix-site-id': WIX_SITE_ID, Accept: 'application/json' },
+    payload: JSON.stringify({ dataCollectionId: WIX_COLLECTION_ID, dataItem: { data } }),
+    muteHttpExceptions: true
+  });
 
   const status = response.getResponseCode();
   const texto = response.getContentText();
-
   if (status < 200 || status >= 300) {
     throw new Error(`Criar projeto Wix: HTTP ${status} - ${texto.slice(0, 500)}`);
   }
 
   const body = JSON.parse(texto || '{}');
-  const id =
-    (body.dataItem && (body.dataItem.id || body.dataItem._id)) ||
-    body.id ||
-    '';
-
-  if (!id) {
-    throw new Error('Wix criou o projeto, mas não devolveu o ID.');
-  }
-
+  const id = (body.dataItem && (body.dataItem.id || body.dataItem._id)) || body.id || '';
+  if (!id) throw new Error('Wix criou o projeto, mas nao devolveu o ID.');
   return String(id);
 }

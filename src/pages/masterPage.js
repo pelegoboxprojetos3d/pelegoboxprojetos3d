@@ -39,7 +39,7 @@ async function registrarBuscaDaPagina() {
   const url = safe(wixLocation.url);
 
   if (pagina === 'search') {
-    const termo = queryValue('q');
+    const termo = queryValue('oq') || queryValue('q');
     const sessionId = queryValue('sid');
 
     if (!termo) return;

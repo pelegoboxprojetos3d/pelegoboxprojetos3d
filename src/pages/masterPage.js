@@ -136,7 +136,9 @@ $w.onReady(async function () {
 
   await ocultarElementoGlobal('#botaoradio');
 
-  // Rastreamento de intenção de busca. Só grava quando a busca foi enviada,
-  // nunca enquanto o visitante está apenas digitando.
-  await registrarBuscaDaPagina();
+  // Rastreamento de intenção de busca. Só grava quando a busca foi enviada.
+  // Não bloqueia mais a renderização nem o filtro da página de resultados.
+  registrarBuscaDaPagina().catch((error) => {
+    console.warn('Não foi possível concluir o rastreamento da busca:', error?.message || error);
+  });
 });

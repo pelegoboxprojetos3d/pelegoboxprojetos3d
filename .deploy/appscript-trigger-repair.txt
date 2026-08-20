@@ -1,3 +1,3 @@
-Apps Script trigger repair OK: 2026-08-20T16:06:57Z
-Deployment: AKfycbzo3tBsbf8gP5-eYolU3KK_yxtCLaBlmm5rfF-8vrsTO7R5H1pFqL4amTFgla0PG1_P
-Response: {"ok":true,"bootstrap":"2026-08-20-v2","triggers":["sincronizarEdicaoVideosDiretoWix:ON_EDIT","pbxAoAbrirBuscador:ON_OPEN","processarNovasLinhasPendentesDiretoWix:CLOCK"]}
+Apps Script trigger diagnostic: 2026-08-20T16:09:58Z
+Deployment: AKfycbwY8_uPX2dWz3TsGIHg9qpiYUesdZQnYJQp7a4UcwagtEqrV9rzZ30iF4cBO9A9QDOb
+Response: {"ok":true,"bootstrap":"2026-08-20-v2","cycle":{"ok":true,"ms":5184},"triggers":["pbxAoAbrirBuscador:ON_OPEN","sincronizarEdicaoVideosDiretoWix:ON_EDIT","processarNovasLinhasPendentesDiretoWix:CLOCK"]}

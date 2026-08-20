@@ -3300,7 +3300,7 @@ export async function get_buscarProjetosZeroV2(request) {
     if (!rawQuery) {
       return badRequest({
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, error: 'busca_vazia', products: [] })
+        body: { ok: false, error: 'busca_vazia', products: [] }
       });
     }
 
@@ -3357,13 +3357,13 @@ export async function get_buscarProjetosZeroV2(request) {
 
     return ok({
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-      body: JSON.stringify({ ok: true, query: rawQuery, count: products.length, products })
+      body: { ok: true, query: rawQuery, count: products.length, products }
     });
   } catch (error) {
     console.error('BUSCADOR ZERO V2 ERROR:', error?.message || error, error);
     return serverError({
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: false, error: safe(error?.message || 'buscar_projetos_zero_v2_error'), products: [] })
+      body: { ok: false, error: safe(error?.message || 'buscar_projetos_zero_v2_error'), products: [] }
     });
   }
 }

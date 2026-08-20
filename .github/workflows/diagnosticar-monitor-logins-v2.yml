@@ -91,4 +91,4 @@ jobs:
           git commit -m "diag: registrar resposta do monitor de logins" || exit 0
           git push origin HEAD:main
 
-# rerun FullData 2026-08-20
+# rerun FullData 2026-08-20 13:53 BRT

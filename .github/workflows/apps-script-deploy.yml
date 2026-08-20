@@ -10,7 +10,7 @@ on:
       - '.clasp.json'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy:
@@ -42,3 +42,13 @@ jobs:
 
       - name: Push to Apps Script
         run: clasp push --force
+
+      - name: Mark successful deploy
+        run: |
+          mkdir -p .deploy
+          printf 'Apps Script deploy OK: %s\nCommit: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$GITHUB_SHA" > .deploy/appscript-last-success.txt
+          git config user.name "PELEGO BOX Apps Script Deploy"
+          git config user.email "pelegobox82@gmail.com"
+          git add .deploy/appscript-last-success.txt
+          git commit -m "chore: confirmar deploy Apps Script ${GITHUB_SHA::7}" || exit 0
+          git push origin HEAD:main

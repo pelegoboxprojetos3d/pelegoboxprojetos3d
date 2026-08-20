@@ -1,0 +1,42 @@
+name: Destravar Monitor de Logins
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/destravar-monitor-logins.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Separar lock do monitor
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps-script/LOGIN_MEMBROS_PROJETOS_PRONTOS.gs')
+          s = p.read_text(encoding='utf-8')
+          old = "const lock = LockService.getScriptLock();\n  if (!lock.tryLock(10000)) return { ok: true, skipped: 'LOCKED' };"
+          new = "const lock = LockService.getUserLock();\n  if (!lock.tryLock(10000)) return { ok: true, skipped: 'LOGIN_MONITOR_LOCKED' };"
+          if old not in s:
+              raise SystemExit('Bloco de lock esperado nao encontrado')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Commit
+        run: |
+          git config user.name "PELEGO BOX Login Monitor"
+          git config user.email "pelegobox82@gmail.com"
+          git add apps-script/LOGIN_MEMBROS_PROJETOS_PRONTOS.gs
+          git diff --cached --check
+          git commit -m "fix: separar lock do monitor de logins"
+          git push origin HEAD:main

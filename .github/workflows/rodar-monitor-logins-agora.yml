@@ -1,0 +1,131 @@
+name: Rodar Monitor de Logins Agora
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/rodar-monitor-logins-agora.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-now:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Restore clasp login
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+      - name: Run login monitor through temporary web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(python - <<'PY'
+          import secrets
+          print(secrets.token_urlsafe(32))
+          PY
+          )"
+          DESC="PBX login monitor run ${GITHUB_SHA}"
+          DEPLOY_ID=""
+
+          cleanup() {
+            set +e
+            if [ -n "${DEPLOY_ID:-}" ]; then
+              clasp delete-deployment "$DEPLOY_ID" >/dev/null 2>&1 || true
+            fi
+            git checkout -- apps-script/appsscript.json >/dev/null 2>&1 || true
+            rm -f apps-script/PBX_LOGIN_RUN_WEB.gs
+            clasp push --force >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          cat > apps-script/PBX_LOGIN_RUN_WEB.gs <<EOF
+          function doGet(e) {
+            var token = e && e.parameter ? String(e.parameter.token || '') : '';
+            if (token !== '${TOKEN}') {
+              return ContentService.createTextOutput(JSON.stringify({ok:false,error:'FORBIDDEN'}))
+                .setMimeType(ContentService.MimeType.JSON);
+            }
+            try {
+              var result = pbxMonitorarLoginsProjetosProntos();
+              return ContentService.createTextOutput(JSON.stringify({ok:true,result:result}))
+                .setMimeType(ContentService.MimeType.JSON);
+            } catch (err) {
+              return ContentService.createTextOutput(JSON.stringify({
+                ok:false,
+                error:String(err && err.message ? err.message : err),
+                stack:String(err && err.stack ? err.stack : '')
+              })).setMimeType(ContentService.MimeType.JSON);
+            }
+          }
+          EOF
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('apps-script/appsscript.json')
+          obj = json.loads(p.read_text(encoding='utf-8'))
+          obj['webapp'] = {'access':'ANYONE_ANONYMOUS','executeAs':'USER_DEPLOYING'}
+          p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          clasp push --force
+          DEPLOY_RAW="$(clasp --json create-deployment --description "$DESC" 2>&1 || true)"
+          printf '%s\n' "$DEPLOY_RAW"
+          DEPLOY_ID="$(printf '%s' "$DEPLOY_RAW" | python -c "import sys,json; s=sys.stdin.read();
+          try:
+           o=json.loads(s); print(o.get('deploymentId','') if isinstance(o,dict) else '')
+          except Exception: print('')" 2>/dev/null | tail -1)"
+          if [ -z "$DEPLOY_ID" ]; then
+            DEPLOY_ID="$(printf '%s' "$DEPLOY_RAW" | grep -oE 'AKfy[a-zA-Z0-9_-]+' | tail -1 || true)"
+          fi
+          test -n "$DEPLOY_ID"
+
+          URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec?token=${TOKEN}"
+          RESPONSE=''
+          for attempt in 1 2 3 4 5 6; do
+            RESPONSE="$(curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors "$URL")"
+            printf 'Attempt %s: %s\n' "$attempt" "$RESPONSE"
+            if printf '%s' "$RESPONSE" | grep -q '"membros":'; then
+              break
+            fi
+            sleep 12
+          done
+
+          printf '%s' "$RESPONSE" | grep -q '"ok":true'
+          printf '%s' "$RESPONSE" | grep -q '"membros":'
+
+          mkdir -p .deploy
+          printf 'Login monitor first load OK: %s\nDeployment: %s\nResponse: %s\n' \
+            "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$DEPLOY_ID" "$RESPONSE" \
+            > .deploy/login-monitor-first-load.txt
+
+          cleanup
+          trap - EXIT
+
+      - name: Record first load
+        run: |
+          git config user.name "PELEGO BOX Login Monitor"
+          git config user.email "pelegobox82@gmail.com"
+          git add .deploy/login-monitor-first-load.txt
+          git commit -m "chore: confirmar primeira carga de logins" || exit 0
+          git push origin HEAD:main

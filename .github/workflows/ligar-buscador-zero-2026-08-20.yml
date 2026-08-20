@@ -1,0 +1,71 @@
+name: Ligar buscador Projeto Feito do Zero
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ligar-buscador-zero-2026-08-20.yml
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar endpoint do buscador
+        run: node scripts/ligar-buscador-zero-2026-08-20.cjs
+
+      - name: Validar buscador
+        run: |
+          set -euo pipefail
+          file="src/backend/http-functions.js"
+          grep -q 'export async function get_buscarProjetosZero' "$file"
+          grep -q 'wixData.query("Stores/Products")' "$file"
+          grep -q 'ROTA: /_functions/buscarProjetosZero' "$file"
+          echo 'Buscador Projeto Feito do Zero validado.'
+
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          file="src/backend/http-functions.js"
+          if git diff --quiet -- "$file"; then
+            echo 'Endpoint já aplicado.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$file"
+            git commit -m 'Ligar busca Wix Stores do Projeto Feito do Zero'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi

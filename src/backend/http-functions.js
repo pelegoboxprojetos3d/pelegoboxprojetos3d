@@ -406,6 +406,213 @@ async function fetchMercadoPagoPayment(
 }
 
 // ======================================================
+// BUSCADOR - PROJETOS FEITOS DO ZERO (WIX STORES)
+// ROTA: /_functions/buscarProjetosZero?q=...
+// ======================================================
+
+function normalizeSearchZero(value) {
+  return safe(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripSearchHtmlZero(value) {
+  return safe(value)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mediaUrlZero(value) {
+  const src = typeof value === "string"
+    ? value
+    : safe(value?.src || value?.url || value?.fileUrl);
+
+  if (!src) return "";
+  if (/^https?:\/\//i.test(src)) return src;
+
+  const match = src.match(/^wix:image:\/\/v1\/([^/]+)/i);
+  return match
+    ? `https://static.wixstatic.com/media/${match[1]}`
+    : "";
+}
+
+function levenshteinZero(a, b) {
+  a = normalizeSearchZero(a);
+  b = normalizeSearchZero(b);
+  if (a === b) return 0;
+  if (!a) return b.length;
+  if (!b) return a.length;
+
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const curr = new Array(b.length + 1);
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      curr[j] = Math.min(
+        curr[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+
+  return prev[b.length];
+}
+
+function scoreProductZero(item, rawQuery, terms) {
+  const name = normalizeSearchZero(item?.name);
+  const description = normalizeSearchZero(stripSearchHtmlZero(item?.description));
+  const sku = normalizeSearchZero(item?.sku);
+  const full = `${name} ${description} ${sku}`.trim();
+  const query = normalizeSearchZero(rawQuery);
+
+  let score = 0;
+  if (name === query) score += 500;
+  if (name.startsWith(query)) score += 260;
+  if (name.includes(query)) score += 220;
+  if (full.includes(query)) score += 140;
+
+  for (const term of terms) {
+    if (name.includes(term)) score += 70;
+    else if (sku.includes(term)) score += 50;
+    else if (description.includes(term)) score += 22;
+  }
+
+  const words = name.split(/\s+/).filter(Boolean);
+  for (const term of terms) {
+    if (term.length < 4 || words.some(word => word.includes(term))) continue;
+    let best = 99;
+    for (const word of words) {
+      if (Math.abs(word.length - term.length) > 3) continue;
+      best = Math.min(best, levenshteinZero(term, word));
+    }
+    if (best === 1) score += 35;
+    else if (best === 2 && term.length >= 6) score += 18;
+  }
+
+  return score;
+}
+
+function publicProductZero(item, score) {
+  return {
+    id: safe(item?._id),
+    name: safe(item?.name),
+    image: mediaUrlZero(item?.mainMedia),
+    url: safe(item?.productPageUrl),
+    price: safe(item?.formattedDiscountedPrice || item?.formattedPrice),
+    sku: safe(item?.sku),
+    score: Number(score || 0)
+  };
+}
+
+export async function get_buscarProjetosZero(request) {
+  try {
+    const rawQuery = safe(request?.query?.q).slice(0, 180);
+
+    if (!rawQuery) {
+      return badRequest({
+        headers: { "Content-Type": "application/json" },
+        body: { ok: false, error: "busca_vazia", products: [] }
+      });
+    }
+
+    const stopWords = new Set([
+      "a", "o", "as", "os", "e", "de", "do", "da", "dos", "das",
+      "um", "uma", "uns", "umas", "para", "pra", "com", "por"
+    ]);
+
+    const normalized = normalizeSearchZero(rawQuery);
+    const terms = [...new Set(normalized.split(/\s+/))]
+      .filter(term => term.length >= 2 && !stopWords.has(term))
+      .slice(0, 8);
+
+    if (!terms.length && normalized) terms.push(normalized);
+
+    let storeQuery = null;
+    for (const term of terms) {
+      const byName = wixData.query("Stores/Products").contains("name", term);
+      const byDescription = wixData.query("Stores/Products").contains("description", term);
+      const termQuery = byName.or(byDescription);
+      storeQuery = storeQuery ? storeQuery.or(termQuery) : termQuery;
+    }
+
+    let items = [];
+    if (storeQuery) {
+      const direct = await storeQuery.limit(100).find();
+      items = direct.items || [];
+    }
+
+    let ranked = items
+      .map(item => ({ item, score: scoreProductZero(item, rawQuery, terms) }))
+      .filter(entry => entry.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    // Fallback para grafias próximas: só varre o catálogo inteiro quando a busca
+    // direta não encontrou nada útil. O catálogo continua sendo exclusivamente
+    // o Wix Stores (Stores/Products).
+    if (!ranked.length) {
+      const all = [];
+      let page = await wixData.query("Stores/Products").limit(100).find();
+      all.push(...(page.items || []));
+
+      while (page.hasNext() && all.length < 1200) {
+        page = await page.next();
+        all.push(...(page.items || []));
+      }
+
+      ranked = all
+        .map(item => ({ item, score: scoreProductZero(item, rawQuery, terms) }))
+        .filter(entry => entry.score >= 18)
+        .sort((a, b) => b.score - a.score);
+    }
+
+    const seen = new Set();
+    const products = [];
+
+    for (const entry of ranked) {
+      const id = safe(entry.item?._id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      products.push(publicProductZero(entry.item, entry.score));
+      if (products.length >= 20) break;
+    }
+
+    return ok({
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store"
+      },
+      body: {
+        ok: true,
+        query: rawQuery,
+        count: products.length,
+        products
+      }
+    });
+  } catch (error) {
+    console.error("BUSCADOR ZERO ERROR:", error?.message || error, error);
+
+    return serverError({
+      headers: { "Content-Type": "application/json" },
+      body: {
+        ok: false,
+        error: safe(error?.message || "buscar_projetos_zero_error"),
+        products: []
+      }
+    });
+  }
+}
+
+// ======================================================
 // CHECK ABANDONADO
 // ======================================================
 

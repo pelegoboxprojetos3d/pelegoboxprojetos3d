@@ -1,2 +1,2 @@
-Apps Script deploy OK: 2026-08-20T15:51:22Z
-Commit: fbd87e56a630436a5ad3403a503f283c2d3e1855
+Apps Script deploy OK: 2026-08-20T16:43:27Z
+Commit: 27a0bbaa6447a772ee2593b9151c02f789a3321e

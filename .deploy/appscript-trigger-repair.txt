@@ -1,0 +1,3 @@
+Apps Script trigger repair OK: 2026-08-20T16:00:11Z
+Deployment: AKfycbwoWIvndARbFBWmmXnSOKMdP4NtwN1-HQEt9HEbjUimw5XzzzDUIpQh8vo9dJrrCi4A
+Response: {"ok":true,"triggers":["sincronizarEdicaoVideosDiretoWix:ON_EDIT","pbxAoAbrirBuscador:ON_OPEN","processarNovasLinhasPendentesDiretoWix:CLOCK"]}

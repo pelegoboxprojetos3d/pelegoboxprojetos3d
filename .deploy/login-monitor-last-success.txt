@@ -1,0 +1,3 @@
+Login monitor install OK: 2026-08-20T16:30:43Z
+Deployment: AKfycbyQcZu1JqMpS8Z4GVN3Vj8Db1SG8G0HDaiN8N5rTqFmqLl7v0ytUr557yqfdgktVhpO
+Response: {"ok":true,"result":{"ok":true,"handler":"pbxMonitorarLoginsProjetosProntos","resultado":{"ok":true,"skipped":"LOCKED"},"triggers":["pbxMonitorarLoginsProjetosProntos:CLOCK","pbxAoAbrirBuscador:ON_OPEN","sincronizarEdicaoVideosDiretoWix:ON_EDIT","processarNovasLinhasPendentesDiretoWix:CLOCK"]}}

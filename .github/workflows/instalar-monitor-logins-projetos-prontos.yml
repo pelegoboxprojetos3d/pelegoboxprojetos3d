@@ -1,0 +1,135 @@
+name: Instalar Monitor de Logins Projetos Prontos
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/instalar-monitor-logins-projetos-prontos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@3.3.0
+
+      - name: Restore clasp login
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+      - name: Deploy and install login monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(python - <<'PY'
+          import secrets
+          print(secrets.token_urlsafe(32))
+          PY
+          )"
+          DESC="PBX login monitor ${GITHUB_SHA}"
+          DEPLOY_ID=""
+
+          cleanup() {
+            set +e
+            if [ -n "${DEPLOY_ID:-}" ]; then
+              clasp delete-deployment "$DEPLOY_ID" >/dev/null 2>&1 || true
+            fi
+            git checkout -- apps-script/appsscript.json >/dev/null 2>&1 || true
+            rm -f apps-script/PBX_LOGIN_MONITOR_SETUP_WEB.gs
+            clasp push --force >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # Garante que o arquivo permanente do monitor esteja no Apps Script.
+          clasp push --force
+
+          cat > apps-script/PBX_LOGIN_MONITOR_SETUP_WEB.gs <<EOF
+          function doGet(e) {
+            var token = e && e.parameter ? String(e.parameter.token || '') : '';
+            if (token !== '${TOKEN}') {
+              return ContentService.createTextOutput(JSON.stringify({ok:false,error:'FORBIDDEN'}))
+                .setMimeType(ContentService.MimeType.JSON);
+            }
+
+            try {
+              var result = pbxInstalarMonitorLoginsProjetosProntos();
+              return ContentService.createTextOutput(JSON.stringify({ok:true,result:result}))
+                .setMimeType(ContentService.MimeType.JSON);
+            } catch (err) {
+              return ContentService.createTextOutput(JSON.stringify({
+                ok:false,
+                error:String(err && err.message ? err.message : err),
+                stack:String(err && err.stack ? err.stack : '')
+              })).setMimeType(ContentService.MimeType.JSON);
+            }
+          }
+          EOF
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('apps-script/appsscript.json')
+          obj = json.loads(p.read_text(encoding='utf-8'))
+          obj['webapp'] = {
+              'access': 'ANYONE_ANONYMOUS',
+              'executeAs': 'USER_DEPLOYING'
+          }
+          p.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          clasp push --force
+          DEPLOY_RAW="$(clasp --json create-deployment --description "$DESC" 2>&1 || true)"
+          printf '%s\n' "$DEPLOY_RAW"
+
+          DEPLOY_ID="$(printf '%s' "$DEPLOY_RAW" | python -c "import sys,json; s=sys.stdin.read();
+          try:
+           o=json.loads(s); print(o.get('deploymentId','') if isinstance(o,dict) else '')
+          except Exception: print('')" 2>/dev/null | tail -1)"
+
+          if [ -z "$DEPLOY_ID" ]; then
+            DEPLOY_ID="$(printf '%s' "$DEPLOY_RAW" | grep -oE 'AKfy[a-zA-Z0-9_-]+' | tail -1 || true)"
+          fi
+
+          if [ -z "$DEPLOY_ID" ]; then
+            echo 'Nao consegui extrair deploymentId.' >&2
+            exit 1
+          fi
+
+          URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec?token=${TOKEN}"
+          RESPONSE="$(curl -fsSL --retry 6 --retry-delay 3 --retry-all-errors "$URL")"
+          printf '%s\n' "$RESPONSE"
+          printf '%s' "$RESPONSE" | grep -q '"ok":true'
+
+          mkdir -p .deploy
+          printf 'Login monitor install OK: %s\nDeployment: %s\nResponse: %s\n' \
+            "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$DEPLOY_ID" "$RESPONSE" \
+            > .deploy/login-monitor-last-success.txt
+
+          cleanup
+          trap - EXIT
+
+      - name: Record successful install
+        run: |
+          git config user.name "PELEGO BOX Login Monitor"
+          git config user.email "pelegobox82@gmail.com"
+          git add .deploy/login-monitor-last-success.txt
+          git commit -m "chore: confirmar monitor de logins ativo" || exit 0
+          git push origin HEAD:main

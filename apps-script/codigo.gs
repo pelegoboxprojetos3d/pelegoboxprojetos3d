@@ -510,12 +510,17 @@ function instalarAtualizacao() {
   formatarColunasPreco(sheet);
   formatarColunaAjuste(sheet);
   aplicarAjustesPercentuaisExistentes(sheet);
-  criarGatilhoEdicao();
-  criarGatilhoNovasLinhas();
+  // A instalacao nova remove gatilhos velhos e recria os handlers corretos.
+  if (typeof instalarSyncDiretoVideos === 'function') {
+    instalarSyncDiretoVideos();
+  } else {
+    criarGatilhoEdicao();
+    criarGatilhoNovasLinhas();
+  }
   processarNovasLinhasPendentes();
 
   SpreadsheetApp.getActive().toast(
-    'Automação instalada. Videos_projetos e Clientes estão cobertos; Clientes sincroniza direto com Wix.',
+    'Automação instalada. Sincronização SITE <-> Wix ativada e gatilhos reparados.',
     'PELEGO BOX',
     6
   );
@@ -554,6 +559,16 @@ function criarGatilhoNovasLinhas() {
 }
 
 function processarNovasLinhasPendentes() {
+  // COMPATIBILIDADE: este handler antigo ainda pode estar instalado como gatilho.
+  // Usa o proprio relogio antigo para executar o sincronizador geral novo.
+  if (typeof pbxSincronizacaoGeralUmCiclo_ === 'function') {
+    try {
+      pbxSincronizacaoGeralUmCiclo_();
+    } catch (err) {
+      console.error('PBX sync geral pelo gatilho legado: ' + (err && err.message ? err.message : err));
+    }
+  }
+
   const sheet = obterAba();
   const cabecalhos = obterCabecalhos(sheet);
   const mapa = mapaCabecalhos(cabecalhos);
@@ -679,6 +694,14 @@ function ordenarProjetosMaisNovosPrimeiro(sheet) {
 }
 
 function sincronizarEdicao(e) {
+  // COMPATIBILIDADE: se o gatilho onEdit antigo ainda existir, encaminha para
+  // o sincronizador direto novo. Isso cobre Videos_projetos, Clientes e as
+  // demais abas mapeadas sem depender de reinstalar o trigger primeiro.
+  if (typeof sincronizarEdicaoVideosDiretoWix === 'function') {
+    sincronizarEdicaoVideosDiretoWix(e);
+    return;
+  }
+
   if (!e || !e.range) return;
 
   const sheet = e.range.getSheet();

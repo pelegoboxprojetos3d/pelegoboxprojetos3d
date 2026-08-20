@@ -35,7 +35,7 @@ jobs:
           test -n "$CLASPRC_JSON"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
 
-      - name: Install triggers through temporary web app
+      - name: Install triggers and run diagnostic cycle
         shell: bash
         run: |
           set -euo pipefail
@@ -91,15 +91,22 @@ jobs:
 
             var props = PropertiesService.getScriptProperties();
             props.setProperty('PBX_TRIGGER_REPAIR_LAST_OK', new Date().toISOString());
-            // O estado oculto ja possui baseline dos ~1.800 videos. Impede que
-            // cada ciclo repita o bootstrap integral e deixa rodar so diferencas.
             props.setProperty('PBX_SYNC_GERAL_VIDEOS_BOOTSTRAP_V1', '2026-08-20-v2');
+
+            var ciclo = {ok:false};
+            var inicio = Date.now();
+            try {
+              pbxSincronizacaoGeralUmCiclo_();
+              ciclo = {ok:true, ms:Date.now() - inicio};
+            } catch (err) {
+              ciclo = {ok:false, ms:Date.now() - inicio, error:String(err && err.stack ? err.stack : err)};
+            }
 
             var ativos = ScriptApp.getProjectTriggers().map(function(t) {
               return t.getHandlerFunction() + ':' + String(t.getEventType());
             });
 
-            return ContentService.createTextOutput(JSON.stringify({ok:true,bootstrap:'2026-08-20-v2',triggers:ativos}))
+            return ContentService.createTextOutput(JSON.stringify({ok:true,bootstrap:'2026-08-20-v2',cycle:ciclo,triggers:ativos}))
               .setMimeType(ContentService.MimeType.JSON);
           }
           EOF
@@ -135,22 +142,22 @@ jobs:
           fi
 
           URL="https://script.google.com/macros/s/${DEPLOY_ID}/exec?token=${TOKEN}"
-          RESPONSE="$(curl -fsSL --retry 6 --retry-delay 3 --retry-all-errors "$URL")"
+          RESPONSE="$(curl -fsSL --max-time 360 --retry 3 --retry-delay 3 --retry-all-errors "$URL")"
           printf '%s\n' "$RESPONSE"
           printf '%s' "$RESPONSE" | grep -q '"ok":true'
 
           mkdir -p .deploy
-          printf 'Apps Script trigger repair OK: %s\nDeployment: %s\nResponse: %s\n' \
+          printf 'Apps Script trigger diagnostic: %s\nDeployment: %s\nResponse: %s\n' \
             "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$DEPLOY_ID" "$RESPONSE" \
             > .deploy/appscript-trigger-repair.txt
 
           cleanup
           trap - EXIT
 
-      - name: Record successful trigger repair
+      - name: Record diagnostic result
         run: |
           git config user.name "PELEGO BOX Trigger Repair"
           git config user.email "pelegobox82@gmail.com"
           git add .deploy/appscript-trigger-repair.txt
-          git commit -m "chore: confirmar gatilhos Apps Script ativos" || exit 0
+          git commit -m "chore: registrar diagnostico do ciclo Apps Script" || exit 0
           git push origin HEAD:main

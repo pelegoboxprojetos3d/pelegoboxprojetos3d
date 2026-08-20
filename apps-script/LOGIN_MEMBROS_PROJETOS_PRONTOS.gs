@@ -1,20 +1,20 @@
 /**
- * PELEGO BOX - MONITOR DE LOGINS DOS PROJETOS PRONTOS
+ * PELEGO BOX - MONITOR DE LOGINS / MEMBROS
  *
- * A Wix expoe o campo lastLoginDate do membro, mas nao um historico completo
- * de logins anteriores. Este monitor cria:
- * - Membros_ProjetosProntos: retrato atual dos membros;
- * - Logins_ProjetosProntos: uma linha por novo lastLoginDate detectado;
- * - Resumo_Logins: total diario, pessoas unicas, novos membros e retornos.
+ * Fonte: colecao de app Wix Members/FullData (somente leitura).
+ * Ela expoe lastLoginDate sem exigir a permissao MEMBERS.MEMBER_READ
+ * que a chave CMS atual nao possui.
  *
- * Na primeira execucao, o ultimo login atual de cada membro vira uma linha
- * BASELINE_WIX_ULTIMO_LOGIN. Depois disso, qualquer mudanca de lastLoginDate
- * vira LOGIN_DETECTADO.
+ * Abas criadas/alimentadas:
+ * - Membros_ProjetosProntos: estado atual de cada membro.
+ * - Logins_ProjetosProntos: historico incremental dos logins detectados.
+ * - Resumo_Logins: consolidado diario + grafico.
  */
 
 const PBX_LOGIN_SPREADSHEET_ID = '1F2SBmr0JtY9qRnabDlM5zImtCORZOirgjuAHGFaFq0E';
 const PBX_LOGIN_WIX_SITE_ID = 'd1022df4-d4fd-4561-8909-a59d876691b3';
-const PBX_LOGIN_WIX_MEMBERS_URL = 'https://www.wixapis.com/members/v1/members/query';
+const PBX_LOGIN_WIX_DATA_QUERY_URL = 'https://www.wixapis.com/wix-data/v2/items/query';
+const PBX_LOGIN_COLLECTION = 'Members/FullData';
 const PBX_LOGIN_TZ = 'America/Sao_Paulo';
 const PBX_LOGIN_SHEET_MEMBROS = 'Membros_ProjetosProntos';
 const PBX_LOGIN_SHEET_EVENTOS = 'Logins_ProjetosProntos';
@@ -52,27 +52,34 @@ function pbxInstalarMonitorLoginsProjetosProntos() {
     .everyMinutes(1)
     .create();
 
-  const resultado = pbxMonitorarLoginsProjetosProntos();
   PropertiesService.getScriptProperties()
     .setProperty('PBX_LOGIN_MONITOR_LAST_INSTALL', new Date().toISOString());
 
+  const resultado = pbxMonitorarLoginsProjetosProntos();
   return {
     ok: true,
     handler: PBX_LOGIN_HANDLER,
-    resultado,
-    triggers: ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction() + ':' + String(t.getEventType()))
+    resultado: resultado,
+    triggers: ScriptApp.getProjectTriggers().map(t =>
+      t.getHandlerFunction() + ':' + String(t.getEventType())
+    )
   };
 }
 
 function pbxMonitorarLoginsProjetosProntos() {
+  // Lock separado do sincronizador geral Sheets <-> Wix.
   const lock = LockService.getUserLock();
-  if (!lock.tryLock(10000)) return { ok: true, skipped: 'LOGIN_MONITOR_LOCKED' };
+  if (!lock.tryLock(10000)) {
+    return { ok: true, skipped: 'LOGIN_MONITOR_LOCKED' };
+  }
 
   try {
     const apiKey = obterWixApiKey_();
-    if (!apiKey) throw new Error('API Wix nao configurada para ler membros.');
+    if (!apiKey) throw new Error('API Wix nao configurada para o monitor de logins.');
 
-    const membros = pbxBuscarTodosMembrosWix_(apiKey);
+    const membros = pbxBuscarTodosMembrosFullData_(apiKey);
+    membros.sort((a, b) => String(b.lastLoginDate || '').localeCompare(String(a.lastLoginDate || '')));
+
     const ss = SpreadsheetApp.openById(PBX_LOGIN_SPREADSHEET_ID);
     const abas = pbxPrepararAbasLoginProjetosProntos_(ss);
     const sheetMembros = abas.membros;
@@ -105,14 +112,17 @@ function pbxMonitorarLoginsProjetosProntos() {
 
     if (novasLinhasEvento.length) {
       const inicio = Math.max(2, sheetEventos.getLastRow() + 1);
-      sheetEventos.getRange(inicio, 1, novasLinhasEvento.length, PBX_LOGIN_HEADERS_EVENTOS.length)
+      sheetEventos
+        .getRange(inicio, 1, novasLinhasEvento.length, PBX_LOGIN_HEADERS_EVENTOS.length)
         .setValues(novasLinhasEvento);
-      sheetEventos.getRange(inicio, 1, novasLinhasEvento.length, 1)
+      sheetEventos
+        .getRange(inicio, 1, novasLinhasEvento.length, 1)
         .setNumberFormat('dd/MM/yyyy HH:mm:ss');
     }
 
     pbxAtualizarResumoLogins_(sheetResumo, sheetEventos, membros);
     pbxGarantirGraficoLogins_(sheetResumo);
+    SpreadsheetApp.flush();
 
     PropertiesService.getScriptProperties()
       .setProperty('PBX_LOGIN_MONITOR_LAST_OK', new Date().toISOString());
@@ -121,20 +131,20 @@ function pbxMonitorarLoginsProjetosProntos() {
       ok: true,
       membros: membros.length,
       novosEventos: novasLinhasEvento.length,
-      primeiraCarga
+      primeiraCarga: primeiraCarga
     };
   } finally {
     lock.releaseLock();
   }
 }
 
-function pbxBuscarTodosMembrosWix_(apiKey) {
+function pbxBuscarTodosMembrosFullData_(apiKey) {
   const todos = [];
   let offset = 0;
   const limit = 100;
 
   while (true) {
-    const response = UrlFetchApp.fetch(PBX_LOGIN_WIX_MEMBERS_URL, {
+    const response = UrlFetchApp.fetch(PBX_LOGIN_WIX_DATA_QUERY_URL, {
       method: 'post',
       contentType: 'application/json',
       headers: {
@@ -143,8 +153,10 @@ function pbxBuscarTodosMembrosWix_(apiKey) {
         Accept: 'application/json'
       },
       payload: JSON.stringify({
-        query: { paging: { limit, offset } },
-        fieldsets: ['FULL']
+        dataCollectionId: PBX_LOGIN_COLLECTION,
+        query: {
+          paging: { limit: limit, offset: offset }
+        }
       }),
       muteHttpExceptions: true
     });
@@ -152,22 +164,83 @@ function pbxBuscarTodosMembrosWix_(apiKey) {
     const status = response.getResponseCode();
     const texto = response.getContentText();
     if (status < 200 || status >= 300) {
-      throw new Error(`Wix Members: HTTP ${status} - ${texto.slice(0, 800)}`);
+      throw new Error('Wix Members/FullData: HTTP ' + status + ' - ' + texto.slice(0, 800));
     }
 
     let body = {};
-    try { body = texto ? JSON.parse(texto) : {}; }
-    catch (_) { throw new Error('Wix Members: resposta JSON invalida.'); }
+    try {
+      body = texto ? JSON.parse(texto) : {};
+    } catch (_) {
+      throw new Error('Wix Members/FullData: resposta JSON invalida.');
+    }
 
-    const lote = Array.isArray(body.members) ? body.members : [];
-    todos.push(...lote);
+    const itens = Array.isArray(body.dataItems)
+      ? body.dataItems
+      : (body.data && Array.isArray(body.data.dataItems) ? body.data.dataItems : []);
 
-    const total = Number(body.metadata && body.metadata.total || todos.length);
-    offset += lote.length;
-    if (!lote.length || offset >= total || lote.length < limit) break;
+    itens.forEach(item => {
+      const d = item && item.data ? item.data : (item || {});
+      const id = String(item.id || d._id || '').trim();
+      if (!id) return;
+
+      const fotoRaw = d.profilePhoto || '';
+      let fotoUrl = '';
+      if (fotoRaw && typeof fotoRaw === 'object') {
+        fotoUrl = String(fotoRaw.url || fotoRaw.src || fotoRaw.id || '');
+      } else {
+        fotoUrl = String(fotoRaw || '');
+      }
+
+      const telefone = String(d.phone || '').trim();
+      const emailContato = String(d.email || '').trim();
+
+      todos.push({
+        id: id,
+        contactId: '',
+        loginEmail: String(d.loginEmail || ''),
+        loginEmailVerified: '',
+        status: String(d.status || ''),
+        activityStatus: String(d.activityStatus || ''),
+        privacyStatus: String(d.privacyStatus || ''),
+        createdDate: pbxWixDataIsoLogin_(d._createdDate || item.createdDate),
+        updatedDate: pbxWixDataIsoLogin_(d._updatedDate || item.updatedDate),
+        lastLoginDate: pbxWixDataIsoLogin_(d.lastLoginDate),
+        contact: {
+          contactId: '',
+          firstName: String(d.firstName || ''),
+          lastName: String(d.lastName || ''),
+          phones: telefone ? [telefone] : [],
+          emails: emailContato ? [emailContato] : [],
+          addresses: [],
+          company: '',
+          jobTitle: '',
+          birthdate: '',
+          customFields: d
+        },
+        profile: {
+          nickname: String(d.nickname || ''),
+          slug: String(d.slug || ''),
+          title: String(d.title || ''),
+          photo: { url: fotoUrl }
+        }
+      });
+    });
+
+    offset += itens.length;
+    if (!itens.length || itens.length < limit) break;
   }
 
   return todos;
+}
+
+function pbxWixDataIsoLogin_(valor) {
+  if (!valor) return '';
+  if (typeof valor === 'string') return valor;
+  if (typeof valor === 'object') {
+    if (valor.$date) return String(valor.$date);
+    if (valor.date) return String(valor.date);
+  }
+  return String(valor || '');
 }
 
 function pbxPrepararAbasLoginProjetosProntos_(ss) {
@@ -203,17 +276,20 @@ function pbxPrepararAbasLoginProjetosProntos_(ss) {
   eventos.setColumnWidth(6, 170);
   eventos.setColumnWidth(7, 170);
   eventos.setColumnWidth(9, 250);
-  eventos.setColumnWidth(17, 190);
+  eventos.setColumnWidth(17, 210);
 
   resumo.setColumnWidth(1, 110);
   resumo.setColumnWidths(2, 4, 125);
 
-  return { membros, eventos, resumo };
+  return { membros: membros, eventos: eventos, resumo: resumo };
 }
 
 function pbxGarantirAbaLogin_(ss, nome, headers) {
   let sheet = ss.getSheetByName(nome);
   if (!sheet) sheet = ss.insertSheet(nome);
+  if (sheet.getMaxColumns() < headers.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  }
 
   const atual = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
   const diferente = headers.some((h, i) => String(atual[i] || '') !== h);
@@ -234,7 +310,10 @@ function pbxLerEstadoMembrosLogin_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return mapa;
 
-  const values = sheet.getRange(2, 1, lastRow - 1, PBX_LOGIN_HEADERS_MEMBROS.length).getValues();
+  const values = sheet
+    .getRange(2, 1, lastRow - 1, PBX_LOGIN_HEADERS_MEMBROS.length)
+    .getValues();
+
   values.forEach(row => {
     const id = String(row[0] || '').trim();
     const iso = String(row[27] || '').trim();
@@ -256,7 +335,7 @@ function pbxLinhaMembroLogin_(m) {
     String(c.lastName || ''),
     String(p.nickname || ''),
     String(m.loginEmail || ''),
-    Boolean(m.loginEmailVerified),
+    m.loginEmailVerified === '' ? '' : Boolean(m.loginEmailVerified),
     (c.phones || []).join(' | '),
     (c.emails || []).join(' | '),
     String(m.status || ''),
@@ -312,7 +391,9 @@ function pbxLinhaEventoLogin_(m, fonte) {
 
 function pbxMelhorEnderecoLogin_(enderecos) {
   if (!Array.isArray(enderecos) || !enderecos.length) return {};
-  return enderecos.find(a => a && (a.city || a.addressLine || a.postalCode || a.subdivision || a.country)) || enderecos[0] || {};
+  return enderecos.find(a =>
+    a && (a.city || a.addressLine || a.postalCode || a.subdivision || a.country)
+  ) || enderecos[0] || {};
 }
 
 function pbxDataWixLogin_(valor) {
@@ -348,14 +429,19 @@ function pbxAtualizarResumoLogins_(sheetResumo, sheetEventos, membros) {
 
   const lastRow = sheetEventos.getLastRow();
   if (lastRow >= 2) {
-    const values = sheetEventos.getRange(2, 1, lastRow - 1, PBX_LOGIN_HEADERS_EVENTOS.length).getValues();
+    const values = sheetEventos
+      .getRange(2, 1, lastRow - 1, PBX_LOGIN_HEADERS_EVENTOS.length)
+      .getValues();
+
     values.forEach(row => {
       const data = row[0];
       const memberId = String(row[3] || '');
       if (!(data instanceof Date) || isNaN(data.getTime()) || !memberId) return;
 
       const key = Utilities.formatDate(data, PBX_LOGIN_TZ, 'yyyy-MM-dd');
-      if (!porDia.has(key)) porDia.set(key, { total: 0, unicos: new Set(), retornos: new Set() });
+      if (!porDia.has(key)) {
+        porDia.set(key, { total: 0, unicos: new Set(), retornos: new Set() });
+      }
       const item = porDia.get(key);
       item.total += 1;
       item.unicos.add(memberId);
@@ -366,14 +452,16 @@ function pbxAtualizarResumoLogins_(sheetResumo, sheetEventos, membros) {
   }
 
   novosPorDia.forEach((_, key) => {
-    if (!porDia.has(key)) porDia.set(key, { total: 0, unicos: new Set(), retornos: new Set() });
+    if (!porDia.has(key)) {
+      porDia.set(key, { total: 0, unicos: new Set(), retornos: new Set() });
+    }
   });
 
   const keys = Array.from(porDia.keys()).sort();
   const rows = keys.map(key => {
     const item = porDia.get(key);
     const partes = key.split('-');
-    const rotulo = `${partes[2]}/${partes[1]}/${partes[0]}`;
+    const rotulo = partes[2] + '/' + partes[1] + '/' + partes[0];
     return [
       rotulo,
       item.total,

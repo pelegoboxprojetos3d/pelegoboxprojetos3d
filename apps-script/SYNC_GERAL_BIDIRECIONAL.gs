@@ -130,6 +130,7 @@ function pbxSincronizacaoGeralUmCiclo_() {
     let estadoMudou = false;
 
     for (const [sheetName, cfg] of Object.entries(PBX_SYNC_ABAS_GERAL)) {
+      try {
       const sheet = ss.getSheetByName(sheetName);
       if (!sheet || sheet.getLastRow() < 2) continue;
 
@@ -221,6 +222,18 @@ function pbxSincronizacaoGeralUmCiclo_() {
           estadoMudou = true;
         });
       }
+
+        if (estadoMudou) {
+          pbxSalvarEstadoSync_(ss, estado);
+          estadoMudou = false;
+        }
+      } catch (err) {
+        console.error(`PBX sync ${sheetName} -> Wix isolado: ${err && err.message ? err.message : err}`);
+        if (estadoMudou) {
+          pbxSalvarEstadoSync_(ss, estado);
+          estadoMudou = false;
+        }
+      }
     }
 
     const props = PropertiesService.getScriptProperties();
@@ -231,6 +244,7 @@ function pbxSincronizacaoGeralUmCiclo_() {
       const desde = Math.max(0, lastPoll - PBX_SYNC_WIX_OVERLAP_MS);
 
       for (const [sheetName, cfg] of Object.entries(PBX_SYNC_ABAS_GERAL)) {
+        try {
         const sheet = ss.getSheetByName(sheetName);
         if (!sheet) continue;
 
@@ -291,6 +305,17 @@ function pbxSincronizacaoGeralUmCiclo_() {
           novo.lastSyncIso = new Date().toISOString();
           estado.set(key, novo);
           estadoMudou = true;
+        }
+        if (estadoMudou) {
+          pbxSalvarEstadoSync_(ss, estado);
+          estadoMudou = false;
+        }
+        } catch (err) {
+          console.error(`PBX sync Wix -> ${sheetName} isolado: ${err && err.message ? err.message : err}`);
+          if (estadoMudou) {
+            pbxSalvarEstadoSync_(ss, estado);
+            estadoMudou = false;
+          }
         }
       }
     }

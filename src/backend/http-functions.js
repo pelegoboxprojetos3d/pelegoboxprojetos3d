@@ -3288,3 +3288,82 @@ export async function get_pelegoRadioCatalog(request) {
   }
 }
 
+
+
+// ======================================================
+// BUSCADOR ZERO V2 - ROTA ESTÁVEL E SOMENTE WIX STORES
+// /_functions/buscarProjetosZeroV2?q=...
+// ======================================================
+export async function get_buscarProjetosZeroV2(request) {
+  try {
+    const rawQuery = safe(request?.query?.q).slice(0, 180);
+    if (!rawQuery) {
+      return badRequest({
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: false, error: 'busca_vazia', products: [] })
+      });
+    }
+
+    const normalized = normalizeSearchZero(rawQuery);
+    const stopWords = new Set(['a','o','as','os','e','de','do','da','dos','das','um','uma','uns','umas','para','pra','com','por']);
+    const terms = [...new Set(normalized.split(/\s+/))]
+      .filter(term => term.length >= 2 && !stopWords.has(term))
+      .slice(0, 8);
+    if (!terms.length && normalized) terms.push(normalized);
+
+    let storeQuery = null;
+    for (const term of terms) {
+      const q = wixData.query('Stores/Products').contains('name', term);
+      storeQuery = storeQuery ? storeQuery.or(q) : q;
+    }
+
+    let items = [];
+    if (storeQuery) {
+      const direct = await storeQuery.limit(100).find({ suppressAuth: true });
+      items = direct.items || [];
+    }
+
+    let ranked = items
+      .map(item => ({ item, score: scoreProductZero(item, rawQuery, terms) }))
+      .filter(entry => entry.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (!ranked.length) {
+      const all = [];
+      for (let offset = 0; offset < 1200; offset += 100) {
+        const page = await wixData.query('Stores/Products')
+          .skip(offset)
+          .limit(100)
+          .find({ suppressAuth: true });
+        const batch = page.items || [];
+        all.push(...batch);
+        if (batch.length < 100) break;
+      }
+      ranked = all
+        .map(item => ({ item, score: scoreProductZero(item, rawQuery, terms) }))
+        .filter(entry => entry.score >= 18)
+        .sort((a, b) => b.score - a.score);
+    }
+
+    const seen = new Set();
+    const products = [];
+    for (const entry of ranked) {
+      const id = safe(entry.item?._id);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      products.push(publicProductZero(entry.item, entry.score));
+      if (products.length >= 20) break;
+    }
+
+    return ok({
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ ok: true, query: rawQuery, count: products.length, products })
+    });
+  } catch (error) {
+    console.error('BUSCADOR ZERO V2 ERROR:', error?.message || error, error);
+    return serverError({
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: false, error: safe(error?.message || 'buscar_projetos_zero_v2_error'), products: [] })
+    });
+  }
+}

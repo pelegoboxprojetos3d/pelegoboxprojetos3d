@@ -1,0 +1,110 @@
+import wixData from "wix-data";
+import { currentMember } from "wix-members-backend";
+
+const ZERO_COLLECTION = "BuscadorProjetosHistorico";
+const READY_COLLECTION = "BuscasProjetosProntos";
+const DB_OPTS = { suppressAuth: true };
+
+function safe(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeSearch(value) {
+  return safe(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dayBR() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+export async function registrarBuscaZero({
+  termo,
+  pagina = "",
+  sessionId = "",
+  quantidadeResultados = 0
+} = {}) {
+  const busca = safe(termo).slice(0, 180);
+  const sid = safe(sessionId).slice(0, 120);
+
+  if (!busca) {
+    return { ok: false, error: "busca_vazia" };
+  }
+
+  // Se o popup enviou um ID único para esta busca, impede duplicação por F5.
+  if (sid) {
+    const existente = await wixData
+      .query(ZERO_COLLECTION)
+      .eq("sessionId", sid)
+      .limit(1)
+      .find(DB_OPTS);
+
+    if (existente.items.length) {
+      return {
+        ok: true,
+        duplicate: true,
+        id: existente.items[0]._id
+      };
+    }
+  }
+
+  const item = await wixData.insert(
+    ZERO_COLLECTION,
+    {
+      busca,
+      buscaNormalizada: normalizeSearch(busca),
+      origem: safe(pagina).slice(0, 300),
+      sessionId: sid,
+      quantidadeResultados: Number.isFinite(Number(quantidadeResultados))
+        ? Number(quantidadeResultados)
+        : 0
+    },
+    DB_OPTS
+  );
+
+  return { ok: true, id: item._id };
+}
+
+export async function registrarBuscaPronto({ termo, pagina = "" } = {}) {
+  const busca = safe(termo).slice(0, 180);
+
+  if (!busca) {
+    return { ok: false, error: "busca_vazia" };
+  }
+
+  let membro;
+  try {
+    membro = await currentMember.getMember();
+  } catch (_) {
+    return { ok: false, loginRequired: true };
+  }
+
+  if (!membro?.id) {
+    return { ok: false, loginRequired: true };
+  }
+
+  const item = await wixData.insert(
+    READY_COLLECTION,
+    {
+      termoOriginal: busca,
+      termoNormalizado: normalizeSearch(busca),
+      dia: dayBR(),
+      pagina: safe(pagina).slice(0, 300),
+      membroId: safe(membro.id),
+      email: safe(membro.loginEmail).toLocaleLowerCase("pt-BR")
+    },
+    DB_OPTS
+  );
+
+  return { ok: true, id: item._id };
+}

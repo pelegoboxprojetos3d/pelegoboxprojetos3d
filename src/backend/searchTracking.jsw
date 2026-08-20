@@ -28,6 +28,18 @@ function dayBR() {
   }).format(new Date());
 }
 
+async function findBySessionId(collectionId, sessionId) {
+  if (!sessionId) return null;
+
+  const result = await wixData
+    .query(collectionId)
+    .eq("sessionId", sessionId)
+    .limit(1)
+    .find(DB_OPTS);
+
+  return result.items[0] || null;
+}
+
 export async function registrarBuscaZero({
   termo,
   pagina = "",
@@ -41,21 +53,9 @@ export async function registrarBuscaZero({
     return { ok: false, error: "busca_vazia" };
   }
 
-  // Se o popup enviou um ID único para esta busca, impede duplicação por F5.
-  if (sid) {
-    const existente = await wixData
-      .query(ZERO_COLLECTION)
-      .eq("sessionId", sid)
-      .limit(1)
-      .find(DB_OPTS);
-
-    if (existente.items.length) {
-      return {
-        ok: true,
-        duplicate: true,
-        id: existente.items[0]._id
-      };
-    }
+  const existente = await findBySessionId(ZERO_COLLECTION, sid);
+  if (existente) {
+    return { ok: true, duplicate: true, id: existente._id };
   }
 
   const item = await wixData.insert(
@@ -75,8 +75,13 @@ export async function registrarBuscaZero({
   return { ok: true, id: item._id };
 }
 
-export async function registrarBuscaPronto({ termo, pagina = "" } = {}) {
+export async function registrarBuscaPronto({
+  termo,
+  pagina = "",
+  sessionId = ""
+} = {}) {
   const busca = safe(termo).slice(0, 180);
+  const sid = safe(sessionId).slice(0, 120);
 
   if (!busca) {
     return { ok: false, error: "busca_vazia" };
@@ -93,6 +98,11 @@ export async function registrarBuscaPronto({ termo, pagina = "" } = {}) {
     return { ok: false, loginRequired: true };
   }
 
+  const existente = await findBySessionId(READY_COLLECTION, sid);
+  if (existente) {
+    return { ok: true, duplicate: true, id: existente._id };
+  }
+
   const item = await wixData.insert(
     READY_COLLECTION,
     {
@@ -101,7 +111,8 @@ export async function registrarBuscaPronto({ termo, pagina = "" } = {}) {
       dia: dayBR(),
       pagina: safe(pagina).slice(0, 300),
       membroId: safe(membro.id),
-      email: safe(membro.loginEmail).toLocaleLowerCase("pt-BR")
+      email: safe(membro.loginEmail).toLocaleLowerCase("pt-BR"),
+      sessionId: sid
     },
     DB_OPTS
   );

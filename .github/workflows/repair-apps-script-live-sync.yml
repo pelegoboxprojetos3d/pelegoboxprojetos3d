@@ -1,0 +1,68 @@
+name: Repair Apps Script Live Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/repair-apps-script-live-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch legacy trigger handlers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('apps-script/codigo.gs')
+          s = p.read_text(encoding='utf-8')
+          original = s
+
+          old = """function processarNovasLinhasPendentes() {\n  const sheet = obterAba();"""
+          new = """function processarNovasLinhasPendentes() {\n  // COMPATIBILIDADE: este handler antigo ainda pode estar instalado como gatilho.\n  // Usa o proprio relogio antigo para executar o sincronizador geral novo.\n  if (typeof pbxSincronizacaoGeralUmCiclo_ === 'function') {\n    try {\n      pbxSincronizacaoGeralUmCiclo_();\n    } catch (err) {\n      console.error('PBX sync geral pelo gatilho legado: ' + (err && err.message ? err.message : err));\n    }\n  }\n\n  const sheet = obterAba();"""
+          if old not in s:
+              raise SystemExit('Bloco processarNovasLinhasPendentes nao encontrado')
+          s = s.replace(old, new, 1)
+
+          old = """function sincronizarEdicao(e) {\n  if (!e || !e.range) return;"""
+          new = """function sincronizarEdicao(e) {\n  // COMPATIBILIDADE: se o gatilho onEdit antigo ainda existir, encaminha para\n  // o sincronizador direto novo. Isso cobre Videos_projetos, Clientes e as\n  // demais abas mapeadas sem depender de reinstalar o trigger primeiro.\n  if (typeof sincronizarEdicaoVideosDiretoWix === 'function') {\n    sincronizarEdicaoVideosDiretoWix(e);\n    return;\n  }\n\n  if (!e || !e.range) return;"""
+          if old not in s:
+              raise SystemExit('Bloco sincronizarEdicao nao encontrado')
+          s = s.replace(old, new, 1)
+
+          old = """  criarGatilhoEdicao();\n  criarGatilhoNovasLinhas();\n  processarNovasLinhasPendentes();"""
+          new = """  // A instalacao nova remove gatilhos velhos e recria os handlers corretos.\n  if (typeof instalarSyncDiretoVideos === 'function') {\n    instalarSyncDiretoVideos();\n  } else {\n    criarGatilhoEdicao();\n    criarGatilhoNovasLinhas();\n  }\n  processarNovasLinhasPendentes();"""
+          if old not in s:
+              raise SystemExit('Bloco instalarAtualizacao nao encontrado')
+          s = s.replace(old, new, 1)
+
+          old = """    'Automação instalada. Videos_projetos e Clientes estão cobertos; Clientes sincroniza direto com Wix.',"""
+          new = """    'Automação instalada. Sincronização SITE <-> Wix ativada e gatilhos reparados.',"""
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          if s == original:
+              raise SystemExit('Nenhuma alteracao aplicada')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit repair
+        run: |
+          git config user.name "PELEGO BOX Sync Repair"
+          git config user.email "pelegobox82@gmail.com"
+          git add apps-script/codigo.gs
+          git diff --cached --check
+          git commit -m "fix: fazer gatilhos legados acionarem sync geral Wix"
+          git push origin HEAD:main

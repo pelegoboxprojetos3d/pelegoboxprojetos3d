@@ -1,4 +1,6 @@
 import wixLocation from 'wix-location';
+import { authentication, currentMember } from 'wix-members-frontend';
+import { registrarBuscaZero, registrarBuscaPronto } from 'backend/searchTracking';
 
 async function ocultarElementoGlobal(id) {
   try {
@@ -7,6 +9,96 @@ async function ocultarElementoGlobal(id) {
     if (typeof elemento.hide === 'function') await elemento.hide();
     if (typeof elemento.collapse === 'function') await elemento.collapse();
   } catch (_) {}
+}
+
+function safe(value) {
+  return String(value ?? '').trim();
+}
+
+function queryValue(name) {
+  return safe(wixLocation.query?.[name]);
+}
+
+function shouldSkipAnonymousDuplicate(term) {
+  if (typeof window === 'undefined' || !term) return false;
+
+  try {
+    const key = 'pb_zero_last_search';
+    const now = Date.now();
+    const previous = JSON.parse(window.sessionStorage.getItem(key) || '{}');
+    const duplicate = previous.term === term && now - Number(previous.at || 0) < 5000;
+    window.sessionStorage.setItem(key, JSON.stringify({ term, at: now }));
+    return duplicate;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function registrarBuscaDaPagina() {
+  const pagina = safe(wixLocation.path?.[0]).toLowerCase();
+  const url = safe(wixLocation.url);
+
+  if (pagina === 'search') {
+    const termo = queryValue('q');
+    const sessionId = queryValue('sid');
+
+    if (!termo) return;
+    if (!sessionId && shouldSkipAnonymousDuplicate(termo)) return;
+
+    try {
+      await registrarBuscaZero({
+        termo,
+        pagina: url,
+        sessionId
+      });
+    } catch (error) {
+      console.warn('Não foi possível registrar a busca do Projeto Feito do Zero:', error?.message || error);
+    }
+    return;
+  }
+
+  if (pagina === 'videos-dos-projetos-prontos') {
+    const termo = queryValue('busca');
+    const sessionId = queryValue('sid');
+
+    if (!termo) return;
+
+    let membro;
+    try {
+      membro = await currentMember.getMember();
+    } catch (_) {
+      membro = undefined;
+    }
+
+    if (!membro?.id) {
+      try {
+        await authentication.promptLogin();
+        membro = await currentMember.getMember();
+      } catch (_) {
+        wixLocation.to('/videos-dos-projetos-prontos');
+        return;
+      }
+    }
+
+    if (!membro?.id) {
+      wixLocation.to('/videos-dos-projetos-prontos');
+      return;
+    }
+
+    try {
+      const result = await registrarBuscaPronto({
+        termo,
+        pagina: url,
+        sessionId
+      });
+
+      if (result?.loginRequired) {
+        wixLocation.to('/videos-dos-projetos-prontos');
+      }
+    } catch (error) {
+      console.warn('Não foi possível registrar a busca dos Projetos Prontos:', error?.message || error);
+    }
+  }
 }
 
 $w.onReady(async function () {
@@ -42,7 +134,9 @@ $w.onReady(async function () {
     } catch (_) {}
   }
 
-  // O mini player lateral substitui o antigo botão global da Rádio Pelego.
-  // Mantemos os demais elementos globais intactos.
   await ocultarElementoGlobal('#botaoradio');
+
+  // Rastreamento de intenção de busca. Só grava quando a busca foi enviada,
+  // nunca enquanto o visitante está apenas digitando.
+  await registrarBuscaDaPagina();
 });

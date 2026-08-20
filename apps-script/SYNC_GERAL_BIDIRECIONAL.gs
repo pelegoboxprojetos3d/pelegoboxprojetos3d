@@ -12,7 +12,7 @@
  * As abas de dashboard nao possuem colecao CMS propria. Elas continuam derivadas das abas de dados.
  */
 
-const PBX_SYNC_GERAL_VERSAO = '2026-08-20-v1';
+const PBX_SYNC_GERAL_VERSAO = '2026-08-20-v2';
 const PBX_SYNC_STATE_SHEET = '__PBX_SYNC_STATE';
 const PBX_SYNC_LAST_POLL_PROP = 'PBX_SYNC_GERAL_LAST_WIX_POLL_MS';
 const PBX_SYNC_BOOTSTRAP_VIDEOS_PROP = 'PBX_SYNC_GERAL_VIDEOS_BOOTSTRAP_V1';
@@ -71,17 +71,11 @@ function pbxSincronizarEdicaoAbaGenericaWix_(e) {
   const primeiraLinha = e.range.getRow();
   const ultimaLinha = primeiraLinha + e.range.getNumRows() - 1;
 
-  // Videos_projetos ja passa pela rotina especializada antes de chegar aqui.
-  // Nao recalculamos preco duas vezes. Este complemento serve para sincronizar
-  // os demais campos mapeados (marca, slug, thumbnail, link, etc.).
-
   const patches = [];
   const novos = [];
 
   for (let linha = primeiraLinha; linha <= ultimaLinha; linha++) {
     let id = String(sheet.getRange(linha, info.idCol).getValue() || '').trim();
-
-    // Novas linhas de Videos ficam a cargo do fluxo especializado, que evita duplicidade por ordem_video.
     if (!id && cfg.mode === 'VIDEOS') continue;
 
     if (!id) {
@@ -99,11 +93,7 @@ function pbxSincronizarEdicaoAbaGenericaWix_(e) {
       if (conversao.remove) {
         mods.push({ fieldPath: field.key, action: 'REMOVE_FIELD' });
       } else {
-        mods.push({
-          fieldPath: field.key,
-          action: 'SET_FIELD',
-          setFieldOptions: { value: conversao.value }
-        });
+        mods.push({ fieldPath: field.key, action: 'SET_FIELD', setFieldOptions: { value: conversao.value } });
       }
     });
 
@@ -124,10 +114,6 @@ function pbxSincronizarEdicaoAbaGenericaWix_(e) {
   pbxAtualizarEstadoLinhasSync_(sheet, cfg, schema, primeiraLinha, ultimaLinha);
 }
 
-/**
- * Executado pelo gatilho de 1 minuto ja usado por Videos_projetos.
- * Detecta alteracoes feitas por API/Make, e puxa alteracoes recentes do Wix.
- */
 function pbxSincronizacaoGeralUmCiclo_() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(PBX_SYNC_LOCK_TIMEOUT_MS)) return;
@@ -138,15 +124,11 @@ function pbxSincronizacaoGeralUmCiclo_() {
 
     const ss = SpreadsheetApp.getActive();
     pbxGarantirEstadoSync_(ss);
-
-    // Corrige o lote de precos/titulos que foi alterado via API e, uma unica vez,
-    // usa a planilha como fonte para reconciliar Videos_projetos com o Wix.
     pbxBootstrapVideosPlanilhaParaWixSync_(ss, apiKey);
 
     const estado = pbxCarregarEstadoSync_(ss);
     let estadoMudou = false;
 
-    // 1) PLANILHA -> WIX: detecta inclusive alteracoes que nao disparam onEdit.
     for (const [sheetName, cfg] of Object.entries(PBX_SYNC_ABAS_GERAL)) {
       const sheet = ss.getSheetByName(sheetName);
       if (!sheet || sheet.getLastRow() < 2) continue;
@@ -179,7 +161,6 @@ function pbxSincronizacaoGeralUmCiclo_() {
         const key = pbxEstadoKeySync_(cfg.collectionId, id);
         let st = estado.get(key);
 
-        // Primeiro contato: cria baseline sem sobrescrever historicos administrativos.
         if (!st) {
           st = {
             key,
@@ -242,7 +223,6 @@ function pbxSincronizacaoGeralUmCiclo_() {
       }
     }
 
-    // 2) WIX -> PLANILHA: somente itens alterados desde o ultimo ciclo.
     const props = PropertiesService.getScriptProperties();
     const agora = Date.now();
     const lastPoll = Number(props.getProperty(PBX_SYNC_LAST_POLL_PROP) || 0);
@@ -295,24 +275,14 @@ function pbxSincronizacaoGeralUmCiclo_() {
           const rowAntes = sheet.getRange(linha, 1, 1, sheet.getLastColumn()).getValues()[0];
           const hashAntes = pbxHashRowArraySync_(rowAntes, info, cfg);
           const sheetMudou = st && hashAntes !== st.sheetHash;
-
-          // Conflito no mesmo intervalo: preserva a planilha, pois e a mesa de trabalho do usuario.
           if (sheetMudou) continue;
 
           pbxEscreverItemWixNaLinhaSync_(sheet, linha, info, item);
-
-          if (cfg.mode === 'VIDEOS') {
-            pbxAtualizarTotalVideosAposPullSync_(sheet, info, linha);
-          }
+          if (cfg.mode === 'VIDEOS') pbxAtualizarTotalVideosAposPullSync_(sheet, info, linha);
 
           SpreadsheetApp.flush();
           const rowDepois = sheet.getRange(linha, 1, 1, sheet.getLastColumn()).getValues()[0];
-          const novo = st || {
-            key,
-            sheetName,
-            collectionId: cfg.collectionId,
-            itemId: id
-          };
+          const novo = st || { key, sheetName, collectionId: cfg.collectionId, itemId: id };
           novo.sheetHash = pbxHashRowArraySync_(rowDepois, info, cfg);
           novo.wixUpdatedMs = pbxWixUpdatedMsSync_(item);
           novo.businessJson = cfg.mode === 'VIDEOS' ? pbxBusinessJsonVideosRowSync_(rowDepois, info) : '';
@@ -376,23 +346,53 @@ function pbxCorrigirInconsistenciasVideosSync_(sheet, info) {
   const col1 = mapa[CAB_ETAPA_1];
   const col2 = mapa[CAB_ETAPA_2];
   const col3 = mapa[CAB_ETAPA_3];
-  if (!colTotal || !col1 || !col2 || !col3) return;
+  const colAjuste = mapa[CAB_AJUSTE_PERCENTUAL];
+  const colBase = mapa[CAB_PRECO_TOTAL_BASE];
+  if (!colTotal || !col1 || !col2 || !col3 || !colAjuste || !colBase) return;
 
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
-  const vals = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const qtd = lastRow - 1;
+  const vals = sheet.getRange(2, 1, qtd, sheet.getLastColumn()).getValues();
 
-  for (let i = 0; i < vals.length; i++) {
-    const row = vals[i];
+  const out1 = [];
+  const out2 = [];
+  const out3 = [];
+  const outBase = [];
+  let corrigidas = 0;
+
+  for (const row of vals) {
     const total = normalizarNumero(row[colTotal - 1]);
-    const e1 = normalizarNumero(row[col1 - 1]);
-    const e2 = normalizarNumero(row[col2 - 1]);
-    const e3 = normalizarNumero(row[col3 - 1]);
-    if (!(total > 0)) continue;
-    if (Math.abs(total - (e1 + e2 + e3)) < 0.009) continue;
+    let e1 = normalizarNumero(row[col1 - 1]);
+    let e2 = normalizarNumero(row[col2 - 1]);
+    let e3 = normalizarNumero(row[col3 - 1]);
+    const ajuste = normalizarNumero(row[colAjuste - 1]);
+    let base = normalizarNumero(row[colBase - 1]);
 
-    pbxAplicarRegrasPrecoMultiplo5_(sheet, info.headers, i + 2, new Set([CAB_PRECO_TOTAL]));
+    if (total > 0 && Math.abs(total - (e1 + e2 + e3)) >= 0.009) {
+      base = (1 + ajuste > 0) ? arredondarCentavos(total / (1 + ajuste)) : total;
+      e1 = Math.max(MIN_ETAPA_1, arredondarParaMultiplo(total * PERCENTUAL_ETAPA_1, MULTIPLO_PRECO));
+      e2 = Math.max(MIN_ETAPA_2, arredondarParaMultiplo(total * PERCENTUAL_ETAPA_2, MULTIPLO_PRECO));
+      const nova3 = arredondarCentavos(total - e1 - e2);
+      if (nova3 >= 0) {
+        e3 = nova3;
+        corrigidas++;
+      }
+    }
+
+    out1.push([e1]);
+    out2.push([e2]);
+    out3.push([e3]);
+    outBase.push([base]);
   }
+
+  if (!corrigidas) return;
+  sheet.getRange(2, col1, qtd, 1).setValues(out1);
+  sheet.getRange(2, col2, qtd, 1).setValues(out2);
+  sheet.getRange(2, col3, qtd, 1).setValues(out3);
+  sheet.getRange(2, colBase, qtd, 1).setValues(outBase);
+  sheet.getRange(2, col1, qtd, 3).setNumberFormat('R$ #,##0.00');
+  console.log(`PBX Videos: ${corrigidas} linha(s) de preco reconciliada(s) em lote.`);
 }
 
 function pbxAplicarRegrasVideosPorMudancaSync_(sheet, info, linha, businessAnteriorJson) {
@@ -537,9 +537,6 @@ function pbxValorPlanilhaParaWixSync_(value, field, criando) {
   const type = String(field.type || 'TEXT').toUpperCase();
 
   if (vazio) {
-    // Em criacao, campo vazio simplesmente nao e enviado. Em atualizacao,
-    // texto vazio limpa o texto; tipos estruturados/numericos removem o campo
-    // em vez de inventar 0/false e corromper semantica da colecao.
     if (criando) return { ok: true, skip: true };
     if (type === 'TEXT' || type === 'EMAIL' || type === 'URL' || type === 'IMAGE' || type === 'REFERENCE') {
       return { ok: true, value: '' };
@@ -669,9 +666,7 @@ function pbxBuscarItensWixAlteradosSync_(collectionId, desdeMs, apiKey) {
 function pbxEscreverItemWixNaLinhaSync_(sheet, linha, info, item) {
   const data = item.data || {};
   const lastCol = sheet.getLastColumn();
-  const atual = linha <= sheet.getLastRow()
-    ? sheet.getRange(linha, 1, 1, lastCol).getValues()[0]
-    : new Array(lastCol).fill('');
+  const atual = linha <= sheet.getLastRow() ? sheet.getRange(linha, 1, 1, lastCol).getValues()[0] : new Array(lastCol).fill('');
 
   if (info.idCol) atual[info.idCol - 1] = String(item.id || item._id || data._id || '');
 
@@ -728,12 +723,7 @@ function pbxDigestSync_(s) {
 }
 
 function pbxNormSync_(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function pbxEstadoKeySync_(collectionId, id) {
@@ -783,6 +773,10 @@ function pbxSalvarEstadoSync_(ss, estado) {
     .sort((a, b) => (a.sheetName + a.itemId).localeCompare(b.sheetName + b.itemId))
     .map(s => [s.key, s.sheetName, s.collectionId, s.itemId, s.sheetHash, s.wixUpdatedMs || 0, s.businessJson || '', s.rowNumber || 0, `${s.lastAction || ''}@@${s.lastSyncIso || ''}`]);
 
+  const requiredRows = Math.max(2, rows.length + 1);
+  if (sh.getMaxRows() < requiredRows) sh.insertRowsAfter(sh.getMaxRows(), requiredRows - sh.getMaxRows());
+  if (sh.getMaxColumns() < 9) sh.insertColumnsAfter(sh.getMaxColumns(), 9 - sh.getMaxColumns());
+
   const oldLast = sh.getLastRow();
   if (oldLast > 1) sh.getRange(2, 1, oldLast - 1, 9).clearContent();
   if (rows.length) sh.getRange(2, 1, rows.length, 9).setValues(rows);
@@ -822,7 +816,5 @@ function pbxStatusSincronizacaoGeral() {
   const ss = SpreadsheetApp.getActive();
   const state = pbxCarregarEstadoSync_(ss);
   const lastPoll = Number(PropertiesService.getScriptProperties().getProperty(PBX_SYNC_LAST_POLL_PROP) || 0);
-  SpreadsheetApp.getUi().alert(
-    `Sincronizacao geral ativa\nVersao: ${PBX_SYNC_GERAL_VERSAO}\nItens monitorados: ${state.size}\nUltimo ciclo Wix: ${lastPoll ? new Date(lastPoll).toLocaleString() : 'ainda nao executado'}`
-  );
+  SpreadsheetApp.getUi().alert(`Sincronizacao geral ativa\nVersao: ${PBX_SYNC_GERAL_VERSAO}\nItens monitorados: ${state.size}\nUltimo ciclo Wix: ${lastPoll ? new Date(lastPoll).toLocaleString() : 'ainda nao executado'}`);
 }

@@ -1,0 +1,56 @@
+name: Corrigir JSON buscador Zero V2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/corrigir-json-buscador-zero-v2-2026-08-20.yml
+      - scripts/corrigir-json-buscador-zero-v2-2026-08-20.cjs
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Corrigir JSON
+        run: node scripts/corrigir-json-buscador-zero-v2-2026-08-20.cjs
+      - name: Validar
+        run: |
+          grep -q "body: { ok: true, query: rawQuery, count: products.length, products }" src/backend/http-functions.js
+          ! grep -q "body: JSON.stringify({ ok: true, query: rawQuery, count: products.length, products })" src/backend/http-functions.js
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/backend/http-functions.js; then
+            echo 'Já corrigido.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add src/backend/http-functions.js
+            git commit -m 'Corrigir resposta JSON do buscador Projeto Feito do Zero'
+            git push origin HEAD:main
+          fi
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi

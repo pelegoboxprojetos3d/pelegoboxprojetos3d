@@ -1,0 +1,115 @@
+name: Fix Sync Bootstrap Health
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fix-sync-bootstrap-health.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch sync bootstrap and heartbeat
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('apps-script/SYNC_GERAL_BIDIRECIONAL.gs')
+          s = p.read_text(encoding='utf-8')
+          old = """function pbxBootstrapVideosPlanilhaParaWixSync_(ss, apiKey) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PBX_SYNC_BOOTSTRAP_VIDEOS_PROP) === PBX_SYNC_GERAL_VERSAO) return;
+
+  const sheet = ss.getSheetByName('Videos_projetos');"""
+          new = """function pbxBootstrapVideosPlanilhaParaWixSync_(ss, apiKey) {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PBX_SYNC_BOOTSTRAP_VIDEOS_PROP) === PBX_SYNC_GERAL_VERSAO) return;
+
+  // Se o estado geral ja possui a base dos videos, nao repete um bootstrap de
+  // ~1.800 PATCHes a cada minuto. As diferencas reais seguem pelo hash normal.
+  const stateSheet = ss.getSheetByName(PBX_SYNC_STATE_SHEET);
+  if (stateSheet && stateSheet.getLastRow() > 1000) {
+    const qtdEstado = stateSheet.getLastRow() - 1;
+    const colecoes = stateSheet.getRange(2, 3, qtdEstado, 1).getDisplayValues();
+    const videosNoEstado = colecoes.reduce((n, r) => n + (String(r[0] || '') === 'Videosprojetos' ? 1 : 0), 0);
+    if (videosNoEstado > 1000) {
+      props.setProperty(PBX_SYNC_BOOTSTRAP_VIDEOS_PROP, PBX_SYNC_GERAL_VERSAO);
+      console.log(`PBX bootstrap Videos dispensado: ${videosNoEstado} itens ja possuem baseline.`);
+      return;
+    }
+  }
+
+  const sheet = ss.getSheetByName('Videos_projetos');"""
+          if old not in s:
+              raise SystemExit('Bloco bootstrap esperado nao encontrado')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          p = Path('apps-script/VIDEOS_PROJETOS_SYNC_DIRETO_WIX.gs')
+          s = p.read_text(encoding='utf-8')
+          old = """  if (typeof pbxSincronizacaoGeralUmCiclo_ === 'function') {
+    try {
+      pbxSincronizacaoGeralUmCiclo_();
+    } catch (err) {
+      console.error('Sincronizacao geral SITE <-> Wix: ' + (err && err.message ? err.message : err));
+    }
+  }
+
+  const sheet = obterAba();"""
+          new = """  if (typeof pbxSincronizacaoGeralUmCiclo_ === 'function') {
+    try {
+      pbxSincronizacaoGeralUmCiclo_();
+      pbxRegistrarSaudeSync_('OK', '');
+    } catch (err) {
+      const detalhe = err && err.message ? err.message : String(err);
+      pbxRegistrarSaudeSync_('ERRO', detalhe);
+      console.error('Sincronizacao geral SITE <-> Wix: ' + detalhe);
+    }
+  }
+
+  const sheet = obterAba();"""
+          if old not in s:
+              raise SystemExit('Bloco ciclo geral esperado nao encontrado')
+          s = s.replace(old, new, 1)
+
+          marker = "function processarNovasLinhasPendentesDiretoWix() {"
+          helper = """function pbxRegistrarSaudeSync_(status, detalhe) {
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const sh = ss.getSheetByName('__PBX_SYNC_STATE');
+    if (!sh) return;
+    sh.getRange('K1:L3').setValues([
+      ['last_trigger_status', String(status || '')],
+      ['last_trigger_at', new Date()],
+      ['last_trigger_detail', String(detalhe || '').slice(0, 500)]
+    ]);
+  } catch (_) {}
+}
+
+"""
+          if helper.strip() not in s:
+              if marker not in s:
+                  raise SystemExit('Marcador processarNovasLinhas nao encontrado')
+              s = s.replace(marker, helper + marker, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name "PELEGO BOX Sync Fix"
+          git config user.email "pelegobox82@gmail.com"
+          git add apps-script/SYNC_GERAL_BIDIRECIONAL.gs apps-script/VIDEOS_PROJETOS_SYNC_DIRETO_WIX.gs
+          git diff --cached --check
+          git commit -m "fix: destravar bootstrap e registrar heartbeat do sync" || exit 0
+          git push origin HEAD:main

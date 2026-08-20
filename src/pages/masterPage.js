@@ -1,5 +1,4 @@
 import wixLocation from 'wix-location';
-import { authentication, currentMember } from 'wix-members-frontend';
 import { registrarBuscaZero, registrarBuscaPronto } from 'backend/searchTracking';
 
 async function ocultarElementoGlobal(id) {
@@ -63,38 +62,14 @@ async function registrarBuscaDaPagina() {
 
     if (!termo) return;
 
-    let membro;
     try {
-      membro = await currentMember.getMember();
-    } catch (_) {
-      membro = undefined;
-    }
-
-    if (!membro?.id) {
-      try {
-        await authentication.promptLogin();
-        membro = await currentMember.getMember();
-      } catch (_) {
-        wixLocation.to('/videos-dos-projetos-prontos');
-        return;
-      }
-    }
-
-    if (!membro?.id) {
-      wixLocation.to('/videos-dos-projetos-prontos');
-      return;
-    }
-
-    try {
-      const result = await registrarBuscaPronto({
+      // O rastreamento nunca deve disparar login, redirecionar ou bloquear a busca.
+      // Se a sessão de membro ainda não estiver disponível, o backend simplesmente não grava esta tentativa.
+      await registrarBuscaPronto({
         termo,
         pagina: url,
         sessionId
       });
-
-      if (result?.loginRequired) {
-        wixLocation.to('/videos-dos-projetos-prontos');
-      }
     } catch (error) {
       console.warn('Não foi possível registrar a busca dos Projetos Prontos:', error?.message || error);
     }
@@ -136,8 +111,7 @@ $w.onReady(async function () {
 
   await ocultarElementoGlobal('#botaoradio');
 
-  // Rastreamento de intenção de busca. Só grava quando a busca foi enviada.
-  // Não bloqueia mais a renderização nem o filtro da página de resultados.
+  // Rastreamento em segundo plano. Nunca interfere na navegação ou autenticação.
   registrarBuscaDaPagina().catch((error) => {
     console.warn('Não foi possível concluir o rastreamento da busca:', error?.message || error);
   });

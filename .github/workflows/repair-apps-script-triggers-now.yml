@@ -89,14 +89,17 @@ jobs:
               .everyMinutes(1)
               .create();
 
-            PropertiesService.getScriptProperties()
-              .setProperty('PBX_TRIGGER_REPAIR_LAST_OK', new Date().toISOString());
+            var props = PropertiesService.getScriptProperties();
+            props.setProperty('PBX_TRIGGER_REPAIR_LAST_OK', new Date().toISOString());
+            // O estado oculto ja possui baseline dos ~1.800 videos. Impede que
+            // cada ciclo repita o bootstrap integral e deixa rodar so diferencas.
+            props.setProperty('PBX_SYNC_GERAL_VIDEOS_BOOTSTRAP_V1', '2026-08-20-v2');
 
             var ativos = ScriptApp.getProjectTriggers().map(function(t) {
               return t.getHandlerFunction() + ':' + String(t.getEventType());
             });
 
-            return ContentService.createTextOutput(JSON.stringify({ok:true,triggers:ativos}))
+            return ContentService.createTextOutput(JSON.stringify({ok:true,bootstrap:'2026-08-20-v2',triggers:ativos}))
               .setMimeType(ContentService.MimeType.JSON);
           }
           EOF

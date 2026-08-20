@@ -58,7 +58,7 @@ async function registrarBuscaDaPagina() {
   }
 
   if (pagina === 'videos-dos-projetos-prontos') {
-    const termo = queryValue('busca');
+    const termo = queryValue('oq') || queryValue('busca');
     const sessionId = queryValue('sid');
 
     if (!termo) return;

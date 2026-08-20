@@ -1,0 +1,13 @@
+const fs = require('fs');
+const file = 'src/backend/http-functions.js';
+let s = fs.readFileSync(file,'utf8');
+const start = s.indexOf('// BUSCADOR ZERO V2 - ROTA ESTÁVEL E SOMENTE WIX STORES');
+if (start < 0) throw new Error('Bloco V2 não encontrado');
+const before = s.slice(0,start);
+let block = s.slice(start);
+block = block.replace("body: JSON.stringify({ ok: false, error: 'busca_vazia', products: [] })", "body: { ok: false, error: 'busca_vazia', products: [] }");
+block = block.replace("body: JSON.stringify({ ok: true, query: rawQuery, count: products.length, products })", "body: { ok: true, query: rawQuery, count: products.length, products }");
+block = block.replace("body: JSON.stringify({ ok: false, error: safe(error?.message || 'buscar_projetos_zero_v2_error'), products: [] })", "body: { ok: false, error: safe(error?.message || 'buscar_projetos_zero_v2_error'), products: [] }");
+s = before + block;
+fs.writeFileSync(file,s);
+console.log('JSON do buscador Zero V2 corrigido.');

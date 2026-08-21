@@ -32,6 +32,14 @@ jobs:
           $ico = Get-Content tools/pelego-screen-ink/pelego.ico.b64 -Raw
           [IO.File]::WriteAllBytes("tools/pelego-screen-ink/pelego.ico", [Convert]::FromBase64String(($ico -replace '\s','')))
 
+      - name: Patch V3.3 source
+        shell: pwsh
+        run: |
+          $p = "tools/pelego-screen-ink/ProgramV33.cs"
+          $s = Get-Content $p -Raw
+          $s = $s.Replace('g.RotateTransform(-35,cx,cy);', 'g.TranslateTransform(cx,cy); g.RotateTransform(-35); g.TranslateTransform(-cx,-cy);')
+          Set-Content -Path $p -Value $s -Encoding UTF8
+
       - name: Publish single-file Windows app
         shell: pwsh
         run: |
@@ -55,27 +63,13 @@ jobs:
       - name: Prepare standalone uninstaller
         shell: pwsh
         run: |
-          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.0.cmd
+          Copy-Item tools/pelego-screen-ink/DESINSTALAR_PELEGO_MARCADOR_DE_TELA.cmd tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.3.cmd
 
       - name: Upload installer and uninstaller
         uses: actions/upload-artifact@v4
         with:
-          name: PELEGO-Marcador-de-Tela-V3.0
+          name: PELEGO-Marcador-de-Tela-V3.3
           path: |
-            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.0.exe
-            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.0.cmd
+            tools/pelego-screen-ink/installer-output/PELEGO-Marcador-de-Tela-Setup-V3.3.exe
+            tools/pelego-screen-ink/installer-output/DESINSTALAR-PELEGO-MARCADOR-DE-TELA-V3.3.cmd
           if-no-files-found: error
-
-      - name: Register build run id
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path .build | Out-Null
-          "$env:GITHUB_RUN_ID" | Set-Content .build/pelego-last-run.txt -NoNewline
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .build/pelego-last-run.txt
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) { exit 0 }
-          git commit -m "Registra último build PELEGO [skip ci]"
-          git push

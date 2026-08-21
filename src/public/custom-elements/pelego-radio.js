@@ -393,6 +393,27 @@ const SKIN = `
     color:inherit!important
   }
   /* END_MOBILE_V24_HEIGHT_EQ8_FIX */
+
+  /* MOBILE_V25_REAL_TITLES_FIX */
+  .grid-top>.panel:nth-child(3) .panel-title{
+    display:flex!important;align-items:center!important;
+    font-size:12px!important;font-weight:700!important;letter-spacing:.2px!important;
+    color:#19ef5d!important;visibility:visible!important;opacity:1!important;
+    white-space:nowrap!important
+  }
+  .grid-top>.panel:nth-child(3) .panel-title::before,
+  .grid-top>.panel:nth-child(3) .panel-title::after{
+    content:none!important;display:none!important
+  }
+  .eqtitle{
+    display:block!important;font-size:8.6px!important;font-weight:700!important;
+    letter-spacing:0!important;color:#19ef5d!important;visibility:visible!important;
+    opacity:1!important;white-space:nowrap!important
+  }
+  .eqtitle::before,.eqtitle::after{
+    content:none!important;display:none!important
+  }
+  /* END_MOBILE_V25_REAL_TITLES_FIX */
   .footer{display:none!important}
 }
 `;
@@ -416,7 +437,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v24' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v25' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){

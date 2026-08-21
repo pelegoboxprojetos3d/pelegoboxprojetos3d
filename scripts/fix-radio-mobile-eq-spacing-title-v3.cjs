@@ -14,55 +14,54 @@ if(!s.includes('MOBILE_V6_EQ_SCOPE_FIX')){
   s=s.replace(marker,css+marker);
 }
 
-// Garante que icone e TOCANDO sejam um unico item flex no mobile.
 if(!s.includes('pbMobileTitleV6')){
   const marker="  const eqTitle=root.querySelector('.eqpanel .eqtitle');";
   need(s.includes(marker),'marcador titulo equalizador');
   const ins=`  if(mobile){\n    const pbMobileTitleV6=root.querySelector('.playbox .panel-title');\n    if(pbMobileTitleV6) pbMobileTitleV6.innerHTML='<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span>';\n  }\n`;
   s=s.replace(marker,ins+marker);
 }
-s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v6');
+s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v8');
 
-// Corrige estado legado onde os dois escopos ficaram desligados.
 const applyMarker='  applyConfig(){';
 need(c.includes(applyMarker),'applyConfig');
-if(!c.includes('pbScopeGuardV6')){
-  c=c.replace(applyMarker,"  applyConfig(){/* pbScopeGuardV6 */if(!this.config.allowInternational&&!this.config.allowNational)this.config.allowInternational=true;");
+if(!c.includes('pbScopeGuardV6')) c=c.replace(applyMarker,"  applyConfig(){/* pbScopeGuardV6 */if(!this.config.allowInternational&&!this.config.allowNational)this.config.allowInternational=true;");
+
+// Toda escolha atualiza imediatamente a playlist do motor, sem interromper a música atual.
+if(!c.includes('applySelectionForNext(){')){
+  const marker='  refreshGenreButtons(){';
+  need(c.includes(marker),'refreshGenreButtons');
+  const pos=c.indexOf('\n  buildPreset(){',c.indexOf(marker));
+  need(pos>0,'fim refreshGenreButtons');
+  c=c.slice(0,pos)+"\n  applySelectionForNext(){this.refreshGenreButtons();const engine=this.persistentRadio;if(!engine)return;engine.setStations([...STATIONS,...this.brStations]);engine.setPlaylist(this.persistentPool());engine.setConfig(this.config);/* pbSelectionNextV8 */}"+c.slice(pos);
 }
 
+c=c.replace("this.refreshGenreButtons();this.syncPersistentState();};return b;","this.applySelectionForNext();};return b;");
+
 const oldInt="this.international.onclick=()=>{this.config.allowInternational=!this.config.allowInternational;this.refreshGenreButtons();this.syncPersistentState();};";
-const newInt="this.international.onclick=()=>{if(this.config.allowInternational&&!this.config.allowNational)return;this.config.allowInternational=!this.config.allowInternational;this.refreshGenreButtons();this.syncPersistentState();};";
-if(c.includes(oldInt)) c=c.replace(oldInt,newInt);
-else need(c.includes(newInt),'handler Internacional protegido');
+const protectedInt="this.international.onclick=()=>{if(this.config.allowInternational&&!this.config.allowNational)return;this.config.allowInternational=!this.config.allowInternational;this.refreshGenreButtons();this.syncPersistentState();};";
+const newInt="this.international.onclick=()=>{if(this.config.allowInternational&&!this.config.allowNational)return;this.config.allowInternational=!this.config.allowInternational;this.applySelectionForNext();};";
+if(c.includes(oldInt)) c=c.replace(oldInt,newInt); else if(c.includes(protectedInt)) c=c.replace(protectedInt,newInt); else need(c.includes(newInt),'handler Internacional');
 
 const oldNat="this.national.onclick=async()=>{this.config.allowNational=!this.config.allowNational;this.refreshGenreButtons();if(this.config.allowNational)await this.loadBrazilStations();this.syncPersistentState();};";
-const newNat="this.national.onclick=async()=>{if(this.config.allowNational&&!this.config.allowInternational)return;this.config.allowNational=!this.config.allowNational;this.refreshGenreButtons();if(this.config.allowNational)await this.loadBrazilStations();this.syncPersistentState();};";
-if(c.includes(oldNat)) c=c.replace(oldNat,newNat);
-else need(c.includes(newNat),'handler Nacional protegido');
+const protectedNat="this.national.onclick=async()=>{if(this.config.allowNational&&!this.config.allowInternational)return;this.config.allowNational=!this.config.allowNational;this.refreshGenreButtons();if(this.config.allowNational)await this.loadBrazilStations();this.syncPersistentState();};";
+const newNat="this.national.onclick=async()=>{if(this.config.allowNational&&!this.config.allowInternational)return;this.config.allowNational=!this.config.allowNational;if(this.config.allowNational)await this.loadBrazilStations();this.applySelectionForNext();};";
+if(c.includes(oldNat)) c=c.replace(oldNat,newNat); else if(c.includes(protectedNat)) c=c.replace(protectedNat,newNat); else need(c.includes(newNat),'handler Nacional');
 
-// Marca e prioriza redes brasileiras declaradamente sem propaganda.
 if(!c.includes('pbAdFreeNationalV7')){
   const old=".filter(x=>String(x.url||'').toLowerCase().startsWith('https://')).slice(0,80)";
   const neu=".filter(x=>String(x.url||'').toLowerCase().startsWith('https://')).map(x=>({...x,adFree:/VAGALUME\\.?FM|BRASIL HITS/i.test(String(x.name||''))})).sort((a,b)=>Number(b.adFree)-Number(a.adFree)).slice(0,80)/* pbAdFreeNationalV7 */";
-  need(c.includes(old),'filtro de radios brasileiras');
-  c=c.replace(old,neu);
+  need(c.includes(old),'filtro radios brasileiras');c=c.replace(old,neu);
 }
 
-// No mobile, somente os 8 botoes visiveis mandam no pool. Nacional/Internacional apenas definem a origem.
 const oldPool="  persistentPool(){const selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];let pool=[];if(this.config.allowInternational)pool.push(...STATIONS.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(this.config.allowNational)pool.push(...this.brStations.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(!pool.length&&this.config.allowNational&&this.brStations.length)pool.push(...this.brStations);if(!pool.length&&this.config.allowInternational)pool.push(...STATIONS);return pool;}";
 const newPool="  persistentPool(){const mobile=Number(this.getBoundingClientRect?.().width||0)<=640;const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];let selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];if(mobile)selected=selected.filter(x=>mobileGenres.includes(x));if(!selected.length)selected=['ROCK'];let pool=[];if(this.config.allowInternational)pool.push(...STATIONS.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(this.config.allowNational){const clean=this.brStations.filter(st=>st.adFree);const byStyle=clean.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag)));pool.push(...(byStyle.length?byStyle:clean));}if(!pool.length&&this.config.allowInternational)pool.push(...STATIONS);return pool;}";
-if(c.includes(oldPool)) c=c.replace(oldPool,newPool);
-else if(c.includes("const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];")){
-  c=c.replace(/  persistentPool\(\)\{[^\n]+\}/,newPool.trim());
-}else need(false,'pool mobile');
+if(c.includes(oldPool))c=c.replace(oldPool,newPool);else if(c.includes("const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];"))c=c.replace(/  persistentPool\(\)\{[^\n]+\}/,newPool.trim());else need(false,'pool mobile');
 
-// Se o stream realmente terminar, troca imediatamente de estacao.
 if(!c.includes('pbEndedNextV7')){
   const marker="this.audio.addEventListener('error',()=>{if(!this.persistentRadio)this.handleStreamError();});";
-  need(c.includes(marker),'listener de erro do audio');
+  need(c.includes(marker),'listener erro audio');
   c=c.replace(marker,marker+"this.audio.addEventListener('ended',()=>{if(this.persistentRadio)this.persistentRadio.next?.();else this.nextStation?.();});/* pbEndedNextV7 */");
 }
 
-fs.writeFileSync(skinPath,s);
-fs.writeFileSync(corePath,c);
-console.log('OK: visual mobile, escopos Nacional/Internacional, fontes nacionais sem propaganda e troca automatica ao fim do stream');
+fs.writeFileSync(skinPath,s);fs.writeFileSync(corePath,c);
+console.log('OK: escolhas valem imediatamente para a proxima musica sem cortar a atual');

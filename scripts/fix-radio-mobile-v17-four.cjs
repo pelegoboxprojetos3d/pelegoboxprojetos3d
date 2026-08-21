@@ -2,7 +2,7 @@ const fs=require('fs');
 const path='src/public/custom-elements/pelego-radio.js';
 let s=fs.readFileSync(path,'utf8');
 
-// Forçar execução V17 pelo merge para aplicar as quatro correções no arquivo ativo.
+// V18: preserva os quatro ajustes mobile e aumenta somente o analisador em mais 0,5 cm.
 const start='  /* MOBILE_V17_FOUR_FIXES */';
 const end='  /* END_MOBILE_V17_FOUR_FIXES */';
 const re=new RegExp('\\n  \/\\* MOBILE_V17_FOUR_FIXES \\*\\/[\\s\\S]*?\/\\* END_MOBILE_V17_FOUR_FIXES \\*\\/','g');
@@ -22,9 +22,9 @@ ${start}
     color:#19ef5d!important
   }
 
-  /* 2) analisador aproximadamente 0,5 cm mais alto */
+  /* 2) analisador +0,5 cm nesta rodada: 167px -> 186px */
   .grid-top>.panel:nth-child(3),.analyzer{
-    min-height:167px!important;height:167px!important;max-height:167px!important
+    min-height:186px!important;height:186px!important;max-height:186px!important
   }
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
 
@@ -51,6 +51,6 @@ ${end}
 `;
 
 s=s.replace(marker,css+marker);
-s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v17');
+s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v18');
 fs.writeFileSync(path,s);
-console.log('OK V17: titulo 8, analisador +19px, Brasil contido, gap Tocando +9px.');
+console.log('OK V18: analisador mobile 186px (+19px); demais ajustes preservados.');

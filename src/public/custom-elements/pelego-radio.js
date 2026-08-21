@@ -126,6 +126,9 @@ const SKIN = `
 
 
 
+
+
+
   /* MOBILE_V15_EQ_ABSOLUTE_8 */
   .eqpanel{
     min-height:154px!important;height:154px!important;max-height:154px!important;
@@ -202,7 +205,7 @@ const SKIN = `
   /* END_MOBILE_V16_TOCANDO_GAP */
 
   /* MOBILE_V17_FOUR_FIXES */
-  /* V19.1 - largura mobile 310px e centralização real */
+  /* V20.1 - largura mobile 310px e centralização real */
   :host{
     width:310px!important;max-width:310px!important;
     margin-left:auto!important;margin-right:auto!important;
@@ -214,7 +217,7 @@ const SKIN = `
     box-sizing:border-box!important
   }
 
-  /* V19.2 - título do analisador sempre em 8 bandas */
+  /* V20.2 - título do analisador sempre em 8 bandas */
   .grid-top>.panel:nth-child(3) .panel-title{font-size:0!important}
   .grid-top>.panel:nth-child(3) .panel-title .pb-icon{font-size:12px!important}
   .grid-top>.panel:nth-child(3) .panel-title::after{
@@ -223,13 +226,13 @@ const SKIN = `
     color:#19ef5d!important
   }
 
-  /* V19.3 - primeiro retângulo do analisador: 186px -> 205px */
+  /* V20.3 - primeiro retângulo: 3,0 cm medidos -> 3,5 cm, aumento proporcional de 16,7% */
   .grid-top>.panel:nth-child(3),.analyzer{
-    min-height:205px!important;height:205px!important;max-height:205px!important
+    min-height:239px!important;height:239px!important;max-height:239px!important
   }
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
 
-  /* V19.4 - título do último retângulo travado em 8 bandas */
+  /* V20.4 - título do último retângulo travado em 8 bandas */
   .eqtitle{font-size:0!important;white-space:nowrap!important}
   .eqtitle::after{
     content:'⚙ EQUALIZADOR 8 BANDAS'!important;
@@ -283,7 +286,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v19' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v20' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });

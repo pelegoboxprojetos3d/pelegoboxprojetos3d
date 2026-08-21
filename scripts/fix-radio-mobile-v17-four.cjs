@@ -2,7 +2,7 @@ const fs=require('fs');
 const path='src/public/custom-elements/pelego-radio.js';
 let s=fs.readFileSync(path,'utf8');
 
-// V19: ajusta somente mobile. Analisador 205px, largura 310px centralizada e título do EQ travado em 8 bandas.
+// V20: somente mobile. Mantém largura 310px e demais ajustes da V19; aumenta o primeiro retângulo do analisador para 239px.
 const start='  /* MOBILE_V17_FOUR_FIXES */';
 const end='  /* END_MOBILE_V17_FOUR_FIXES */';
 const re=new RegExp('\\n  \/\\* MOBILE_V17_FOUR_FIXES \\*\\/[\\s\\S]*?\/\\* END_MOBILE_V17_FOUR_FIXES \\*\\/','g');
@@ -13,7 +13,7 @@ if(!s.includes(marker)) throw new Error('fim do CSS mobile não encontrado');
 
 const css=`
 ${start}
-  /* V19.1 - largura mobile 310px e centralização real */
+  /* V20.1 - largura mobile 310px e centralização real */
   :host{
     width:310px!important;max-width:310px!important;
     margin-left:auto!important;margin-right:auto!important;
@@ -25,7 +25,7 @@ ${start}
     box-sizing:border-box!important
   }
 
-  /* V19.2 - título do analisador sempre em 8 bandas */
+  /* V20.2 - título do analisador sempre em 8 bandas */
   .grid-top>.panel:nth-child(3) .panel-title{font-size:0!important}
   .grid-top>.panel:nth-child(3) .panel-title .pb-icon{font-size:12px!important}
   .grid-top>.panel:nth-child(3) .panel-title::after{
@@ -34,13 +34,13 @@ ${start}
     color:#19ef5d!important
   }
 
-  /* V19.3 - primeiro retângulo do analisador: 186px -> 205px */
+  /* V20.3 - primeiro retângulo: 3,0 cm medidos -> 3,5 cm, aumento proporcional de 16,7% */
   .grid-top>.panel:nth-child(3),.analyzer{
-    min-height:205px!important;height:205px!important;max-height:205px!important
+    min-height:239px!important;height:239px!important;max-height:239px!important
   }
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
 
-  /* V19.4 - título do último retângulo travado em 8 bandas */
+  /* V20.4 - título do último retângulo travado em 8 bandas */
   .eqtitle{font-size:0!important;white-space:nowrap!important}
   .eqtitle::after{
     content:'⚙ EQUALIZADOR 8 BANDAS'!important;
@@ -71,6 +71,6 @@ ${end}
 `;
 
 s=s.replace(marker,css+marker);
-s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v19');
+s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v20');
 fs.writeFileSync(path,s);
-console.log('OK V19: mobile 310px centralizado, analisador 205px e equalizador travado em 8 bandas.');
+console.log('OK V20: analisador mobile 239px; largura 310px e demais ajustes preservados.');

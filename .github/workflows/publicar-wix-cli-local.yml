@@ -10,6 +10,7 @@ on:
       - "src/public/custom-elements/pelego-radio-core.js"
       - "src/pages/Rádio Pelego Box.ypxc8.js"
       - "src/public/radioPelegoPersistente.js"
+      - "scripts/corrigir-radio-mobile-altura-eq-v24-2026-08-21.cjs"
       - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
@@ -35,6 +36,8 @@ jobs:
           cache: npm
       - name: Instalar dependências
         run: npm ci --ignore-scripts
+      - name: Aplicar correção V24 da Rádio mobile
+        run: node scripts/corrigir-radio-mobile-altura-eq-v24-2026-08-21.cjs
       - name: Autenticar Wix CLI
         env:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
@@ -43,12 +46,15 @@ jobs:
           test -n "$WIX_API_KEY"
           npx wix login --api-key "$WIX_API_KEY"
           npx wix whoami
-      - name: Confirmar V23 no código que será publicado
+      - name: Confirmar V24 no código que será publicado
         run: |
           set -euo pipefail
-          grep -q "20260821-mobile-final-v23" src/public/custom-elements/pelego-radio.js
-          grep -q "MOBILE_V23_ANALYZER_CLIP_FIX" src/public/custom-elements/pelego-radio.js
-      - name: Publicar exatamente o código do main via Wix CLI for Sites
+          grep -q "20260821-mobile-final-v24" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V24_HEIGHT_EQ8_FIX" src/public/custom-elements/pelego-radio.js
+          grep -q "EQUALIZADOR 8 BANDAS" src/public/custom-elements/pelego-radio.js
+          grep -q "height:900px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "height:270px!important" src/public/custom-elements/pelego-radio.js
+      - name: Publicar exatamente o código local via Wix CLI for Sites
         run: npx wix publish --source local -y
       - name: Registrar publicação Wix CLI confirmada
         if: success()
@@ -58,8 +64,8 @@ jobs:
           printf 'STATUS=SUCESSO\nRUN_ID=%s\nSOURCE_SHA=%s\nPUBLISHED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-success.txt
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
-          git add .deploy/wix-cli-radio-last-success.txt
-          git commit -m "Confirmar publicação real da Rádio via Wix CLI" || exit 0
+          git add .deploy/wix-cli-radio-last-success.txt src/public/custom-elements/pelego-radio.js
+          git commit -m "Confirmar publicação real da Rádio V24 via Wix CLI" || exit 0
           git push origin HEAD:main
       - name: Registrar falha do Wix CLI
         if: failure()

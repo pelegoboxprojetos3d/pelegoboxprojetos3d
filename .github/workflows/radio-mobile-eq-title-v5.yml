@@ -1,0 +1,45 @@
+name: Ajuste final Radio mobile v5
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix-radio-mobile-eq-spacing-title-v3.cjs'
+      - '.github/workflows/radio-mobile-eq-title-v5.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar ajuste
+        run: node scripts/fix-radio-mobile-eq-spacing-title-v3.cjs
+      - name: Validar
+        run: |
+          grep -q "mobile-final-v5" src/public/custom-elements/pelego-radio.js
+          grep -q "grid-template-columns:repeat(6,minmax(0,1fr))" src/public/custom-elements/pelego-radio.js
+          grep -q "position:absolute!important;right:6px!important;bottom:4px" src/public/custom-elements/pelego-radio.js
+      - name: Commitar código
+        run: |
+          git config user.name "pelegoboxprojetos3d"
+          git config user.email "actions@github.com"
+          git add src/public/custom-elements/pelego-radio.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Alinhar equalizador e titulo Tocando no mobile"
+            git push origin main
+          fi
+      - name: Aguardar sincronização Wix
+        run: sleep 90
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi

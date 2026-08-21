@@ -6,6 +6,11 @@ on:
       - main
     paths:
       - ".github/workflows/corrigir-login-passivo-2026-08-20.yml"
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
   workflow_dispatch:
 
 permissions:
@@ -17,9 +22,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Baixar código
+      - name: Baixar código atual da main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Configurar Node.js

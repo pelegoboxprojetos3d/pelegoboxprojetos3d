@@ -1,0 +1,2 @@
+trigger=2026-08-21T17:25:00-03:00
+motivo=corrigir canvas do analisador mobile vazando por baixo da proxima secao

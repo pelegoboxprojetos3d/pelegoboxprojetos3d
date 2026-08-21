@@ -1,0 +1,27 @@
+name: Corrigir filtro HTTPS Radio BR
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/corrigir-filtro-https-radio-br-2026-08-21.yml
+permissions:
+  contents: write
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/corrigir-filtro-https-radio-br-2026-08-21.cjs
+      - run: node --check src/public/custom-elements/pelego-radio-core.js
+      - run: |
+          git config user.name 'PELEGO BOX Automacao'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/public/custom-elements/pelego-radio-core.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Corrigir filtro HTTPS das radios brasileiras'
+          git push origin HEAD:main

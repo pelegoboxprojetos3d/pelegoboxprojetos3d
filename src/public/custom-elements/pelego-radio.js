@@ -611,6 +611,42 @@ const MOBILE_CLEAN_SKIN = `
 .eqgroups span{display:block!important;width:100%!important;padding:0!important;border-top:1px solid #13d94f!important;text-align:center!important}
 .eqpanel:before,.eqpanel:after{display:none!important;content:none!important}
 /* END_MOBILE_V29_APPROVED_LAYOUT */
+
+/* MOBILE_V30_FINAL_LOCK */
+/* Títulos mobile imunes a qualquer rotina antiga que reescreva o texto. */
+.grid-top>.panel:nth-child(3) .panel-title{font-size:0!important}
+.grid-top>.panel:nth-child(3) .panel-title .pb-icon{display:inline-flex!important;width:16px!important;height:16px!important;flex:0 0 16px!important}
+.grid-top>.panel:nth-child(3) .panel-title::before{content:none!important;display:none!important}
+.grid-top>.panel:nth-child(3) .panel-title::after{
+  content:'ANALISADOR - 8 BANDAS'!important;display:inline!important;
+  color:#19ef5d!important;font-size:11px!important;font-weight:700!important;letter-spacing:.15px!important;white-space:nowrap!important
+}
+.eqtitle{font-size:0!important}
+.eqtitle::before{content:none!important;display:none!important}
+.eqtitle::after{
+  content:'⚙ EQUALIZADOR 8 BANDAS'!important;display:inline!important;
+  color:#19ef5d!important;font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;white-space:nowrap!important
+}
+
+/* Equalizador: tudo cabe de verdade dentro dos 160px, inclusive GRAVE/MÉDIO/AGUDO. */
+.eqpanel{
+  height:160px!important;min-height:160px!important;max-height:160px!important;
+  grid-template-rows:25px 109px 16px!important;padding:0 6px 6px!important;overflow:hidden!important
+}
+.eqgrid{height:109px!important;min-height:109px!important;max-height:109px!important}
+.eqgroups{height:16px!important;min-height:16px!important;max-height:16px!important}
+.db-scale{top:32px!important;bottom:22px!important}
+
+/* TOCANDO: selects e botões usam exatamente a mesma grade de três colunas. */
+.randomrow,.controls{grid-template-columns:repeat(3,1fr)!important;gap:6px!important;width:100%!important}
+.randomrow label,.randomrow select,.controls button{width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important}
+.controls button{margin:0!important}
+
+/* Mantém a faixa atual na mesma linha do TOCANDO, alinhada à direita. */
+#shell .playbox .panel-title{justify-content:space-between!important}
+#shell .playbox .play-title-left{flex:0 0 auto!important}
+#shell .playbox .play-meta{margin-left:auto!important;text-align:right!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+/* END_MOBILE_V30_FINAL_LOCK */
 .toast{z-index:50!important}
 `;
 /* END_MOBILE_V28_CLEAN_FOUR_STACK */
@@ -634,7 +670,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? MOBILE_CLEAN_SKIN : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v29' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v30' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){

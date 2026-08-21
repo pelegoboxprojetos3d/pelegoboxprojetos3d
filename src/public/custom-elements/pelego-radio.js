@@ -132,6 +132,68 @@ const SKIN = `
 
 
 
+
+
+
+  /* MOBILE_V21_STABLE */
+  /* largura mobile fixa e centralizada, sem alternar 315/310 */
+  :host{
+    width:310px!important;min-width:310px!important;max-width:310px!important;
+    margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important
+  }
+  .shell{
+    width:310px!important;min-width:310px!important;max-width:310px!important;
+    margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important
+  }
+
+  /* primeiro retângulo: analisador com altura realmente travada */
+  .grid-top>.panel:nth-child(3),.analyzer{
+    width:100%!important;max-width:100%!important;
+    min-height:239px!important;height:239px!important;max-height:239px!important
+  }
+  .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
+  .analyzer canvas{
+    width:calc(100% - 14px)!important;max-width:calc(100% - 14px)!important;
+    margin-left:7px!important;margin-right:7px!important
+  }
+  .grid-top>.panel:nth-child(3) .panel-title{font-size:12px!important;white-space:nowrap!important}
+  .grid-top>.panel:nth-child(3) .panel-title::before,
+  .grid-top>.panel:nth-child(3) .panel-title::after{content:none!important;display:none!important}
+
+  /* um único título real do equalizador, sem pseudo-elemento duplicando */
+  .eqtitle{
+    font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;
+    white-space:nowrap!important
+  }
+  .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
+
+  /* preservar mapa do Brasil contido no botão Nacional */
+  #national{overflow:hidden!important;position:relative!important;padding:2px 1px!important;gap:0!important}
+  #national .scope-icon{
+    width:24px!important;height:19px!important;max-width:24px!important;max-height:19px!important;
+    min-width:0!important;min-height:0!important;margin:0 auto!important;
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    position:static!important;transform:none!important;overflow:hidden!important
+  }
+  #national .scope-icon svg{
+    width:22px!important;height:18px!important;max-width:22px!important;max-height:18px!important;
+    display:block!important;position:static!important;transform:none!important;margin:0 auto!important
+  }
+
+  /* preservar o respiro no bloco Tocando */
+  .playbox{min-height:217px!important;height:217px!important;max-height:217px!important}
+  .controls{
+    position:relative!important;top:9px!important;
+    margin-top:0!important;margin-bottom:0!important;gap:8px!important
+  }
+  /* END_MOBILE_V21_STABLE */
+  /* MOBILE_V22_WRAPPER_GUARD */
+  :host,.shell{width:310px!important;min-width:310px!important;max-width:310px!important;margin-left:auto!important;margin-right:auto!important}
+  .grid-top>.panel:nth-child(3),.analyzer{min-height:239px!important;height:239px!important;max-height:239px!important}
+  .eqtitle{font-size:8.6px!important;white-space:nowrap!important}
+  .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
+  /* END_MOBILE_V22_WRAPPER_GUARD */
+
   /* MOBILE_V15_EQ_ABSOLUTE_8 */
   .eqpanel{
     min-height:154px!important;height:154px!important;max-height:154px!important;
@@ -207,40 +269,74 @@ const SKIN = `
   }
   /* END_MOBILE_V16_TOCANDO_GAP */
 
-
-  /* MOBILE_V21_STABLE */
-  /* largura mobile fixa e centralizada, sem alternar 315/310 */
+  /* MOBILE_V17_FOUR_FIXES */
+  /* V23.1 - largura mobile 310px e centralização */
   :host{
-    width:310px!important;min-width:310px!important;max-width:310px!important;
-    margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important
+    width:310px!important;max-width:310px!important;
+    margin-left:auto!important;margin-right:auto!important;
+    box-sizing:border-box!important
   }
   .shell{
-    width:310px!important;min-width:310px!important;max-width:310px!important;
-    margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important
+    width:310px!important;max-width:310px!important;
+    margin-left:auto!important;margin-right:auto!important;
+    box-sizing:border-box!important
   }
 
-  /* primeiro retângulo: analisador com altura realmente travada */
+  /* V23.2 - títulos mobile sempre em 8 bandas */
+  .grid-top>.panel:nth-child(3) .panel-title{font-size:0!important}
+  .grid-top>.panel:nth-child(3) .panel-title .pb-icon{font-size:12px!important}
+  .grid-top>.panel:nth-child(3) .panel-title::after{
+    content:'ANALISADOR - 8 BANDAS'!important;
+    font-size:12px!important;font-weight:700!important;letter-spacing:.2px!important;
+    color:#19ef5d!important
+  }
+  .eqtitle{font-size:0!important;white-space:nowrap!important}
+  .eqtitle::after{
+    content:'⚙ EQUALIZADOR 8 BANDAS'!important;
+    font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;
+    color:inherit!important
+  }
+
+  /* V23.3 - bloco do analisador fecha em 239px e não invade o próximo painel */
+  .grid-top{
+    display:block!important;
+    width:100%!important;
+    min-height:239px!important;height:239px!important;max-height:239px!important;
+    overflow:hidden!important;
+    position:relative!important;
+    margin:0!important
+  }
   .grid-top>.panel:nth-child(3),.analyzer{
+    display:grid!important;
     width:100%!important;max-width:100%!important;
-    min-height:239px!important;height:239px!important;max-height:239px!important
+    min-height:239px!important;height:239px!important;max-height:239px!important;
+    overflow:hidden!important;
+    position:relative!important;
+    margin:0!important
   }
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
   .analyzer canvas{
+    display:block!important;
     width:calc(100% - 14px)!important;max-width:calc(100% - 14px)!important;
-    margin-left:7px!important;margin-right:7px!important
+    height:auto!important;min-height:0!important;max-height:none!important;
+    align-self:stretch!important;
+    margin:0 7px!important;
+    overflow:hidden!important;
+    position:relative!important;
+    z-index:0!important
   }
-  .grid-top>.panel:nth-child(3) .panel-title{font-size:12px!important;white-space:nowrap!important}
-  .grid-top>.panel:nth-child(3) .panel-title::before,
-  .grid-top>.panel:nth-child(3) .panel-title::after{content:none!important;display:none!important}
-
-  /* um único título real do equalizador, sem pseudo-elemento duplicando */
-  .eqtitle{
-    font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;
-    white-space:nowrap!important
+  .analyzer .bands-label{
+    position:relative!important;
+    z-index:1!important;
+    background:#050908!important
   }
-  .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
+  .grid-middle{
+    position:relative!important;
+    z-index:1!important;
+    margin-top:0!important
+  }
 
-  /* preservar mapa do Brasil contido no botão Nacional */
+  /* V23.4 - preservar mapa do Brasil contido no botão Nacional */
   #national{overflow:hidden!important;position:relative!important;padding:2px 1px!important;gap:0!important}
   #national .scope-icon{
     width:24px!important;height:19px!important;max-width:24px!important;max-height:19px!important;
@@ -253,19 +349,20 @@ const SKIN = `
     display:block!important;position:static!important;transform:none!important;margin:0 auto!important
   }
 
-  /* preservar o respiro no bloco Tocando */
+  /* V23.5 - preservar espaço do bloco Tocando */
   .playbox{min-height:217px!important;height:217px!important;max-height:217px!important}
   .controls{
     position:relative!important;top:9px!important;
     margin-top:0!important;margin-bottom:0!important;gap:8px!important
   }
-  /* END_MOBILE_V21_STABLE */
-  /* MOBILE_V22_WRAPPER_GUARD */
-  :host,.shell{width:310px!important;min-width:310px!important;max-width:310px!important;margin-left:auto!important;margin-right:auto!important}
-  .grid-top>.panel:nth-child(3),.analyzer{min-height:239px!important;height:239px!important;max-height:239px!important}
-  .eqtitle{font-size:8.6px!important;white-space:nowrap!important}
-  .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
-  /* END_MOBILE_V22_WRAPPER_GUARD */
+  /* END_MOBILE_V17_FOUR_FIXES */
+
+  /* MOBILE_V23_ANALYZER_CLIP_FIX */
+  .grid-top{height:239px!important;max-height:239px!important;overflow:hidden!important}
+  .analyzer{height:239px!important;max-height:239px!important;overflow:hidden!important}
+  .analyzer canvas{height:auto!important;min-height:0!important;align-self:stretch!important}
+  .grid-middle{position:relative!important;z-index:1!important;margin-top:0!important}
+  /* END_MOBILE_V23_ANALYZER_CLIP_FIX */
   .footer{display:none!important}
 }
 `;
@@ -289,7 +386,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v22' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v23' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){

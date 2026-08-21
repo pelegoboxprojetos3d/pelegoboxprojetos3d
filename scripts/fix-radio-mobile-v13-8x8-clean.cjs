@@ -3,16 +3,16 @@ const path='src/public/custom-elements/pelego-radio.js';
 let s=fs.readFileSync(path,'utf8');
 const need=(cond,msg)=>{if(!cond)throw new Error(msg)};
 
-// V15: corrige somente o equalizador mobile.
-// O analisador já está correto em 8 bandas e não deve ser alterado.
+// V16: mantém o equalizador mobile em 8 posições fixas e aumenta somente
+// o respiro vertical entre os 3 menus e os 3 botões do bloco TOCANDO.
 need(s.includes("const labels=mobile?['40','100','250','630','1.6K','4K','10K','16K']"),'analisador mobile 8 bandas não encontrado');
 need(s.includes('count=mobile?8:24'),'analisador mobile não está em 8 bandas');
 
-// Remove apenas os overrides finais anteriores do EQ. Regras antigas permanecem abaixo,
-// mas V15 é inserido no último ponto do media query e vence por ordem + !important.
+// Remove somente os overrides finais que este script controla.
 s=s.replace(/\n  \/\* MOBILE_V13_8X8_CLEAN \*\/[\s\S]*?\/\* END_MOBILE_V13_8X8_CLEAN \*\//g,'');
 s=s.replace(/\n  \/\* MOBILE_V14_EQ_FLEX_8 \*\/[\s\S]*?\/\* END_MOBILE_V14_EQ_FLEX_8 \*\//g,'');
 s=s.replace(/\n  \/\* MOBILE_V15_EQ_ABSOLUTE_8 \*\/[\s\S]*?\/\* END_MOBILE_V15_EQ_ABSOLUTE_8 \*\//g,'');
+s=s.replace(/\n  \/\* MOBILE_V16_TOCANDO_GAP \*\/[\s\S]*?\/\* END_MOBILE_V16_TOCANDO_GAP \*\//g,'');
 
 const marker='  .footer{display:none!important}\n}';
 need(s.includes(marker),'fim do CSS mobile não encontrado');
@@ -74,14 +74,33 @@ const css=`
   .band input::-webkit-slider-thumb{width:13px!important;height:13px!important}
   .db-scale{left:3px!important;width:24px!important;top:43px!important;bottom:25px!important;font-size:6px!important}
   /* END_MOBILE_V15_EQ_ABSOLUTE_8 */
+
+  /* MOBILE_V16_TOCANDO_GAP */
+  .playbox{
+    min-height:215px!important;
+    height:215px!important;
+    max-height:215px!important
+  }
+  .randomrow{
+    margin-bottom:0!important
+  }
+  .controls{
+    position:relative!important;
+    top:7px!important;
+    margin-top:0!important;
+    margin-bottom:0!important;
+    gap:8px!important
+  }
+  /* END_MOBILE_V16_TOCANDO_GAP */
 `;
 
 s=s.replace(marker,css+marker);
-s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v15');
+s=s.replace(/20260821-mobile-final-v\d+/g,'20260821-mobile-final-v16');
 
-need(s.includes('MOBILE_V15_EQ_ABSOLUTE_8'),'override V15 não foi inserido');
+need(s.includes('MOBILE_V15_EQ_ABSOLUTE_8'),'override do equalizador V15 não foi inserido');
 need(s.includes('left:87.5%'),'oitava banda não foi fixada na oitava posição');
-need(s.includes('position:absolute!important'),'bandas não foram travadas em posições absolutas');
+need(s.includes('MOBILE_V16_TOCANDO_GAP'),'espaçamento V16 não foi inserido');
+need(s.includes('top:7px!important'),'linha de botões não recebeu o respiro vertical');
 
 fs.writeFileSync(path,s);
-console.log('OK V15: equalizador mobile com 8 bandas em 8 posições fixas, uma única linha, sem alterar analisador, tocando ou desktop.');
+console.log('OK V16: Tocando mobile com 7px extras entre menus e botões; restante preservado.');

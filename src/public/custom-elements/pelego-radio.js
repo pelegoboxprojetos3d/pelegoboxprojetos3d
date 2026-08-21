@@ -129,6 +129,9 @@ const SKIN = `
 
 
 
+
+
+
   /* MOBILE_V15_EQ_ABSOLUTE_8 */
   .eqpanel{
     min-height:154px!important;height:154px!important;max-height:154px!important;

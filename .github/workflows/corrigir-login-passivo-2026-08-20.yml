@@ -1,0 +1,77 @@
+name: Corrigir login passivo do checkout
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/corrigir-login-passivo-2026-08-20.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Aplicar correção do login passivo
+        run: node scripts/corrigir-login-social-reabertura-robusta-2026-08-12.cjs
+
+      - name: Validar sintaxe do checkout
+        run: node --check "src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
+
+      - name: Gravar checkout corrigido
+        run: |
+          set -euo pipefail
+          FILE="src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js"
+          if git diff --quiet -- "$FILE"; then
+            echo "Checkout já está com login passivo."
+          else
+            git config user.name "PELEGO BOX Automação"
+            git config user.email "pelegobox82@gmail.com"
+            git add -- "$FILE"
+            git commit -m "fix: preservar sessão e remover login automático do checkout"
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub Wix
+        run: sleep 60
+
+      - name: Publicar versão salva no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            "https://www.wixapis.com/site-publisher/v1/site/publish" \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header "Content-Type: application/json" \
+            --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "Falha ao publicar o site pela API oficial do Wix."
+            exit 1
+          fi

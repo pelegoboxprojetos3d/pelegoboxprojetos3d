@@ -1,4 +1,4 @@
-name: Corrigir título do equalizador para 8 bandas
+name: Corrigir gráfico do analisador mobile e publicar
 
 on:
   push:
@@ -21,60 +21,90 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fixar título mobile em 8 bandas
+      - name: Corrigir canvas do analisador no mobile
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          files = [
-              Path('src/public/custom-elements/pelego-radio-core.js'),
-              Path('src/public/custom-elements/pelego-radio.js'),
-          ]
+          path = Path('src/public/custom-elements/pelego-radio.js')
+          s = path.read_text(encoding='utf-8')
+          marker = 'MOBILE_V23_ANALYZER_CLIP_FIX'
 
-          marker = 'PB_EQ_TITLE_8_BANDAS_FINAL_20260821'
+          if marker not in s:
+              anchor = '  /* END_MOBILE_V22_WRAPPER_GUARD */'
+              if anchor not in s:
+                  raise SystemExit('Marcador V22 do wrapper não encontrado.')
 
-          for path in files:
-              s = path.read_text(encoding='utf-8')
-              original = s
-
-              s = s.replace("EQUALIZADOR ${mobile ? '6' : '24'} BANDAS", "EQUALIZADOR ${mobile ? '8' : '24'} BANDAS")
-              s = s.replace("EQUALIZADOR 6 BANDAS", "EQUALIZADOR 8 BANDAS")
-
-              if path.name == 'pelego-radio.js':
-                  needle = "const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`;"
-                  if needle in s and marker not in s:
-                      s = s.replace(needle, needle + f" /* {marker} */", 1)
-
-              if path.name == 'pelego-radio-core.js':
-                  needle = "eqTitle.textContent='⚙ EQUALIZADOR 8 BANDAS';"
-                  if needle in s and marker not in s:
-                      s = s.replace(needle, needle + f"/* {marker} */", 1)
-
-              if s != original:
-                  path.write_text(s, encoding='utf-8')
+              fix = r'''
+  /* MOBILE_V23_ANALYZER_CLIP_FIX */
+  .grid-top{
+    display:block!important;
+    width:100%!important;
+    min-height:239px!important;
+    height:239px!important;
+    max-height:239px!important;
+    overflow:hidden!important;
+    position:relative!important;
+    margin:0!important
+  }
+  .grid-top>.panel:nth-child(3),.analyzer{
+    display:grid!important;
+    width:100%!important;
+    min-height:239px!important;
+    height:239px!important;
+    max-height:239px!important;
+    overflow:hidden!important;
+    position:relative!important;
+    margin:0!important
+  }
+  .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
+  .analyzer canvas{
+    display:block!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    align-self:stretch!important;
+    width:calc(100% - 14px)!important;
+    max-width:calc(100% - 14px)!important;
+    margin:0 7px!important;
+    overflow:hidden!important
+  }
+  .grid-middle{
+    position:relative!important;
+    z-index:1!important;
+    margin-top:0!important
+  }
+  /* END_MOBILE_V23_ANALYZER_CLIP_FIX */
+'''
+              s = s.replace(anchor, anchor + '\n' + fix, 1)
+              s = s.replace("20260821-mobile-final-v22", "20260821-mobile-final-v23", 1)
+              path.write_text(s, encoding='utf-8')
           PY
 
-      - name: Validar título
+      - name: Validar correção e preservar 8 bandas
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "EQUALIZADOR \${mobile ? '8' : '24'} BANDAS" src/public/custom-elements/pelego-radio.js
-          grep -q "eqTitle.textContent='⚙ EQUALIZADOR 8 BANDAS'" src/public/custom-elements/pelego-radio-core.js
-          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
-          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio.js
+          f='src/public/custom-elements/pelego-radio.js'
+          grep -q 'MOBILE_V23_ANALYZER_CLIP_FIX' "$f"
+          grep -q 'height:auto!important' "$f"
+          grep -q '20260821-mobile-final-v23' "$f"
+          grep -q "ANALISADOR - \${mobile ? '8' : '24'} BANDAS" "$f"
+          grep -q "EQUALIZADOR \${mobile ? '8' : '24'} BANDAS" "$f"
 
       - name: Gravar alteração no main
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'PELEGO BOX Automação'
-          git config user.email 'pelegobox82@gmail.com'
-          git add src/public/custom-elements/pelego-radio-core.js src/public/custom-elements/pelego-radio.js
-          if git diff --cached --quiet; then
-            echo 'Título já estava em 8 bandas; nenhuma alteração adicional necessária.'
+          f='src/public/custom-elements/pelego-radio.js'
+          if git diff --quiet -- "$f"; then
+            echo 'Correção já estava aplicada.'
           else
-            git commit -m 'Fixar título do equalizador mobile em 8 bandas'
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$f"
+            git commit -m 'Corrigir gráfico do analisador sobreposto no mobile'
             git push origin HEAD:main
           fi
 

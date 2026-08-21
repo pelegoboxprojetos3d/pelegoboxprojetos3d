@@ -82,6 +82,17 @@ const SKIN = `
   .db-scale>*{margin:0!important;padding:0!important;line-height:1!important;text-align:center!important}
   .band input[type=range]{width:74px!important;height:14px!important;margin:0!important}
   .sliderwrap:before{height:84%!important}
+  /* MOBILE_V10_TITLE_META_COMPACT */
+  .topbar{order:4!important;height:18px!important;min-height:18px!important;max-height:18px!important;padding:0 4px!important;justify-content:center!important;overflow:hidden!important}
+  .topbar .brandrow{justify-content:center!important;gap:0!important;min-width:0!important}
+  .topbar .logo-bars,.topbar .subtitle,.topbar .win{display:none!important}
+  .topbar .title{font-size:8px!important;font-weight:600!important;line-height:18px!important;letter-spacing:.15px!important;white-space:nowrap!important}
+  .playbox{min-height:216px!important;height:216px!important;max-height:216px!important}
+  .playbody{grid-template-rows:9px 23px 18px 32px 27px!important;gap:1px!important;padding:0 8px 5px!important}
+  .playbox .hint{display:none!important}
+  #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:5px!important;overflow:hidden!important;white-space:nowrap!important}
+  #shell .playbox .play-title-left{display:inline-flex!important;align-items:center!important;gap:5px!important;flex:0 0 auto!important}
+  #shell .playbox .play-meta{display:block!important;min-width:0!important;max-width:calc(100% - 92px)!important;margin-left:2px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;text-align:left!important;color:#fff!important;font-size:7px!important;font-weight:500!important;letter-spacing:0!important;text-transform:none!important}
   .footer{display:none!important}
 }
 `;
@@ -108,7 +119,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v9' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v10' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
@@ -120,10 +131,10 @@ function applySkin(el){
   title(top[1], `<span class="pb-icon">${CUBE}</span>PROJETOS PRONTOS`);
   title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - ${mobile ? '6' : '24'} BANDAS`);
   title(root.querySelector('.filters .panel-title'), `<span class="pb-icon">${HEADPHONES}</span>ESCOLHA O QUE QUER OUVIR`);
-  const playTitle=root.querySelector('.playbox .panel-title'); title(playTitle, mobile ? `<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span>` : `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
+  const playTitle=root.querySelector('.playbox .panel-title'); title(playTitle, mobile ? `<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span><span class="play-meta" id="playMeta"></span>` : `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
   if(mobile){
     const pbMobileTitleV6=root.querySelector('.playbox .panel-title');
-    if(pbMobileTitleV6) pbMobileTitleV6.innerHTML='<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span>';
+    if(pbMobileTitleV6) pbMobileTitleV6.innerHTML='<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span><span class="play-meta" id="playMeta"></span>';
   }
   const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '6' : '24'} BANDAS`;
   const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];

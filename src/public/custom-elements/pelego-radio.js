@@ -260,6 +260,12 @@ const SKIN = `
     margin-top:0!important;margin-bottom:0!important;gap:8px!important
   }
   /* END_MOBILE_V21_STABLE */
+  /* MOBILE_V22_WRAPPER_GUARD */
+  :host,.shell{width:310px!important;min-width:310px!important;max-width:310px!important;margin-left:auto!important;margin-right:auto!important}
+  .grid-top>.panel:nth-child(3),.analyzer{min-height:239px!important;height:239px!important;max-height:239px!important}
+  .eqtitle{font-size:8.6px!important;white-space:nowrap!important}
+  .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
+  /* END_MOBILE_V22_WRAPPER_GUARD */
   .footer{display:none!important}
 }
 `;
@@ -283,7 +289,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v21' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v22' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){

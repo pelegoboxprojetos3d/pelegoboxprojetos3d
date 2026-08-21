@@ -1,0 +1,56 @@
+name: Corrigir mobile da Radio por largura real
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/corrigir-mobile-radio-por-container-2026-08-21.yml
+permissions:
+  contents: write
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar correção mobile
+        run: node scripts/corrigir-mobile-radio-por-largura-container-2026-08-21.cjs
+      - name: Validar correção
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          grep -q "function isMobileRadio(el)" "$file"
+          grep -q "20260821-mobile-container-v2" "$file"
+          grep -q "SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){')" "$file"
+          grep -q "ResizeObserver" "$file"
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          file="src/public/custom-elements/pelego-radio.js"
+          if git diff --quiet -- "$file"; then
+            echo 'Correção já aplicada.'
+          else
+            git config user.name 'PELEGO BOX Automacao'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$file"
+            git commit -m 'Detectar layout mobile da Radio pela largura real do componente'
+            git push origin HEAD:main
+          fi
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi

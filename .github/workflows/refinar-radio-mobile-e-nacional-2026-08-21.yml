@@ -1,0 +1,40 @@
+name: Refinar Radio Pelego mobile e nacional
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/refinar-radio-mobile-e-nacional-2026-08-21.yml
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar ajustes
+        run: node scripts/refinar-radio-mobile-e-nacional-2026-08-21.cjs
+      - name: Validar
+        run: |
+          set -euo pipefail
+          grep -q 'height:129px!important' src/public/custom-elements/pelego-radio.js
+          grep -q "EQUALIZADOR.*6.*24" src/public/custom-elements/pelego-radio.js
+          grep -q 'loadBrazilStations' src/public/custom-elements/pelego-radio-core.js
+          grep -q 'engine.setStations(\[...STATIONS,...this.brStations\])' src/public/custom-elements/pelego-radio-core.js
+      - name: Gravar no main
+        run: |
+          set -euo pipefail
+          git config user.name 'PELEGO BOX Automacao'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/public/custom-elements/pelego-radio.js src/public/custom-elements/pelego-radio-core.js
+          if git diff --cached --quiet; then
+            echo 'Ajustes ja aplicados.'
+          else
+            git commit -m 'Refinar Radio mobile e ativar estacoes nacionais'
+            git push origin HEAD:main
+          fi

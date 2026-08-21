@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publicar:
@@ -50,3 +50,25 @@ jobs:
           grep -q "MOBILE_V23_ANALYZER_CLIP_FIX" src/public/custom-elements/pelego-radio.js
       - name: Publicar exatamente o código do main via Wix CLI for Sites
         run: npx wix publish --source local -y
+      - name: Registrar publicação Wix CLI confirmada
+        if: success()
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy
+          printf 'STATUS=SUCESSO\nRUN_ID=%s\nSOURCE_SHA=%s\nPUBLISHED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-success.txt
+          git config user.name "PELEGO BOX Wix CLI"
+          git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
+          git add .deploy/wix-cli-radio-last-success.txt
+          git commit -m "Confirmar publicação real da Rádio via Wix CLI" || exit 0
+          git push origin HEAD:main
+      - name: Registrar falha do Wix CLI
+        if: failure()
+        run: |
+          set -euo pipefail
+          mkdir -p .deploy
+          printf 'STATUS=FALHA\nRUN_ID=%s\nSOURCE_SHA=%s\nFAILED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-failure.txt
+          git config user.name "PELEGO BOX Wix CLI"
+          git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
+          git add .deploy/wix-cli-radio-last-failure.txt
+          git commit -m "Registrar falha na publicação real da Rádio via Wix CLI" || exit 0
+          git push origin HEAD:main

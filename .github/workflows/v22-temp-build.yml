@@ -1,0 +1,49 @@
+name: V22 temp build radio mobile
+on:
+  push:
+    branches: [v22-core-final-build]
+    paths:
+      - 'scripts/build-radio-mobile-v22-core-final.cjs'
+      - '.github/workflows/v22-temp-build.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v22-core-final-build
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Gerar V22
+        run: node scripts/build-radio-mobile-v22-core-final.cjs
+      - name: Validar core e wrapper
+        run: |
+          set -euo pipefail
+          core='src/public/custom-elements/pelego-radio-core.js'
+          skin='src/public/custom-elements/pelego-radio.js'
+          grep -q 'MOBILE_V22_CORE_FINAL' "$core"
+          grep -q 'PB_V22_MOBILE_METHOD' "$core"
+          grep -q "ANALISADOR - 8 BANDAS" "$core"
+          grep -q "EQUALIZADOR 8 BANDAS" "$core"
+          grep -q 'height:239px!important' "$core"
+          grep -q 'width:310px!important' "$core"
+          grep -q 'left:87.5%' "$core"
+          grep -q 'mobile-final-v22' "$skin"
+          grep -q 'MOBILE_V22_WRAPPER_GUARD' "$skin"
+          grep -q 'height:239px!important' "$skin"
+      - name: Gravar somente na branch temporaria
+        run: |
+          set -euo pipefail
+          git config user.name 'pelegoboxprojetos3d'
+          git config user.email 'pelegoboxprojetos3d@users.noreply.github.com'
+          git add src/public/custom-elements/pelego-radio-core.js src/public/custom-elements/pelego-radio.js
+          if git diff --cached --quiet; then
+            echo 'Sem alteracoes'
+            exit 0
+          fi
+          git commit -m 'V22 BUILD - alinhar core e wrapper mobile'
+          git push origin HEAD:v22-core-final-build

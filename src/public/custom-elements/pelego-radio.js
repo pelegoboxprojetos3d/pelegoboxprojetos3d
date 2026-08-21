@@ -320,7 +320,7 @@ function applySkin(el){
       title(playTitle, `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
     }
   }
-  const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`;
+  const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`; /* PB_EQ_TITLE_8_BANDAS_FINAL_20260821 */
   const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];
   root.querySelectorAll('.genre').forEach((b,i)=>{const original=b.dataset.key||b.textContent.trim();if(mobile&&i<8){b.dataset.filter=mobileGenres[i];b.textContent=mobileGenres[i];}else{b.dataset.filter=original;b.textContent=original;}});
   try{el.refreshGenreButtons?.();}catch(_){}

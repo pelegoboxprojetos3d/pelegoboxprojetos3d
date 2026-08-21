@@ -1,4 +1,4 @@
-name: Aplicar layout mobile compacto da Rádio Pelego v2
+name: Corrigir layout mobile final da Rádio Pelego
 
 on:
   push:
@@ -10,112 +10,74 @@ permissions:
   contents: write
 
 jobs:
-  aplicar:
+  corrigir:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Ajustar somente mobile
+      - name: Aplicar correção mobile final
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('src/public/custom-elements/pelego-radio.js')
           s=p.read_text(encoding='utf-8')
 
-          css=r'''
-/* PB MOBILE COMPACT V2 2026-08-20 */
-@media(max-width:640px){
-:host{width:315px!important;max-width:315px!important;margin:0 auto!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
-.shell{width:315px!important;max-width:315px!important;min-height:0!important;height:auto!important;max-height:none!important;margin:0 auto!important;overflow:hidden!important;grid-template-rows:auto auto auto auto!important}
-.grid-top>.panel:nth-child(1),.grid-top>.panel:nth-child(2){display:none!important}
-.grid-top{display:block!important;min-height:0!important;height:auto!important}
-.grid-top>.panel:nth-child(3),.analyzer{min-height:110px!important;height:110px!important;max-height:110px!important}
-.analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
-.analyzer canvas{width:calc(100% - 14px)!important;margin:0 7px!important}
-.filters{min-height:110px!important;height:110px!important;max-height:110px!important;padding-bottom:0!important;overflow:hidden!important}
-.filterbody{height:calc(100% - 25px)!important;grid-template-columns:76px minmax(0,1fr)!important;gap:5px!important;padding:0 6px 6px!important}
-.scopebuttons{grid-template-rows:1fr 1fr!important;gap:4px!important}.scope{font-size:7px!important;gap:1px!important;padding:1px!important}.scope .scope-icon{width:22px!important;height:19px!important}#national .scope-icon{width:25px!important;height:22px!important}#national .scope-icon svg{width:24px!important;height:21px!important}
-.genres{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:repeat(4,minmax(0,1fr))!important;grid-auto-rows:0!important;gap:4px!important;overflow:hidden!important;padding-top:0!important;align-content:stretch!important}
-.genre{display:none!important;height:auto!important;min-height:0!important;font-size:7px!important;padding:0 2px!important}.genre:nth-child(-n+8){display:block!important}
-.playbox{min-height:235px!important;height:auto!important}
-.eqpanel{min-height:160px!important;height:160px!important;max-height:160px!important;overflow:hidden!important;padding:0 6px 5px!important;grid-template-rows:27px minmax(0,1fr)!important}
-.eqgrid{min-width:0!important;width:100%!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:2px!important;padding:0 2px 0 25px!important;overflow:hidden!important}
-.eqgrid .band{display:none!important;grid-template-rows:11px minmax(0,1fr) 12px!important;font-size:6px!important}.eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(15),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(24){display:grid!important}
-.band input[type=range]{width:72px!important;height:14px!important}.band input::-webkit-slider-thumb{width:13px!important;height:13px!important}.sliderwrap:before{height:84%!important}.eqgroups{display:none!important}.eqpanel:before{left:6px!important;top:42px!important;bottom:18px!important;font-size:6px!important}.db-scale{left:4px!important;top:43px!important;bottom:18px!important;font-size:6px!important}
-}
-'''
-          if 'PB MOBILE COMPACT V2 2026-08-20' not in s:
-              anchor='\n`;\n\nfunction title(el, html)'
-              if anchor not in s: raise SystemExit('fim do SKIN não encontrado')
-              s=s.replace(anchor,'\n'+css+'`;\n\nfunction title(el, html)',1)
+          s=s.replace("ANALISADOR - ${mobile ? '8' : '24'} BANDAS", "ANALISADOR - ${mobile ? '6' : '24'} BANDAS")
+          s=s.replace("EQUALIZADOR ${mobile ? '8' : '24'} BANDAS", "EQUALIZADOR ${mobile ? '6' : '24'} BANDAS")
 
-          if "const mobile = window.matchMedia('(max-width:640px)').matches;" not in s:
-              s=s.replace("  const top = root.querySelectorAll('.grid-top .panel-title');", "  const top = root.querySelectorAll('.grid-top .panel-title');\n  const mobile = window.matchMedia('(max-width:640px)').matches;",1)
-          s=s.replace("title(top[2], `<span class=\"pb-icon\">${BARS}</span>ANALISADOR - 24 BANDAS`);", "title(top[2], `<span class=\"pb-icon\">${BARS}</span>ANALISADOR - ${mobile ? '6' : '24'} BANDAS`);",1)
+          s=s.replace(".grid-top>.panel:nth-child(3),.analyzer{min-height:148px!important;height:148px!important;max-height:148px!important}", ".grid-top>.panel:nth-child(3),.analyzer{min-height:110px!important;height:110px!important;max-height:110px!important}")
+          s=s.replace(".filters{min-height:129px!important;height:129px!important;max-height:129px!important;padding-bottom:0!important;overflow:hidden!important}", ".filters{min-height:110px!important;height:110px!important;max-height:110px!important;padding-bottom:0!important;overflow:hidden!important}")
 
-          a=s.find('  p.drawAnalyzerGrid = function(c,w,h){')
-          b=s.find('\n\n  const originalConnected = p.connectedCallback;',a)
-          if a<0 or b<0: raise SystemExit('bloco analisador não encontrado')
-          block=r'''  p.drawAnalyzerGrid = function(c,w,h){
-    c.fillStyle='#020707'; c.fillRect(0,0,w,h);
-    const mobile=window.matchMedia('(max-width:640px)').matches;
-    const labels=mobile?['40','100','250','1K','4K','16K']:['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
-    const count=labels.length,left=mobile?27:34,right=mobile?6:9,top=mobile?8:14,bottom=mobile?18:29;
-    c.strokeStyle='rgba(69,103,90,.50)'; c.lineWidth=1;
-    for(let i=0;i<=count;i++){const x=left+(w-left-right)*(i/count);c.beginPath();c.moveTo(x,top);c.lineTo(x,h-bottom);c.stroke();}
-    const rows=mobile?6:12;for(let i=0;i<=rows;i++){const y=top+(h-top-bottom)*(i/rows);c.beginPath();c.moveTo(left,y);c.lineTo(w-right,y);c.stroke();}
-    c.fillStyle='#e8eeea';c.font=mobile?'6px Arial':'7px Arial';
-    if(mobile){c.fillText('+12',2,10);c.fillText('0',8,Math.round(h*.5));c.fillText('-12',2,h-14);}else{c.fillText('+12',2,15);c.fillText('+6',5,Math.round(h*.28));c.fillText('0',8,Math.round(h*.51));c.fillText('-6',5,Math.round(h*.72));c.fillText('-12',2,h-26);}
-    labels.forEach((t,i)=>{const x=left+(w-left-right)*((i+.5)/count);c.fillText(t,x-(mobile?6:5),h-(mobile?7:16));});
-  };
-  p.__pbDrawSegments = function(values){
-    if(!this.ctx2d||!this.canvas)return;const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;if(w<2||h<2)return;
-    const mobile=window.matchMedia('(max-width:640px)').matches,count=mobile?6:24;this.drawAnalyzerGrid(c,w,h);
-    const left=mobile?27:34,right=mobile?6:9,top=mobile?8:14,bottom=mobile?19:30,usableW=w-left-right,usableH=h-top-bottom,bw=usableW/count,segs=mobile?8:12,gap=mobile?1:2,segH=Math.max(1,(usableH-(segs-1)*gap)/segs);
-    for(let i=0;i<count;i++){const level=Math.max(1,Math.min(segs,Math.round((values[i]||0)*segs)));for(let n=0;n<level;n++){const y=h-bottom-(n+1)*segH-n*gap;c.fillStyle=n>=Math.max(6,segs-2)?'#4cff7a':'#12d84d';c.fillRect(left+i*bw+2,y,Math.max(3,bw-4),segH);}}
-  };
-  p.drawIdleAnalyzer = function(){const count=window.matchMedia('(max-width:640px)').matches?6:24;this.__pbDrawSegments(Array.from({length:count},(_,i)=>.25+.45*(.55+.45*Math.sin(i*.55+1.2))));};
-  p.drawAnalyzer = function(){
-    cancelAnimationFrame(this.visualFrame);const loop=()=>{const mobile=window.matchMedia('(max-width:640px)').matches;const freqs=mobile?[40,100,250,1000,4000,16000]:[40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];const values=Array(freqs.length).fill(.05);
-      if(this.analyser&&this.audioCtx){const bins=new Uint8Array(this.analyser.frequencyBinCount);this.analyser.getByteFrequencyData(bins);for(let i=0;i<freqs.length;i++){const idx=Math.min(bins.length-1,Math.round(freqs[i]/(this.audioCtx.sampleRate/2)*(bins.length-1)));let sum=0,count=0;for(let j=Math.max(0,idx-2);j<=Math.min(bins.length-1,idx+2);j++){sum+=bins[j];count++;}values[i]=(count?sum/count:0)/255;}}
-      this.__pbDrawSegments(values);this.visualFrame=requestAnimationFrame(loop);};loop();
-  };'''
-          s=s[:a]+block+s[b:]
-          s=s.replace("style.dataset.pelegoSkinRev = '20260819-final';","style.dataset.pelegoSkinRev = '20260820-mobile-v2';",1)
+          old="""  .eqgrid{min-width:0!important;width:calc(100% - 30px)!important;height:100%!important;margin:0 0 0 30px!important;grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:0!important;padding:0!important;overflow:hidden!important}
+  .eqgrid .band{display:none!important;justify-items:center!important;align-items:center!important;grid-template-rows:10px minmax(0,1fr) 12px!important;font-size:5.7px!important}
+  .eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(13),.eqgrid .band:nth-child(17),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(23),.eqgrid .band:nth-child(24){display:grid!important}
+  .db-scale{left:4px!important;width:26px!important;top:42px!important;bottom:25px!important}
+"""
+          new="""  .eqpanel{min-height:80px!important;height:80px!important;max-height:80px!important;padding:0 6px 4px!important;grid-template-rows:22px minmax(0,1fr)!important;overflow:hidden!important}
+  .eqhead{height:22px!important;min-height:22px!important}
+  .eqtitle{font-size:8px!important}
+  .preset{font-size:6px!important;gap:3px!important}
+  .preset select{width:82px!important;min-width:82px!important;height:18px!important;font-size:7px!important}
+  .eqgrid{min-width:0!important;width:calc(100% - 26px)!important;height:100%!important;margin:0 0 0 26px!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:0!important;padding:0!important;overflow:hidden!important}
+  .eqgrid .band{display:none!important;justify-items:center!important;align-items:center!important;grid-template-rows:8px minmax(0,1fr) 9px!important;font-size:5px!important}
+  .eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(15),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(24){display:grid!important}
+  .band input[type=range]{width:44px!important;height:10px!important}
+  .band input::-webkit-slider-thumb{width:10px!important;height:10px!important}
+  .sliderwrap:before{height:80%!important;width:2px!important}
+  .db-scale{left:2px!important;width:24px!important;top:29px!important;bottom:13px!important;font-size:5px!important}
+"""
+          if old not in s:
+              raise SystemExit('bloco MOBILE_V12 de 8 bandas não encontrado')
+          s=s.replace(old,new,1)
+
+          # trava final: largura real do elemento e shell em 315px no mobile
+          marker="  .footer{display:none!important}\n}"
+          final_css="""  :host{width:315px!important;max-width:315px!important;min-width:315px!important;margin-left:auto!important;margin-right:auto!important;display:block!important}
+  .shell{width:315px!important;max-width:315px!important;min-width:315px!important;margin:0 auto!important}
+  .footer{display:none!important}\n}"""
+          if marker in s:
+              s=s.replace(marker, final_css, 1)
+
+          s=s.replace("style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v12' : '20260821-desktop-preservado-v2';", "style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v13-6band' : '20260821-desktop-preservado-v2';")
           p.write_text(s,encoding='utf-8')
           PY
 
-      - name: Validar
+      - name: Validar correção
         run: |
           set -e
           f=src/public/custom-elements/pelego-radio.js
-          grep -q 'PB MOBILE COMPACT V2 2026-08-20' "$f"
-          grep -q "mobile?\[40,100,250,1000,4000,16000\]" "$f"
-          grep -q 'genre:nth-child(-n+8)' "$f"
+          grep -q "mobile ? '6' : '24'" "$f"
           grep -q 'repeat(6,minmax(0,1fr))' "$f"
+          grep -q 'height:80px!important' "$f"
+          grep -q 'mobile-final-v13-6band' "$f"
 
-      - name: Commitar
+      - name: Commitar no main
         run: |
           git config user.name 'PELEGO BOX Automação'
           git config user.email 'pelegobox82@gmail.com'
           git add src/public/custom-elements/pelego-radio.js
           git diff --cached --quiet && exit 0
-          git commit -m 'Ajustar Rádio Pelego somente no mobile'
+          git commit -m 'Corrigir rádio mobile para 6 bandas e layout compacto'
           git push origin HEAD:main
-
-      - name: Aguardar Wix Git
-        run: sleep 90
-
-      - name: Publicar Wix
-        env:
-          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
-          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
-        run: |
-          code=$(curl -sS -o /tmp/wix.json -w '%{http_code}' -X POST 'https://www.wixapis.com/site-publisher/v1/site/publish' -H "Authorization: $WIX_API_KEY" -H "wix-site-id: $WIX_SITE_ID" -H 'Content-Type: application/json' --data '{}')
-          cat /tmp/wix.json; echo
-          test "$code" -ge 200 -a "$code" -lt 300
-
-# trigger direto 2026-08-20 22:36 BRT

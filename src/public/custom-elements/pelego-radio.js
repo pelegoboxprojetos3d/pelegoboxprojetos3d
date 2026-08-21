@@ -45,19 +45,20 @@ const SKIN = `
   .topbar{min-height:42px!important;padding:0 4px!important}.brandrow{gap:6px!important}.logo-bars{width:22px!important;height:24px!important}.title{font-size:14px!important;white-space:nowrap!important}.subtitle{font-size:5.5px!important;white-space:nowrap!important;margin-top:2px!important}.win{display:none!important}
   .grid-top{display:block!important;min-height:0!important;height:auto!important;overflow:visible!important}
   .grid-top>.panel:nth-child(1),.grid-top>.panel:nth-child(2){display:none!important}
-  .grid-top>.panel:nth-child(3),.analyzer{min-height:110px!important;height:110px!important;max-height:110px!important}
+  .grid-top>.panel:nth-child(3),.analyzer{min-height:129px!important;height:129px!important;max-height:129px!important}
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}.analyzer canvas{width:calc(100% - 14px)!important;margin:0 7px!important}.bands-label{font-size:6px!important}
   .grid-middle{grid-template-columns:1fr!important;gap:7px!important;overflow:visible!important}
-  .filters{min-height:110px!important;height:110px!important;max-height:110px!important;padding-bottom:0!important;overflow:hidden!important}
+  .filters{min-height:129px!important;height:129px!important;max-height:129px!important;padding-bottom:0!important;overflow:hidden!important}
   .filterbody{height:calc(100% - 25px)!important;grid-template-columns:76px minmax(0,1fr)!important;gap:5px!important;padding:0 6px 6px!important}
-  .scopebuttons{grid-template-rows:1fr 1fr!important;gap:4px!important}.scope{font-size:7px!important;gap:1px!important;padding:1px!important}.scope .scope-icon{width:22px!important;height:19px!important}#national .scope-icon{width:25px!important;height:22px!important}#national .scope-icon svg{width:24px!important;height:21px!important}
+  .scopebuttons{height:100%!important;grid-template-rows:repeat(2,minmax(0,1fr))!important;gap:4px!important}.scope{height:100%!important;min-height:0!important;font-size:7px!important;gap:1px!important;padding:1px!important}.scope .scope-icon{width:22px!important;height:19px!important}#national .scope-icon{width:25px!important;height:22px!important}#national .scope-icon svg{width:24px!important;height:21px!important}
   .genres{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:repeat(4,minmax(0,1fr))!important;grid-auto-rows:0!important;gap:4px!important;overflow:hidden!important;padding-top:0!important;align-content:stretch!important}
   .genre{display:none!important;height:auto!important;min-height:0!important;font-size:7px!important;padding:0 2px!important}.genre:nth-child(-n+8){display:block!important}
   .playbox{min-height:235px!important;margin-top:0!important;height:auto!important}.playbody{padding:0 8px 8px!important}.randomrow{gap:5px!important}.controls{gap:5px!important}
-  .eqpanel{min-height:160px!important;height:160px!important;max-height:160px!important;overflow:hidden!important;padding:0 6px 5px!important;grid-template-rows:27px minmax(0,1fr)!important}
-  .eqgrid{min-width:0!important;width:100%!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:2px!important;padding:0 2px 0 25px!important;overflow:hidden!important}
+  .eqpanel{min-height:160px!important;height:160px!important;max-height:160px!important;overflow:hidden!important;padding:0 6px 5px!important;grid-template-rows:27px minmax(0,1fr)!important}.eqhead{padding:0 2px!important;align-items:center!important}.eqtitle{font-size:9px!important;white-space:nowrap!important}.preset{margin-left:auto!important;gap:4px!important;font-size:7px!important}.preset select{width:96px!important;min-width:96px!important;height:21px!important}
+  .eqgrid{min-width:0!important;width:100%!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:3px!important;padding:2px 4px 0 25px!important;overflow:hidden!important;align-items:stretch!important}
   .eqgrid .band{display:none!important;grid-template-rows:11px minmax(0,1fr) 12px!important;font-size:6px!important}.eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(15),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(24){display:grid!important}
   .band input[type=range]{width:72px!important;height:14px!important}.band input::-webkit-slider-thumb{width:13px!important;height:13px!important}.sliderwrap:before{height:84%!important}.eqgroups{display:none!important}.eqpanel:before{left:6px!important;top:42px!important;bottom:18px!important;font-size:6px!important}.db-scale{left:4px!important;top:43px!important;bottom:18px!important;font-size:6px!important}
+  .playbox .panel-title{justify-content:flex-start!important;text-align:left!important}.playbox .play-title-left{margin:0!important;justify-content:flex-start!important}.playbox .play-meta{display:none!important}
   .footer{display:none!important}
 }
 `;
@@ -83,7 +84,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-container-v2' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v3' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
@@ -96,6 +97,10 @@ function applySkin(el){
   title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - ${mobile ? '6' : '24'} BANDAS`);
   title(root.querySelector('.filters .panel-title'), `<span class="pb-icon">${HEADPHONES}</span>ESCOLHA O QUE QUER OUVIR`);
   title(root.querySelector('.playbox .panel-title'), `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
+  const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '6' : '24'} BANDAS`;
+  const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];
+  root.querySelectorAll('.genre').forEach((b,i)=>{const original=b.dataset.key||b.textContent.trim();if(mobile&&i<8){b.dataset.filter=mobileGenres[i];b.textContent=mobileGenres[i];}else{b.dataset.filter=original;b.textContent=original;}});
+  try{el.refreshGenreButtons?.();}catch(_){}
 
   const international = root.querySelector('#international .scope-icon');
   if(international) international.innerHTML = GLOBE;

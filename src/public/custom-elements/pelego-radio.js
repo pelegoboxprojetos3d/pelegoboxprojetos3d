@@ -93,6 +93,22 @@ const SKIN = `
   #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:5px!important;overflow:hidden!important;white-space:nowrap!important}
   #shell .playbox .play-title-left{display:inline-flex!important;align-items:center!important;gap:5px!important;flex:0 0 auto!important}
   #shell .playbox .play-meta{display:block!important;min-width:0!important;max-width:calc(100% - 92px)!important;margin-left:2px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;text-align:left!important;color:#fff!important;font-size:7px!important;font-weight:500!important;letter-spacing:0!important;text-transform:none!important}
+  /* MOBILE_V11_8_BANDS_RELAXED */
+  .playbox{min-height:224px!important;height:224px!important;max-height:224px!important}
+  .playbody{grid-template-rows:11px 28px 22px 48px 36px!important;row-gap:4px!important;padding:4px 8px 7px!important}
+  .playbody>select{height:28px!important}
+  .volrow{min-height:22px!important}
+  .randomrow{gap:6px!important}
+  .randomrow label{grid-template-rows:11px 30px!important;gap:3px!important;padding:2px 3px 3px!important}
+  .randomrow select{height:30px!important}
+  .controls{gap:6px!important;align-items:center!important}
+  .controls button{height:36px!important}
+  #shell .playbox .panel-title{justify-content:flex-start!important;gap:6px!important}
+  #shell .playbox .play-meta{display:block!important;min-width:0!important;max-width:calc(100% - 98px)!important;margin-left:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;text-align:left!important;font-size:7px!important}
+  .eqgrid{min-width:0!important;width:calc(100% - 30px)!important;height:100%!important;margin:0 0 0 30px!important;grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:0!important;padding:0!important;overflow:hidden!important}
+  .eqgrid .band{display:none!important;justify-items:center!important;align-items:center!important;grid-template-rows:10px minmax(0,1fr) 12px!important;font-size:5.7px!important}
+  .eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(13),.eqgrid .band:nth-child(17),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(23),.eqgrid .band:nth-child(24){display:grid!important}
+  .db-scale{left:4px!important;width:26px!important;top:42px!important;bottom:25px!important}
   .footer{display:none!important}
 }
 `;
@@ -119,7 +135,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v10' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v11' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
@@ -129,14 +145,19 @@ function applySkin(el){
   const top = root.querySelectorAll('.grid-top .panel-title');
   title(top[0], `<span class="pb-icon">${CUBE}</span>PROJETOS FEITOS DO ZERO`);
   title(top[1], `<span class="pb-icon">${CUBE}</span>PROJETOS PRONTOS`);
-  title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - ${mobile ? '6' : '24'} BANDAS`);
+  title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - ${mobile ? '8' : '24'} BANDAS`);
   title(root.querySelector('.filters .panel-title'), `<span class="pb-icon">${HEADPHONES}</span>ESCOLHA O QUE QUER OUVIR`);
-  const playTitle=root.querySelector('.playbox .panel-title'); title(playTitle, mobile ? `<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span><span class="play-meta" id="playMeta"></span>` : `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
-  if(mobile){
-    const pbMobileTitleV6=root.querySelector('.playbox .panel-title');
-    if(pbMobileTitleV6) pbMobileTitleV6.innerHTML='<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span><span class="play-meta" id="playMeta"></span>';
+  const playTitle=root.querySelector('.playbox .panel-title');
+  if(playTitle){
+    if(mobile){
+      if(!playTitle.querySelector('.play-title-left') || !playTitle.querySelector('#playMeta')){
+        playTitle.innerHTML='<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span><span class="play-meta" id="playMeta"></span>';
+      }
+    }else{
+      title(playTitle, `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
+    }
   }
-  const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '6' : '24'} BANDAS`;
+  const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`;
   const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];
   root.querySelectorAll('.genre').forEach((b,i)=>{const original=b.dataset.key||b.textContent.trim();if(mobile&&i<8){b.dataset.filter=mobileGenres[i];b.textContent=mobileGenres[i];}else{b.dataset.filter=original;b.textContent=original;}});
   try{el.refreshGenreButtons?.();}catch(_){}

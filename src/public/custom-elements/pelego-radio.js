@@ -564,7 +564,53 @@ const MOBILE_CLEAN_SKIN = `
 .band input::-webkit-slider-thumb{width:13px!important;height:13px!important}
 .sliderwrap:before{height:84%!important}
 .db-scale{left:0!important;width:30px!important;top:32px!important;bottom:18px!important;font-size:6px!important;align-items:center!important}
-.eqgroups,.eqpanel:before,.eqpanel:after{display:none!important;content:none!important}
+/* MOBILE_V29_APPROVED_LAYOUT */
+/* TOCANDO: título à esquerda e faixa atual à direita */
+#shell .playbox .panel-title{
+  display:flex!important;align-items:center!important;justify-content:space-between!important;
+  gap:6px!important;padding:0 9px!important
+}
+#shell .playbox .play-title-left{
+  display:inline-flex!important;align-items:center!important;justify-content:flex-start!important;
+  gap:6px!important;min-width:0!important;flex:0 0 auto!important
+}
+#shell .playbox .play-meta{
+  display:block!important;visibility:visible!important;opacity:1!important;
+  margin-left:auto!important;min-width:0!important;max-width:150px!important;
+  overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;
+  text-align:right!important;color:#eef3f0!important;font-size:7px!important;font-weight:400!important
+}
+
+/* Mesma grade para os três selects e os três botões */
+.randomrow,.controls{
+  display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  column-gap:6px!important;width:100%!important;margin-left:0!important;margin-right:0!important
+}
+.randomrow label,.controls button{width:100%!important;min-width:0!important;max-width:none!important}
+.controls{position:static!important;top:auto!important;transform:none!important}
+.controls button{margin:0!important;padding-left:2px!important;padding-right:2px!important}
+
+/* ANALISADOR: grupos sob as oito bandas */
+.bands-label{
+  display:grid!important;grid-template-columns:repeat(3,1fr)!important;
+  align-items:center!important;justify-items:center!important;
+  height:17px!important;min-height:17px!important;max-height:17px!important;
+  color:#19ef5d!important;font-size:6px!important;font-weight:700!important
+}
+.bands-label span{display:block!important;width:100%!important;border:0!important;text-align:center!important}
+
+/* EQUALIZADOR: reserva uma linha própria para GRAVE / MÉDIO / AGUDO */
+.eqpanel{grid-template-rows:25px 111px 18px!important}
+.eqgrid{height:111px!important;min-height:111px!important;max-height:111px!important}
+.eqgroups{
+  display:grid!important;grid-template-columns:repeat(3,1fr)!important;
+  width:calc(100% - 30px)!important;height:18px!important;min-height:18px!important;max-height:18px!important;
+  margin:0 0 0 30px!important;padding:0!important;align-items:center!important;justify-items:center!important;
+  color:#19ef5d!important;font-size:6px!important;font-weight:700!important;line-height:1!important
+}
+.eqgroups span{display:block!important;width:100%!important;padding:0!important;border-top:1px solid #13d94f!important;text-align:center!important}
+.eqpanel:before,.eqpanel:after{display:none!important;content:none!important}
+/* END_MOBILE_V29_APPROVED_LAYOUT */
 .toast{z-index:50!important}
 `;
 /* END_MOBILE_V28_CLEAN_FOUR_STACK */
@@ -588,7 +634,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? MOBILE_CLEAN_SKIN : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v28' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v29' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){
@@ -620,6 +666,12 @@ function applySkin(el){
     }
   }
   const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`; /* PB_EQ_TITLE_8_BANDAS_FINAL_20260821 */
+  if(mobile){
+    const analyzerGroups=root.querySelectorAll('.bands-label span');
+    ['GRAVE','MÉDIO','AGUDO'].forEach((txt,i)=>{ if(analyzerGroups[i]) analyzerGroups[i].textContent=txt; });
+    const eqGroups=root.querySelectorAll('.eqgroups span');
+    ['GRAVE','MÉDIO','AGUDO'].forEach((txt,i)=>{ if(eqGroups[i]) eqGroups[i].textContent=txt; });
+  }
 
   // V27: no mobile, os dois títulos ficam literalmente em 8 bandas.
   // Reaplica após o carregamento para neutralizar qualquer rotina antiga que tente restaurar 6.

@@ -10,7 +10,7 @@ on:
       - "src/public/custom-elements/pelego-radio-core.js"
       - "src/pages/Rádio Pelego Box.ypxc8.js"
       - "src/public/radioPelegoPersistente.js"
-      - "scripts/canonicalizar-radio-mobile-v32-2026-08-21.cjs"
+      - "scripts/canonicalizar-radio-mobile-v33-flow-2026-08-21.cjs"
       - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
@@ -39,30 +39,23 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Aplicar única skin mobile canônica V32
+      - name: Aplicar única skin mobile canônica V33
         run: |
           set -euo pipefail
-          if grep -q "MOBILE_V32_CANONICAL_ONLY" src/public/custom-elements/pelego-radio.js; then
-            echo "Skin V32 já está canônica; nenhuma camada antiga será reaplicada."
-          else
-            node scripts/canonicalizar-radio-mobile-v32-2026-08-21.cjs
-          fi
+          node scripts/canonicalizar-radio-mobile-v33-flow-2026-08-21.cjs
 
       - name: Validar layout mobile antes de publicar
         run: |
           set -euo pipefail
-          grep -q "MOBILE_V32_CANONICAL_ONLY" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V33_CANONICAL_FLOW" src/public/custom-elements/pelego-radio.js
+          grep -q "display:flex!important;flex-direction:column!important" src/public/custom-elements/pelego-radio.js
+          grep -q ".grid-top,.grid-middle{display:contents!important}" src/public/custom-elements/pelego-radio.js
+          grep -q "height:auto!important;min-height:700px!important" src/public/custom-elements/pelego-radio.js
           grep -q "ANALISADOR - 8 BANDAS" src/public/custom-elements/pelego-radio.js
           grep -q "EQUALIZADOR 8 BANDAS" src/public/custom-elements/pelego-radio.js
-          grep -q "top:171px!important" src/public/custom-elements/pelego-radio.js
-          grep -q "top:309px!important" src/public/custom-elements/pelego-radio.js
-          grep -q "top:535px!important" src/public/custom-elements/pelego-radio.js
           grep -q "grid-template-rows:12px 29px 25px 52px 40px!important" src/public/custom-elements/pelego-radio.js
           grep -q "grid-template-columns:repeat(3,minmax(0,1fr))!important" src/public/custom-elements/pelego-radio.js
-          grep -q "grid-template-columns:minmax(0,1fr) 116px!important" src/public/custom-elements/pelego-radio.js
-          test "$(grep -c "MOBILE_V29_APPROVED_LAYOUT" src/public/custom-elements/pelego-radio.js || true)" -eq 0
-          test "$(grep -c "MOBILE_V30_FINAL_LOCK" src/public/custom-elements/pelego-radio.js || true)" -eq 0
-          test "$(grep -c "MOBILE_V31_FLEX_STACK_FIX" src/public/custom-elements/pelego-radio.js || true)" -eq 0
+          grep -q "requestAnimationFrame(()=>requestAnimationFrame" src/public/custom-elements/pelego-radio.js
 
       - name: Autenticar Wix CLI
         env:
@@ -85,7 +78,7 @@ jobs:
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add .deploy/wix-cli-radio-last-success.txt src/public/custom-elements/pelego-radio.js
-          git commit -m "Consolidar Rádio mobile V32 publicada [skip ci]" || exit 0
+          git commit -m "Consolidar Rádio mobile V33 publicada [skip ci]" || exit 0
           git push origin HEAD:main
 
       - name: Registrar falha do Wix CLI

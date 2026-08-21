@@ -1,11 +1,10 @@
-name: Radio mobile V18 analisador mais alto
+name: Radio mobile V19 ajuste final layout
 on:
   push:
     branches: [main]
     paths:
       - 'scripts/fix-radio-mobile-v13-8x8-clean.cjs'
       - 'scripts/fix-radio-mobile-v17-four.cjs'
-      - '.github/workflows/radio-mobile-v11-8bands.yml'
 permissions:
   contents: write
 jobs:
@@ -21,14 +20,16 @@ jobs:
           node-version: '20'
       - name: Preservar EQ 8 bandas e ajustes existentes
         run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
-      - name: Aumentar analisador mobile em 0,5 cm
+      - name: Aplicar V19 mobile
         run: node scripts/fix-radio-mobile-v17-four.cjs
-      - name: Validar ajuste mobile
+      - name: Validar V19 mobile
         run: |
-          grep -q "mobile-final-v18" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v19" src/public/custom-elements/pelego-radio.js
           grep -q "MOBILE_V17_FOUR_FIXES" src/public/custom-elements/pelego-radio.js
           grep -q "ANALISADOR - 8 BANDAS" src/public/custom-elements/pelego-radio.js
-          grep -q "height:186px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "height:205px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "width:310px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "EQUALIZADOR 8 BANDAS" src/public/custom-elements/pelego-radio.js
           grep -q "#national .scope-icon" src/public/custom-elements/pelego-radio.js
           grep -q "top:9px!important" src/public/custom-elements/pelego-radio.js
           grep -q "left:87.5%" src/public/custom-elements/pelego-radio.js
@@ -42,5 +43,5 @@ jobs:
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add src/public/custom-elements/pelego-radio.js
-          git commit -m "Aumentar altura do analisador mobile em 0,5 cm"
+          git commit -m "V19 - ajustar analisador, largura e titulo do equalizador mobile"
           git push origin main

@@ -69,6 +69,19 @@ const SKIN = `
   .preset select{width:96px!important;min-width:96px!important;height:21px!important}
   #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:6px!important}
   #shell .playbox .play-title-left{display:inline-flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;margin:0!important}
+  /* MOBILE_V9_EQ_HARMONY */
+  .eqpanel{min-height:142px!important;height:142px!important;max-height:142px!important;padding:0 6px 6px!important;grid-template-rows:25px minmax(0,1fr)!important;position:relative!important;overflow:hidden!important}
+  .eqhead{height:25px!important;min-height:25px!important;padding:0 2px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:6px!important}
+  .eqtitle{font-size:9px!important;white-space:nowrap!important;flex:0 0 auto!important}
+  .preset{position:static!important;right:auto!important;bottom:auto!important;margin:0 0 0 auto!important;display:flex!important;align-items:center!important;gap:4px!important;font-size:7px!important;z-index:auto!important}
+  .preset select{width:92px!important;min-width:92px!important;height:21px!important}
+  .eqgrid{min-width:0!important;width:calc(100% - 34px)!important;height:100%!important;margin:0 0 0 34px!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:0!important;padding:0!important;overflow:hidden!important;align-items:stretch!important;justify-content:stretch!important}
+  .eqgrid .band{justify-items:center!important;align-items:center!important;grid-template-rows:10px minmax(0,1fr) 12px!important;font-size:6px!important}
+  .eqgrid .band .db,.eqgrid .band .freq{width:100%!important;text-align:center!important;margin:0!important;padding:0!important;line-height:1!important}
+  .db-scale{left:6px!important;width:28px!important;top:42px!important;bottom:25px!important;display:flex!important;flex-direction:column!important;justify-content:space-between!important;align-items:center!important;text-align:center!important;font-size:6.5px!important;line-height:1!important;margin:0!important;padding:0!important}
+  .db-scale>*{margin:0!important;padding:0!important;line-height:1!important;text-align:center!important}
+  .band input[type=range]{width:74px!important;height:14px!important;margin:0!important}
+  .sliderwrap:before{height:84%!important}
   .footer{display:none!important}
 }
 `;
@@ -95,7 +108,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v8' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v9' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });

@@ -89,3 +89,4 @@ const replacement=`  const originalPlay = p.play;
 s=s.replace(anchor,replacement);
 fs.writeFileSync(path,s);
 console.log('OK: mobile refinado e player da pagina preso ao motor global unico');
+// trigger 2026-08-21 final

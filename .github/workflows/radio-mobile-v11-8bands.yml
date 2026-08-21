@@ -1,4 +1,4 @@
-name: Radio mobile V15 EQ 8 fixo
+name: Radio mobile V16 Tocando gap
 on:
   push:
     branches: [main]
@@ -18,15 +18,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Aplicar V15 equalizador mobile
+      - name: Aplicar V16 espacamento Tocando mobile
         run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
-      - name: Validar V15
+      - name: Validar V16
         run: |
-          grep -q "mobile-final-v15" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v16" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V16_TOCANDO_GAP" src/public/custom-elements/pelego-radio.js
+          grep -q "top:7px!important" src/public/custom-elements/pelego-radio.js
           grep -q "MOBILE_V15_EQ_ABSOLUTE_8" src/public/custom-elements/pelego-radio.js
           grep -q "count=mobile?8:24" src/public/custom-elements/pelego-radio.js
-          grep -q "40','100','250','630','1.6K','4K','10K','16K" src/public/custom-elements/pelego-radio.js
-          grep -q "left:87.5%" src/public/custom-elements/pelego-radio.js
       - name: Commit e push
         run: |
           if git diff --quiet -- src/public/custom-elements/pelego-radio.js; then
@@ -36,5 +36,5 @@ jobs:
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add src/public/custom-elements/pelego-radio.js
-          git commit -m "Fixar equalizador mobile em oito posições alinhadas"
+          git commit -m "Criar respiro entre menus e botoes do Tocando mobile"
           git push origin main

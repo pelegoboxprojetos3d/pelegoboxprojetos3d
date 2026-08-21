@@ -1,0 +1,33 @@
+name: Radio mobile equalizador harmonia v9
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/radio-mobile-eq-harmony-v9.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar ajuste visual final
+        run: node scripts/fix-radio-mobile-eq-harmony-v9.cjs
+      - name: Validar
+        run: |
+          grep -q "MOBILE_V9_EQ_HARMONY" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v9" src/public/custom-elements/pelego-radio.js
+          grep -q "height:142px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "top:42px!important;bottom:25px" src/public/custom-elements/pelego-radio.js
+      - name: Commitar ajuste
+        run: |
+          git config user.name "pelegoboxprojetos3d"
+          git config user.email "actions@github.com"
+          git add src/public/custom-elements/pelego-radio.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Harmonizar equalizador mobile e devolver preset ao topo"
+            git push origin main
+          fi

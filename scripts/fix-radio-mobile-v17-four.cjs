@@ -2,6 +2,7 @@ const fs=require('fs');
 const path='src/public/custom-elements/pelego-radio.js';
 let s=fs.readFileSync(path,'utf8');
 
+// Forçar execução V17 pelo merge para aplicar as quatro correções no arquivo ativo.
 const start='  /* MOBILE_V17_FOUR_FIXES */';
 const end='  /* END_MOBILE_V17_FOUR_FIXES */';
 const re=new RegExp('\\n  \/\\* MOBILE_V17_FOUR_FIXES \\*\\/[\\s\\S]*?\/\\* END_MOBILE_V17_FOUR_FIXES \\*\\/','g');

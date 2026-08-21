@@ -93,16 +93,18 @@ const SKIN = `
   #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:5px!important;overflow:hidden!important;white-space:nowrap!important}
   #shell .playbox .play-title-left{display:inline-flex!important;align-items:center!important;gap:5px!important;flex:0 0 auto!important}
   #shell .playbox .play-meta{display:block!important;min-width:0!important;max-width:calc(100% - 92px)!important;margin-left:2px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;text-align:left!important;color:#fff!important;font-size:7px!important;font-weight:500!important;letter-spacing:0!important;text-transform:none!important}
-  /* MOBILE_V11_8_BANDS_RELAXED */
-  .playbox{min-height:224px!important;height:224px!important;max-height:224px!important}
-  .playbody{grid-template-rows:11px 28px 22px 48px 36px!important;row-gap:4px!important;padding:4px 8px 7px!important}
-  .playbody>select{height:28px!important}
-  .volrow{min-height:22px!important}
-  .randomrow{gap:6px!important}
-  .randomrow label{grid-template-rows:11px 30px!important;gap:3px!important;padding:2px 3px 3px!important}
-  .randomrow select{height:30px!important}
-  .controls{gap:6px!important;align-items:center!important}
-  .controls button{height:36px!important}
+  /* MOBILE_V12_TOCANDO_SPACING */
+  .playbox{min-height:208px!important;height:208px!important;max-height:208px!important}
+  .playbody{grid-template-rows:9px 23px 18px 34px 30px!important;row-gap:4px!important;padding:0 8px 1px!important}
+  .playbody>select{height:23px!important}
+  .volrow{min-height:18px!important}
+  .randomrow{gap:8px!important;align-items:start!important;margin-top:2px!important;margin-bottom:0!important}
+  .randomrow label{grid-template-rows:10px 24px!important;gap:2px!important;padding:2px 3px 1px!important}
+  .randomrow select{height:24px!important}
+  .controls{gap:8px!important;margin-top:0!important;margin-bottom:0!important;align-items:center!important}
+  .controls button{height:30px!important;margin:0!important}
+  .playbox .hint{display:none!important}
+  .playbox .status{margin:0!important;padding:0!important}
   #shell .playbox .panel-title{justify-content:flex-start!important;gap:6px!important}
   #shell .playbox .play-meta{display:block!important;min-width:0!important;max-width:calc(100% - 98px)!important;margin-left:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;text-align:left!important;font-size:7px!important}
   .eqgrid{min-width:0!important;width:calc(100% - 30px)!important;height:100%!important;margin:0 0 0 30px!important;grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:0!important;padding:0!important;overflow:hidden!important}
@@ -135,7 +137,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v11' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v12' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });

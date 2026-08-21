@@ -1,4 +1,3 @@
-# trigger 2
 name: Corrigir sobreposição do analisador mobile
 
 on:
@@ -6,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/corrigir-overlap-analisador-mobile-2026-08-21.yml
+      - .github/triggers/corrigir-overlap-analisador-mobile-v23.txt
 
 permissions:
   contents: write
@@ -20,18 +19,26 @@ jobs:
       - name: Baixar código
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Travar altura do analisador sem sobreposição
+      - name: Corrigir gráfico do analisador no mobile
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          marker = 'PB_MOBILE_ANALYZER_NO_OVERLAP_20260821'
-          override = r'''
-/* PB_MOBILE_ANALYZER_NO_OVERLAP_20260821 */
-@media(max-width:640px){
+          path = Path('src/public/custom-elements/pelego-radio.js')
+          s = path.read_text(encoding='utf-8')
+          marker = 'MOBILE_V23_ANALYZER_CLIP_FIX'
+
+          if marker not in s:
+              anchor = '  /* END_MOBILE_V22_WRAPPER_GUARD */'
+              if anchor not in s:
+                  raise SystemExit('Marcador V22 do wrapper não encontrado.')
+
+              fix = r'''
+  /* MOBILE_V23_ANALYZER_CLIP_FIX */
   .grid-top{
     display:block!important;
     width:100%!important;
@@ -40,11 +47,9 @@ jobs:
     max-height:239px!important;
     overflow:hidden!important;
     position:relative!important;
-    margin:0!important;
+    margin:0!important
   }
-  .grid-top>.panel:nth-child(3),
-  .grid-top>.analyzer,
-  .analyzer{
+  .grid-top>.panel:nth-child(3),.analyzer{
     display:grid!important;
     width:100%!important;
     min-height:239px!important;
@@ -52,71 +57,54 @@ jobs:
     max-height:239px!important;
     overflow:hidden!important;
     position:relative!important;
-    margin:0!important;
+    margin:0!important
   }
-  .analyzer{
-    grid-template-rows:25px 194px 18px!important;
-  }
+  .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
   .analyzer canvas{
     display:block!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    align-self:stretch!important;
     width:calc(100% - 14px)!important;
     max-width:calc(100% - 14px)!important;
-    min-height:194px!important;
-    height:194px!important;
-    max-height:194px!important;
     margin:0 7px!important;
-    align-self:stretch!important;
-    overflow:hidden!important;
+    overflow:hidden!important
   }
   .grid-middle{
     position:relative!important;
     z-index:1!important;
-    margin-top:0!important;
+    margin-top:0!important
   }
-}
-/* END_PB_MOBILE_ANALYZER_NO_OVERLAP_20260821 */
+  /* END_MOBILE_V23_ANALYZER_CLIP_FIX */
 '''
-
-          core = Path('src/public/custom-elements/pelego-radio-core.js')
-          s = core.read_text(encoding='utf-8')
-          if marker not in s:
-              token = '</style>'
-              if token not in s:
-                  raise SystemExit('Fim do style do core não encontrado.')
-              s = s.replace(token, override + token, 1)
-              core.write_text(s, encoding='utf-8')
-
-          wrapper = Path('src/public/custom-elements/pelego-radio.js')
-          s = wrapper.read_text(encoding='utf-8')
-          if marker not in s:
-              token = '\n`;\n\nfunction title'
-              if token not in s:
-                  raise SystemExit('Fim do SKIN do wrapper não encontrado.')
-              s = s.replace(token, '\n' + override + '`;\n\nfunction title', 1)
-              wrapper.write_text(s, encoding='utf-8')
+              s = s.replace(anchor, anchor + '\n' + fix, 1)
+              s = s.replace("20260821-mobile-final-v22", "20260821-mobile-final-v23", 1)
+              path.write_text(s, encoding='utf-8')
           PY
 
       - name: Validar correção
         shell: bash
         run: |
           set -euo pipefail
-          for f in src/public/custom-elements/pelego-radio-core.js src/public/custom-elements/pelego-radio.js; do
-            grep -q 'PB_MOBILE_ANALYZER_NO_OVERLAP_20260821' "$f"
-            grep -q 'min-height:239px!important' "$f"
-            grep -q 'grid-template-rows:25px 194px 18px!important' "$f"
-            grep -q 'height:194px!important' "$f"
-          done
+          f='src/public/custom-elements/pelego-radio.js'
+          grep -q 'MOBILE_V23_ANALYZER_CLIP_FIX' "$f"
+          grep -q 'height:auto!important' "$f"
+          grep -q 'overflow:hidden!important' "$f"
+          grep -q '20260821-mobile-final-v23' "$f"
+          grep -q "EQUALIZADOR \${mobile ? '8' : '24'} BANDAS" "$f"
 
       - name: Gravar correção no main
         shell: bash
         run: |
           set -euo pipefail
+          f='src/public/custom-elements/pelego-radio.js'
+          if git diff --quiet -- "$f"; then
+            echo 'Correção já estava aplicada.'
+            exit 0
+          fi
           git config user.name 'PELEGO BOX Automação'
           git config user.email 'pelegobox82@gmail.com'
-          git add src/public/custom-elements/pelego-radio-core.js src/public/custom-elements/pelego-radio.js
-          if git diff --cached --quiet; then
-            echo 'Correção já aplicada.'
-          else
-            git commit -m 'Corrigir sobreposição do analisador mobile'
-            git push origin HEAD:main
-          fi
+          git add "$f"
+          git commit -m 'Corrigir gráfico do analisador sobreposto no mobile'
+          git push origin HEAD:main

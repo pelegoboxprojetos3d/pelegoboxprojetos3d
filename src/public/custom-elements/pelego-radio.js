@@ -114,6 +114,7 @@ const SKIN = `
 
 
 
+
   /* MOBILE_V15_EQ_ABSOLUTE_8 */
   .eqpanel{
     min-height:154px!important;height:154px!important;max-height:154px!important;
@@ -170,6 +171,24 @@ const SKIN = `
   .band input::-webkit-slider-thumb{width:13px!important;height:13px!important}
   .db-scale{left:3px!important;width:24px!important;top:43px!important;bottom:25px!important;font-size:6px!important}
   /* END_MOBILE_V15_EQ_ABSOLUTE_8 */
+
+  /* MOBILE_V16_TOCANDO_GAP */
+  .playbox{
+    min-height:215px!important;
+    height:215px!important;
+    max-height:215px!important
+  }
+  .randomrow{
+    margin-bottom:0!important
+  }
+  .controls{
+    position:relative!important;
+    top:7px!important;
+    margin-top:0!important;
+    margin-bottom:0!important;
+    gap:8px!important
+  }
+  /* END_MOBILE_V16_TOCANDO_GAP */
   .footer{display:none!important}
 }
 `;
@@ -196,7 +215,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v15' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v16' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });

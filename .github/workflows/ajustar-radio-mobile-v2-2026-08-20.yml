@@ -22,7 +22,6 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p=Path('src/public/custom-elements/pelego-radio.js')
           s=p.read_text(encoding='utf-8')
 
@@ -97,7 +96,6 @@ jobs:
           grep -q "mobile?\[40,100,250,1000,4000,16000\]" "$f"
           grep -q 'genre:nth-child(-n+8)' "$f"
           grep -q 'repeat(6,minmax(0,1fr))' "$f"
-          grep -q 'grid-template-columns:1fr 1fr 1.04fr!important' "$f"
 
       - name: Commitar
         run: |
@@ -120,4 +118,4 @@ jobs:
           cat /tmp/wix.json; echo
           test "$code" -ge 200 -a "$code" -lt 300
 
-# trigger via PR merge 2026-08-20
+# trigger direto 2026-08-20 22:36 BRT

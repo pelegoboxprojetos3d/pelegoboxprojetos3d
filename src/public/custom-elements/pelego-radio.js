@@ -115,6 +115,8 @@ const SKIN = `
 
 
 
+
+
   /* MOBILE_V15_EQ_ABSOLUTE_8 */
   .eqpanel{
     min-height:154px!important;height:154px!important;max-height:154px!important;
@@ -189,6 +191,43 @@ const SKIN = `
     gap:8px!important
   }
   /* END_MOBILE_V16_TOCANDO_GAP */
+
+  /* MOBILE_V17_FOUR_FIXES */
+  /* 1) título visível sempre em 8 bandas */
+  .grid-top>.panel:nth-child(3) .panel-title{font-size:0!important}
+  .grid-top>.panel:nth-child(3) .panel-title .pb-icon{font-size:12px!important}
+  .grid-top>.panel:nth-child(3) .panel-title::after{
+    content:'ANALISADOR - 8 BANDAS'!important;
+    font-size:12px!important;font-weight:700!important;letter-spacing:.2px!important;
+    color:#19ef5d!important
+  }
+
+  /* 2) analisador aproximadamente 0,5 cm mais alto */
+  .grid-top>.panel:nth-child(3),.analyzer{
+    min-height:167px!important;height:167px!important;max-height:167px!important
+  }
+  .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
+
+  /* 3) mapa do Brasil contido no botão Nacional */
+  #national{overflow:hidden!important;position:relative!important;padding:2px 1px!important;gap:0!important}
+  #national .scope-icon{
+    width:24px!important;height:19px!important;max-width:24px!important;max-height:19px!important;
+    min-width:0!important;min-height:0!important;margin:0 auto!important;
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    position:static!important;transform:none!important;overflow:hidden!important
+  }
+  #national .scope-icon svg{
+    width:22px!important;height:18px!important;max-width:22px!important;max-height:18px!important;
+    display:block!important;position:static!important;transform:none!important;margin:0 auto!important
+  }
+
+  /* 4) espaço entre menus e botões inferiores do Tocando */
+  .playbox{min-height:217px!important;height:217px!important;max-height:217px!important}
+  .controls{
+    position:relative!important;top:9px!important;
+    margin-top:0!important;margin-bottom:0!important;gap:8px!important
+  }
+  /* END_MOBILE_V17_FOUR_FIXES */
   .footer{display:none!important}
 }
 `;
@@ -215,7 +254,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v16' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v17' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });

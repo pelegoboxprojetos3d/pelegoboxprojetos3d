@@ -207,41 +207,38 @@ const SKIN = `
   }
   /* END_MOBILE_V16_TOCANDO_GAP */
 
-  /* MOBILE_V17_FOUR_FIXES */
-  /* V20.1 - largura mobile 310px e centralização real */
+
+  /* MOBILE_V21_STABLE */
+  /* largura mobile fixa e centralizada, sem alternar 315/310 */
   :host{
-    width:310px!important;max-width:310px!important;
-    margin-left:auto!important;margin-right:auto!important;
-    box-sizing:border-box!important
+    width:310px!important;min-width:310px!important;max-width:310px!important;
+    margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important
   }
   .shell{
-    width:310px!important;max-width:310px!important;
-    margin-left:auto!important;margin-right:auto!important;
-    box-sizing:border-box!important
+    width:310px!important;min-width:310px!important;max-width:310px!important;
+    margin-left:auto!important;margin-right:auto!important;box-sizing:border-box!important
   }
 
-  /* V20.2 - título do analisador sempre em 8 bandas */
-  .grid-top>.panel:nth-child(3) .panel-title{font-size:0!important}
-  .grid-top>.panel:nth-child(3) .panel-title .pb-icon{font-size:12px!important}
-  .grid-top>.panel:nth-child(3) .panel-title::after{
-    content:'ANALISADOR - 8 BANDAS'!important;
-    font-size:12px!important;font-weight:700!important;letter-spacing:.2px!important;
-    color:#19ef5d!important
-  }
-
-  /* V20.3 - primeiro retângulo: 3,0 cm medidos -> 3,5 cm, aumento proporcional de 16,7% */
+  /* primeiro retângulo: analisador com altura realmente travada */
   .grid-top>.panel:nth-child(3),.analyzer{
+    width:100%!important;max-width:100%!important;
     min-height:239px!important;height:239px!important;max-height:239px!important
   }
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
-
-  /* V20.4 - título do último retângulo travado em 8 bandas */
-  .eqtitle{font-size:0!important;white-space:nowrap!important}
-  .eqtitle::after{
-    content:'⚙ EQUALIZADOR 8 BANDAS'!important;
-    font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;
-    color:inherit!important
+  .analyzer canvas{
+    width:calc(100% - 14px)!important;max-width:calc(100% - 14px)!important;
+    margin-left:7px!important;margin-right:7px!important
   }
+  .grid-top>.panel:nth-child(3) .panel-title{font-size:12px!important;white-space:nowrap!important}
+  .grid-top>.panel:nth-child(3) .panel-title::before,
+  .grid-top>.panel:nth-child(3) .panel-title::after{content:none!important;display:none!important}
+
+  /* um único título real do equalizador, sem pseudo-elemento duplicando */
+  .eqtitle{
+    font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;
+    white-space:nowrap!important
+  }
+  .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
 
   /* preservar mapa do Brasil contido no botão Nacional */
   #national{overflow:hidden!important;position:relative!important;padding:2px 1px!important;gap:0!important}
@@ -256,13 +253,13 @@ const SKIN = `
     display:block!important;position:static!important;transform:none!important;margin:0 auto!important
   }
 
-  /* preservar espaço entre menus e botões inferiores do Tocando */
+  /* preservar o respiro no bloco Tocando */
   .playbox{min-height:217px!important;height:217px!important;max-height:217px!important}
   .controls{
     position:relative!important;top:9px!important;
     margin-top:0!important;margin-bottom:0!important;gap:8px!important
   }
-  /* END_MOBILE_V17_FOUR_FIXES */
+  /* END_MOBILE_V21_STABLE */
   .footer{display:none!important}
 }
 `;
@@ -270,10 +267,7 @@ const SKIN = `
 function title(el, html){ if(el) el.innerHTML = html; }
 
 function isMobileRadio(el){
-  const own = Number(el?.getBoundingClientRect?.().width || el?.clientWidth || 0);
-  const parent = Number(el?.parentElement?.getBoundingClientRect?.().width || 0);
-  const viewportMobile = !!window.matchMedia?.('(max-width:640px)')?.matches;
-  return viewportMobile || (own > 0 && own <= 640) || (parent > 0 && parent <= 640);
+  return !!window.matchMedia?.('(max-width:640px)')?.matches;
 }
 
 function applySkin(el){
@@ -287,14 +281,23 @@ function applySkin(el){
     root.appendChild(style);
   }
   const mobile = isMobileRadio(el);
-  const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
+  const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v20' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v21' : '20260821-desktop-preservado-v2';
 
-  if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
-    el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
-    el.__pbMobileResizeObserver.observe(el);
+  const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
+  if(analyzerPanel){
+    if(mobile){
+      analyzerPanel.style.setProperty('min-height','239px','important');
+      analyzerPanel.style.setProperty('height','239px','important');
+      analyzerPanel.style.setProperty('max-height','239px','important');
+    }else{
+      analyzerPanel.style.removeProperty('min-height');
+      analyzerPanel.style.removeProperty('height');
+      analyzerPanel.style.removeProperty('max-height');
+    }
   }
+
 
   const top = root.querySelectorAll('.grid-top .panel-title');
   title(top[0], `<span class="pb-icon">${CUBE}</span>PROJETOS FEITOS DO ZERO`);
@@ -478,13 +481,15 @@ const applyAllSkins = ()=>{
   });
 };
 const scheduleSkinSweep = ()=>{
-  queueMicrotask(applyAllSkins);
   requestAnimationFrame(()=>applyAllSkins());
-  setTimeout(applyAllSkins, 80);
-  setTimeout(applyAllSkins, 350);
 };
 
 scheduleSkinSweep();
+
+if(window.__PELEGO_RADIO_SKIN_HEALER__){
+  clearInterval(window.__PELEGO_RADIO_SKIN_HEALER__);
+  window.__PELEGO_RADIO_SKIN_HEALER__=null;
+}
 
 if(!window.__PELEGO_RADIO_SKIN_OBSERVER__){
   window.__PELEGO_RADIO_SKIN_OBSERVER__ = new MutationObserver((mutations)=>{
@@ -504,5 +509,4 @@ if(!window.__PELEGO_RADIO_SKIN_OBSERVER__){
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState === 'visible') scheduleSkinSweep();
   });
-  window.__PELEGO_RADIO_SKIN_HEALER__ = setInterval(applyAllSkins,1200);
 }

@@ -52,7 +52,6 @@ jobs:
               raise SystemExit('bloco MOBILE_V12 de 8 bandas não encontrado')
           s=s.replace(old,new,1)
 
-          # trava final: largura real do elemento e shell em 315px no mobile
           marker="  .footer{display:none!important}\n}"
           final_css="""  :host{width:315px!important;max-width:315px!important;min-width:315px!important;margin-left:auto!important;margin-right:auto!important;display:block!important}
   .shell{width:315px!important;max-width:315px!important;min-width:315px!important;margin:0 auto!important}
@@ -81,3 +80,5 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m 'Corrigir rádio mobile para 6 bandas e layout compacto'
           git push origin HEAD:main
+
+# trigger final via merge 2026-08-21 12:55 BRT

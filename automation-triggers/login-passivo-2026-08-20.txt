@@ -1,0 +1,1 @@
+Disparo isolado para aplicar a correção de sessão/login passivo no checkout de Projetos Prontos em 2026-08-20.

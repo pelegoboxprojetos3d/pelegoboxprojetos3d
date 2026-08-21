@@ -1,9 +1,10 @@
-name: Radio mobile V16 Tocando gap
+name: Radio mobile V17 quatro ajustes
 on:
   push:
     branches: [main]
     paths:
       - 'scripts/fix-radio-mobile-v13-8x8-clean.cjs'
+      - 'scripts/fix-radio-mobile-v17-four.cjs'
       - '.github/workflows/radio-mobile-v11-8bands.yml'
 permissions:
   contents: write
@@ -18,14 +19,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Aplicar V16 espacamento Tocando mobile
+      - name: Preservar EQ 8 bandas e ajustes existentes
         run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
-      - name: Validar V16
+      - name: Aplicar quatro ajustes finais mobile
+        run: node scripts/fix-radio-mobile-v17-four.cjs
+      - name: Validar os quatro ajustes
         run: |
-          grep -q "mobile-final-v16" src/public/custom-elements/pelego-radio.js
-          grep -q "MOBILE_V16_TOCANDO_GAP" src/public/custom-elements/pelego-radio.js
-          grep -q "top:7px!important" src/public/custom-elements/pelego-radio.js
-          grep -q "MOBILE_V15_EQ_ABSOLUTE_8" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v17" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V17_FOUR_FIXES" src/public/custom-elements/pelego-radio.js
+          grep -q "ANALISADOR - 8 BANDAS" src/public/custom-elements/pelego-radio.js
+          grep -q "height:167px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "#national .scope-icon" src/public/custom-elements/pelego-radio.js
+          grep -q "top:9px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "left:87.5%" src/public/custom-elements/pelego-radio.js
           grep -q "count=mobile?8:24" src/public/custom-elements/pelego-radio.js
       - name: Commit e push
         run: |
@@ -36,5 +42,5 @@ jobs:
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add src/public/custom-elements/pelego-radio.js
-          git commit -m "Criar respiro entre menus e botoes do Tocando mobile"
+          git commit -m "Aplicar quatro ajustes finais da radio mobile"
           git push origin main

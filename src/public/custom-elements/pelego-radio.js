@@ -59,6 +59,16 @@ const SKIN = `
   .eqgrid .band{display:none!important;grid-template-rows:11px minmax(0,1fr) 12px!important;font-size:6px!important}.eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(15),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(24){display:grid!important}
   .band input[type=range]{width:72px!important;height:14px!important}.band input::-webkit-slider-thumb{width:13px!important;height:13px!important}.sliderwrap:before{height:84%!important}.eqgroups{display:none!important}.eqpanel:before{left:6px!important;top:42px!important;bottom:18px!important;font-size:6px!important}.db-scale{left:4px!important;top:43px!important;bottom:18px!important;font-size:6px!important}
   #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:6px!important}#shell .playbox .play-title-left{margin:0!important;justify-content:flex-start!important;display:inline-flex!important;align-items:center!important;gap:6px!important}#shell .playbox .play-meta{display:none!important}
+  /* MOBILE_V6_EQ_SCOPE_FIX */
+  .eqpanel{padding:0 6px 28px!important;grid-template-rows:20px minmax(0,1fr)!important;position:relative!important}
+  .eqhead{height:20px!important;min-height:20px!important;padding:0 2px!important;align-items:center!important;justify-content:flex-start!important}
+  .eqgrid{min-width:0!important;width:calc(100% - 42px)!important;margin-left:42px!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:0!important;padding:0!important;overflow:hidden!important;align-items:stretch!important;justify-content:stretch!important}
+  .eqgrid .band{justify-items:center!important;grid-template-rows:9px minmax(0,1fr) 12px!important}
+  .db-scale{left:0!important;width:42px!important;top:29px!important;bottom:40px!important;align-items:center!important;font-size:6px!important}
+  .preset{position:absolute!important;right:6px!important;bottom:4px!important;margin:0!important;gap:4px!important;font-size:7px!important;z-index:5!important}
+  .preset select{width:96px!important;min-width:96px!important;height:21px!important}
+  #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:6px!important}
+  #shell .playbox .play-title-left{display:inline-flex!important;align-items:center!important;justify-content:flex-start!important;gap:6px!important;margin:0!important}
   .footer{display:none!important}
 }
 `;
@@ -85,7 +95,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v5' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v8' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
@@ -98,6 +108,10 @@ function applySkin(el){
   title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - ${mobile ? '6' : '24'} BANDAS`);
   title(root.querySelector('.filters .panel-title'), `<span class="pb-icon">${HEADPHONES}</span>ESCOLHA O QUE QUER OUVIR`);
   const playTitle=root.querySelector('.playbox .panel-title'); title(playTitle, mobile ? `<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span>` : `<span class="pb-icon" style="font-size:18px">♫</span>TOCANDO`);
+  if(mobile){
+    const pbMobileTitleV6=root.querySelector('.playbox .panel-title');
+    if(pbMobileTitleV6) pbMobileTitleV6.innerHTML='<span class="play-title-left"><span class="pb-icon" style="font-size:18px">♫</span><span>TOCANDO</span></span>';
+  }
   const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '6' : '24'} BANDAS`;
   const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];
   root.querySelectorAll('.genre').forEach((b,i)=>{const original=b.dataset.key||b.textContent.trim();if(mobile&&i<8){b.dataset.filter=mobileGenres[i];b.textContent=mobileGenres[i];}else{b.dataset.filter=original;b.textContent=original;}});

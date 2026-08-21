@@ -543,6 +543,43 @@ const MOBILE_CLEAN_SKIN = `
 .eqgroups span{display:block!important;width:100%!important;border-top:1px solid #13d94f!important;text-align:center!important;padding-top:3px!important}
 .eqpanel:before,.eqpanel:after{display:none!important;content:none!important}
 .toast{z-index:50!important}
+
+
+/* MOBILE_V34_TITLE_LOCK
+   Títulos visuais fixos em 8 bandas. O texto real fica oculto para impedir
+   que qualquer rotina antiga mostre 6 bandas sem tocar no layout. */
+.grid-top>.panel:nth-child(3) .panel-title{
+  font-size:0!important;
+}
+.grid-top>.panel:nth-child(3) .panel-title::after{
+  content:'ANALISADOR - 8 BANDAS'!important;
+  display:inline!important;
+  visibility:visible!important;
+  opacity:1!important;
+  font-size:11px!important;
+  line-height:1!important;
+  color:#19ef5d!important;
+  font-weight:700!important;
+  letter-spacing:.15px!important;
+  white-space:nowrap!important;
+}
+.eqpanel .eqtitle{
+  font-size:0!important;
+}
+.eqpanel .eqtitle::after{
+  content:'⚙ EQUALIZADOR 8 BANDAS'!important;
+  display:inline!important;
+  visibility:visible!important;
+  opacity:1!important;
+  font-size:8.6px!important;
+  line-height:1!important;
+  color:#19ef5d!important;
+  font-weight:700!important;
+  letter-spacing:0!important;
+  white-space:nowrap!important;
+}
+/* END_MOBILE_V34_TITLE_LOCK */
+
 `;
 /* END_MOBILE_V33_CANONICAL_FLOW */
 

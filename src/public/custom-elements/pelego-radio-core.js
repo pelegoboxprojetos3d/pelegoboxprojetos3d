@@ -244,3 +244,5 @@ class PelegoRadio extends HTMLElement {
 }
 
 if(!customElements.get('pelego-radio'))customElements.define('pelego-radio',PelegoRadio);
+
+/* PB_CORE_V34_TITLE_8_BANDAS: força novo deploy do core mobile com títulos 8 BANDAS. */

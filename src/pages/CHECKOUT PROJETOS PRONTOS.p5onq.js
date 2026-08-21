@@ -2192,46 +2192,11 @@ function agendarPopupWhatsapp(
     );
 }
 
-function agendarRetornoLoginSocial(
-  milliseconds = POPUP_REOPEN_DELAY
-) {
+function agendarRetornoLoginSocial() {
+  // PB_LOGIN_PASSIVO_V1_APLICADO
+  // Nunca abrir/reabrir o login por temporizador. A autenticação só pode
+  // começar a partir de uma ação explícita do visitante.
   cancelarPopupAgendado();
-
-  if (
-    !paginaLoginSocialAtiva() ||
-    identificado
-  ) {
-    return;
-  }
-
-  popupAgendado = setTimeout(
-    () => {
-      popupAgendado = null;
-
-      if (
-        !paginaLoginSocialAtiva() ||
-        identificado ||
-        popupAberto
-      ) {
-        return;
-      }
-
-      /*
-        O cancelamento pode ocorrer antes de a consulta do projeto terminar.
-        Os 3 segundos contam a partir do fechamento. Se o projeto ainda não
-        estiver pronto, tentamos novamente em 250 ms, sem mandar o visitante
-        para outra página.
-      */
-      if (!projeto) {
-        agendarRetornoLoginSocial(250);
-        return;
-      }
-
-      abrirPopupWhatsapp()
-        .catch(console.error);
-    },
-    milliseconds
-  );
 }
 
 function perfilMembroFrontend(membro = {}) {
@@ -3385,15 +3350,24 @@ function iniciarDepoisDeRender() {
         membro = await currentMember.getMember();
       } catch (_) {}
 
+      if (!membro?._id) {
+        try {
+          if (authentication.loggedIn()) {
+            membro = await aguardarMembroLogado(10000);
+          }
+        } catch (_) {}
+      }
+
       if (membro?._id) {
         cancelarPopupAgendado();
-        await identificarMembroSocial();
+        await identificarMembroSocial(membro);
         return;
       }
 
       identificado = false;
       bloquearSemIdentificacao();
 
+      // PB_LOGIN_PASSIVO_V1: não abrir login sozinho ao carregar a página.
       agendarRetornoLoginSocial(
         MOBILE_LOGIN_AFTER_RENDER_DELAY
       );

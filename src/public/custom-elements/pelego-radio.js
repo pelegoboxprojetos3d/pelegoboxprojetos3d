@@ -64,6 +64,13 @@ const SKIN = `
 
 function title(el, html){ if(el) el.innerHTML = html; }
 
+function isMobileRadio(el){
+  const own = Number(el?.getBoundingClientRect?.().width || el?.clientWidth || 0);
+  const parent = Number(el?.parentElement?.getBoundingClientRect?.().width || 0);
+  const viewportMobile = !!window.matchMedia?.('(max-width:640px)')?.matches;
+  return viewportMobile || (own > 0 && own <= 640) || (parent > 0 && parent <= 640);
+}
+
 function applySkin(el){
   const root = el?.shadowRoot;
   if(!root) return;
@@ -73,11 +80,17 @@ function applySkin(el){
     style.id = 'pb-v548-reference-skin';
     root.appendChild(style);
   }
-  if(style.textContent !== SKIN) style.textContent = SKIN;
-  style.dataset.pelegoSkinRev = '20260820-mobile-compact';
+  const mobile = isMobileRadio(el);
+  const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
+  if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-container-v2' : '20260821-desktop-preservado-v2';
+
+  if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
+    el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
+    el.__pbMobileResizeObserver.observe(el);
+  }
 
   const top = root.querySelectorAll('.grid-top .panel-title');
-  const mobile = window.matchMedia('(max-width:640px)').matches;
   title(top[0], `<span class="pb-icon">${CUBE}</span>PROJETOS FEITOS DO ZERO`);
   title(top[1], `<span class="pb-icon">${CUBE}</span>PROJETOS PRONTOS`);
   title(top[2], `<span class="pb-icon">${BARS}</span>ANALISADOR - ${mobile ? '6' : '24'} BANDAS`);
@@ -106,7 +119,7 @@ function patchAnalyzer(Klass){
 
   p.drawAnalyzerGrid = function(c,w,h){
     c.fillStyle='#020707'; c.fillRect(0,0,w,h);
-    const mobile=window.matchMedia('(max-width:640px)').matches;
+    const mobile=isMobileRadio(this);
     const labels=mobile?['40','100','250','1K','4K','16K']:['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
     const count=labels.length,left=mobile?27:34,right=mobile?6:9,top=mobile?8:14,bottom=mobile?18:29;
     c.strokeStyle='rgba(69,103,90,.50)'; c.lineWidth=1;
@@ -137,7 +150,7 @@ function patchAnalyzer(Klass){
   };
 
   p.drawIdleAnalyzer = function(){
-    const count=window.matchMedia('(max-width:640px)').matches?6:24;
+    const count=isMobileRadio(this)?6:24;
     const vals=Array.from({length:count},(_,i)=>.25+.45*(.55+.45*Math.sin(i*.55+1.2)));
     this.__pbDrawSegments(vals);
   };
@@ -145,7 +158,7 @@ function patchAnalyzer(Klass){
   p.drawAnalyzer = function(){
     cancelAnimationFrame(this.visualFrame);
     const loop=()=>{
-      const mobile=window.matchMedia('(max-width:640px)').matches;
+      const mobile=isMobileRadio(this);
       const freqs=mobile?[40,100,250,1000,4000,16000]:[40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];
       const values=Array(freqs.length).fill(.05);
       if(this.analyser && this.audioCtx){

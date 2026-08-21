@@ -119,3 +119,5 @@ jobs:
           code=$(curl -sS -o /tmp/wix.json -w '%{http_code}' -X POST 'https://www.wixapis.com/site-publisher/v1/site/publish' -H "Authorization: $WIX_API_KEY" -H "wix-site-id: $WIX_SITE_ID" -H 'Content-Type: application/json' --data '{}')
           cat /tmp/wix.json; echo
           test "$code" -ge 200 -a "$code" -lt 300
+
+# trigger via PR merge 2026-08-20

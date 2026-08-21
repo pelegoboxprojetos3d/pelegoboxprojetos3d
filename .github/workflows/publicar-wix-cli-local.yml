@@ -11,6 +11,7 @@ on:
       - "src/pages/Rádio Pelego Box.ypxc8.js"
       - "src/public/radioPelegoPersistente.js"
       - "scripts/canonicalizar-radio-mobile-v33-flow-2026-08-21.cjs"
+      - "scripts/fixar-titulos-8-v34-2026-08-21.cjs"
       - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
@@ -44,18 +45,29 @@ jobs:
           set -euo pipefail
           node scripts/canonicalizar-radio-mobile-v33-flow-2026-08-21.cjs
 
+      - name: Travar títulos mobile em 8 bandas V34
+        run: |
+          set -euo pipefail
+          node scripts/fixar-titulos-8-v34-2026-08-21.cjs
+
       - name: Validar layout mobile antes de publicar
         run: |
           set -euo pipefail
           grep -q "MOBILE_V33_CANONICAL_FLOW" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V34_TITLE_LOCK" src/public/custom-elements/pelego-radio.js
+          grep -q "PB_CORE_V34_TITLE_8_BANDAS" src/public/custom-elements/pelego-radio-core.js
           grep -q "display:flex!important;flex-direction:column!important" src/public/custom-elements/pelego-radio.js
           grep -q ".grid-top,.grid-middle{display:contents!important}" src/public/custom-elements/pelego-radio.js
           grep -q "height:auto!important;min-height:700px!important" src/public/custom-elements/pelego-radio.js
-          grep -q "ANALISADOR - 8 BANDAS" src/public/custom-elements/pelego-radio.js
-          grep -q "EQUALIZADOR 8 BANDAS" src/public/custom-elements/pelego-radio.js
+          grep -q "content:'ANALISADOR - 8 BANDAS'!important" src/public/custom-elements/pelego-radio.js
+          grep -q "content:'⚙ EQUALIZADOR 8 BANDAS'!important" src/public/custom-elements/pelego-radio.js
           grep -q "grid-template-rows:12px 29px 25px 52px 40px!important" src/public/custom-elements/pelego-radio.js
           grep -q "grid-template-columns:repeat(3,minmax(0,1fr))!important" src/public/custom-elements/pelego-radio.js
           grep -q "requestAnimationFrame(()=>requestAnimationFrame" src/public/custom-elements/pelego-radio.js
+          ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio.js
+          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio.js
+          ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
+          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
 
       - name: Autenticar Wix CLI
         env:
@@ -77,8 +89,8 @@ jobs:
           printf 'STATUS=SUCESSO\nRUN_ID=%s\nSOURCE_SHA=%s\nPUBLISHED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-success.txt
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
-          git add .deploy/wix-cli-radio-last-success.txt src/public/custom-elements/pelego-radio.js
-          git commit -m "Consolidar Rádio mobile V33 publicada [skip ci]" || exit 0
+          git add .deploy/wix-cli-radio-last-success.txt src/public/custom-elements/pelego-radio.js src/public/custom-elements/pelego-radio-core.js
+          git commit -m "Consolidar Rádio mobile V34 publicada [skip ci]" || exit 0
           git push origin HEAD:main
 
       - name: Registrar falha do Wix CLI

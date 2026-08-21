@@ -1,0 +1,1 @@
+V3.3 correções funcionais: seleção tracejada, ponteiros reais/efeitos, borracha parcial e tray icon.

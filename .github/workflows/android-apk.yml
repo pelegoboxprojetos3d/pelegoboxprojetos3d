@@ -1,0 +1,60 @@
+name: Build Android APK
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Create private-layout placeholder
+        run: |
+          mkdir -p app/src/main/res/drawable-nodpi
+          printf '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EF//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EF//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EF//2Q==' | base64 --decode > app/src/main/res/drawable-nodpi/layout_aprovado.jpg
+
+      - name: Build signed installable APK
+        run: gradle --no-daemon assembleRelease
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk PELEGO_BOX_RADIO_LAYOUT_APROVADO_ANDROID.apk
+
+      - name: Collect local signing tools
+        run: |
+          mkdir signing-tools
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signing-tools/apksigner.jar
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signing-tools/zipalign
+          cp "$(ldd "$ANDROID_HOME/build-tools/35.0.0/zipalign" | awk '/libc\+\+\.so/ {print $3; exit}')" signing-tools/libc++.so
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PELEGO_BOX_RADIO_ANDROID_APK
+          path: |
+            PELEGO_BOX_RADIO_LAYOUT_APROVADO_ANDROID.apk
+            signing-tools/apksigner.jar
+            signing-tools/zipalign
+            signing-tools/libc++.so
+          if-no-files-found: error

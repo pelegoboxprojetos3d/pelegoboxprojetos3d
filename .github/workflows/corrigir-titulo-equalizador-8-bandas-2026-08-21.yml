@@ -1,0 +1,95 @@
+name: Corrigir título do equalizador para 8 bandas
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/corrigir-titulo-equalizador-8-bandas-2026-08-21.yml
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fixar título mobile em 8 bandas
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('src/public/custom-elements/pelego-radio-core.js'),
+              Path('src/public/custom-elements/pelego-radio.js'),
+          ]
+
+          marker = 'PB_EQ_TITLE_8_BANDAS_FINAL_20260821'
+
+          for path in files:
+              s = path.read_text(encoding='utf-8')
+              original = s
+
+              s = s.replace("EQUALIZADOR ${mobile ? '6' : '24'} BANDAS", "EQUALIZADOR ${mobile ? '8' : '24'} BANDAS")
+              s = s.replace("EQUALIZADOR 6 BANDAS", "EQUALIZADOR 8 BANDAS")
+
+              if path.name == 'pelego-radio.js':
+                  needle = "const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`;"
+                  if needle in s and marker not in s:
+                      s = s.replace(needle, needle + f" /* {marker} */", 1)
+
+              if path.name == 'pelego-radio-core.js':
+                  needle = "eqTitle.textContent='⚙ EQUALIZADOR 8 BANDAS';"
+                  if needle in s and marker not in s:
+                      s = s.replace(needle, needle + f"/* {marker} */", 1)
+
+              if s != original:
+                  path.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Validar título
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "EQUALIZADOR \${mobile ? '8' : '24'} BANDAS" src/public/custom-elements/pelego-radio.js
+          grep -q "eqTitle.textContent='⚙ EQUALIZADOR 8 BANDAS'" src/public/custom-elements/pelego-radio-core.js
+          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
+          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio.js
+
+      - name: Gravar alteração no main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'PELEGO BOX Automação'
+          git config user.email 'pelegobox82@gmail.com'
+          git add src/public/custom-elements/pelego-radio-core.js src/public/custom-elements/pelego-radio.js
+          if git diff --cached --quiet; then
+            echo 'Título já estava em 8 bandas; nenhuma alteração adicional necessária.'
+          else
+            git commit -m 'Fixar título do equalizador mobile em 8 bandas'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

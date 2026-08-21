@@ -1,4 +1,4 @@
-name: Radio mobile V13 8x8 clean
+name: Radio mobile V14 EQ 8 colunas
 on:
   push:
     branches: [main]
@@ -18,15 +18,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Aplicar V13 mobile 8x8
+      - name: Aplicar V14 equalizador mobile
         run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
-      - name: Validar 8x8
+      - name: Validar V14
         run: |
-          grep -q "mobile-final-v13" src/public/custom-elements/pelego-radio.js
-          grep -q "MOBILE_V13_8X8_CLEAN" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v14" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V14_EQ_FLEX_8" src/public/custom-elements/pelego-radio.js
           grep -q "count=mobile?8:24" src/public/custom-elements/pelego-radio.js
           grep -q "40','100','250','630','1.6K','4K','10K','16K" src/public/custom-elements/pelego-radio.js
-          grep -q "grid-column:8" src/public/custom-elements/pelego-radio.js
+          grep -q "flex:0 0 12.5%" src/public/custom-elements/pelego-radio.js
       - name: Commit e push
         run: |
           if git diff --quiet -- src/public/custom-elements/pelego-radio.js; then
@@ -36,5 +36,5 @@ jobs:
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add src/public/custom-elements/pelego-radio.js
-          git commit -m "Corrigir rádio mobile para 8x8 real e alinhado"
+          git commit -m "Alinhar equalizador mobile em 8 colunas iguais"
           git push origin main

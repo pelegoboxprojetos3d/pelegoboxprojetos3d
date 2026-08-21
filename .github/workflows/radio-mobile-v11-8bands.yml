@@ -1,4 +1,4 @@
-name: Radio mobile V20 analisador 3,5cm
+name: Radio mobile V23 corrigir sobreposicao do analisador
 on:
   push:
     branches: [main]
@@ -20,14 +20,16 @@ jobs:
           node-version: '20'
       - name: Preservar EQ 8 bandas e ajustes existentes
         run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
-      - name: Aplicar V20 mobile
+      - name: Aplicar V23 mobile sem sobreposicao
         run: node scripts/fix-radio-mobile-v17-four.cjs
-      - name: Validar V20 mobile
+      - name: Validar V23 mobile
         run: |
-          grep -q "mobile-final-v20" src/public/custom-elements/pelego-radio.js
-          grep -q "MOBILE_V17_FOUR_FIXES" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v23" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V23_ANALYZER_CLIP_FIX" src/public/custom-elements/pelego-radio.js
           grep -q "ANALISADOR - 8 BANDAS" src/public/custom-elements/pelego-radio.js
           grep -q "height:239px!important" src/public/custom-elements/pelego-radio.js
+          grep -q "height:auto!important" src/public/custom-elements/pelego-radio.js
+          grep -q "overflow:hidden!important" src/public/custom-elements/pelego-radio.js
           grep -q "width:310px!important" src/public/custom-elements/pelego-radio.js
           grep -q "EQUALIZADOR 8 BANDAS" src/public/custom-elements/pelego-radio.js
           grep -q "#national .scope-icon" src/public/custom-elements/pelego-radio.js
@@ -43,5 +45,5 @@ jobs:
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add src/public/custom-elements/pelego-radio.js
-          git commit -m "V20 - aumentar analisador mobile de 3cm para 3,5cm"
+          git commit -m "V23 - corrigir sobreposicao do analisador mobile"
           git push origin main

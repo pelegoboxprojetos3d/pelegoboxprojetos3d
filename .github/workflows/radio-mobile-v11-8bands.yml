@@ -1,10 +1,10 @@
-name: Radio mobile V20 analisador 3,5cm
+name: Radio mobile V21 stable build
 on:
   push:
-    branches: [main]
+    branches: [v21-mobile-stable-build]
     paths:
-      - 'scripts/fix-radio-mobile-v13-8x8-clean.cjs'
       - 'scripts/fix-radio-mobile-v17-four.cjs'
+      - '.github/workflows/radio-mobile-v11-8bands.yml'
 permissions:
   contents: write
 jobs:
@@ -13,28 +13,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: v21-mobile-stable-build
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Preservar EQ 8 bandas e ajustes existentes
-        run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
-      - name: Aplicar V20 mobile
+      - name: Aplicar V21 mobile estável
         run: node scripts/fix-radio-mobile-v17-four.cjs
-      - name: Validar V20 mobile
+      - name: Validar V21 mobile
         run: |
-          grep -q "mobile-final-v20" src/public/custom-elements/pelego-radio.js
-          grep -q "MOBILE_V17_FOUR_FIXES" src/public/custom-elements/pelego-radio.js
-          grep -q "ANALISADOR - 8 BANDAS" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v21" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V21_STABLE" src/public/custom-elements/pelego-radio.js
           grep -q "height:239px!important" src/public/custom-elements/pelego-radio.js
           grep -q "width:310px!important" src/public/custom-elements/pelego-radio.js
-          grep -q "EQUALIZADOR 8 BANDAS" src/public/custom-elements/pelego-radio.js
-          grep -q "#national .scope-icon" src/public/custom-elements/pelego-radio.js
-          grep -q "top:9px!important" src/public/custom-elements/pelego-radio.js
-          grep -q "left:87.5%" src/public/custom-elements/pelego-radio.js
-          grep -q "count=mobile?8:24" src/public/custom-elements/pelego-radio.js
-      - name: Commit e push
+          grep -q "const skinForThisView = SKIN;" src/public/custom-elements/pelego-radio.js
+          grep -q "return !!window.matchMedia" src/public/custom-elements/pelego-radio.js
+          grep -q "analyzerPanel.style.setProperty('height','239px','important')" src/public/custom-elements/pelego-radio.js
+          grep -q "eqtitle::before,.eqtitle::after" src/public/custom-elements/pelego-radio.js
+          if grep -q "setInterval(applyAllSkins,1200)" src/public/custom-elements/pelego-radio.js; then
+            echo "Healer cíclico antigo ainda existe"
+            exit 1
+          fi
+          if grep -q "content:'⚙ EQUALIZADOR 8 BANDAS'" src/public/custom-elements/pelego-radio.js; then
+            echo "Título duplicado via pseudo-elemento ainda existe"
+            exit 1
+          fi
+      - name: Commit de build V21
         run: |
           if git diff --quiet -- src/public/custom-elements/pelego-radio.js; then
             echo "Sem alterações"
@@ -43,5 +47,5 @@ jobs:
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add src/public/custom-elements/pelego-radio.js
-          git commit -m "V20 - aumentar analisador mobile de 3cm para 3,5cm"
-          git push origin main
+          git commit -m "V21 - estabilizar analisador e corrigir titulo do equalizador mobile"
+          git push origin HEAD:v21-mobile-stable-build

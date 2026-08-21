@@ -427,6 +427,16 @@ const SKIN = `
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
   .analyzer canvas{height:auto!important;min-height:0!important;align-self:stretch!important}
   /* END_MOBILE_V26_ANALYZER_160_FIX */
+
+  /* MOBILE_V27_FORCE_8_AND_SCOPE_GAP */
+  #international,#national{
+    gap:6px!important;padding-top:5px!important;padding-bottom:5px!important
+  }
+  #international .scope-icon,#national .scope-icon{margin-bottom:3px!important}
+  #international>span:last-child,#national>span:last-child{
+    line-height:1.08!important;letter-spacing:.15px!important
+  }
+  /* END_MOBILE_V27_FORCE_8_AND_SCOPE_GAP */
   .footer{display:none!important}
 }
 `;
@@ -450,7 +460,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v26' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v27' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){
@@ -482,6 +492,21 @@ function applySkin(el){
     }
   }
   const eqTitle=root.querySelector('.eqpanel .eqtitle'); if(eqTitle) eqTitle.textContent=`⚙ EQUALIZADOR ${mobile ? '8' : '24'} BANDAS`; /* PB_EQ_TITLE_8_BANDAS_FINAL_20260821 */
+
+  // V27: no mobile, os dois títulos ficam literalmente em 8 bandas.
+  // Reaplica após o carregamento para neutralizar qualquer rotina antiga que tente restaurar 6.
+  if(mobile){
+    const forceEightBands=()=>{
+      const analyzerTitle=root.querySelector('.grid-top>.panel:nth-child(3) .panel-title');
+      if(analyzerTitle) analyzerTitle.innerHTML=`<span class="pb-icon">${BARS}</span>ANALISADOR - 8 BANDAS`;
+      const equalizerTitle=root.querySelector('.eqpanel .eqtitle');
+      if(equalizerTitle) equalizerTitle.textContent='⚙ EQUALIZADOR 8 BANDAS';
+    };
+    forceEightBands();
+    requestAnimationFrame(forceEightBands);
+    setTimeout(forceEightBands,120);
+    setTimeout(forceEightBands,600);
+  }
   const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];
   root.querySelectorAll('.genre').forEach((b,i)=>{const original=b.dataset.key||b.textContent.trim();if(mobile&&i<8){b.dataset.filter=mobileGenres[i];b.textContent=mobileGenres[i];}else{b.dataset.filter=original;b.textContent=original;}});
   try{el.refreshGenreButtons?.();}catch(_){}

@@ -45,7 +45,7 @@ const SKIN = `
   .topbar{min-height:42px!important;padding:0 4px!important}.brandrow{gap:6px!important}.logo-bars{width:22px!important;height:24px!important}.title{font-size:14px!important;white-space:nowrap!important}.subtitle{font-size:5.5px!important;white-space:nowrap!important;margin-top:2px!important}.win{display:none!important}
   .grid-top{display:block!important;min-height:0!important;height:auto!important;overflow:visible!important}
   .grid-top>.panel:nth-child(1),.grid-top>.panel:nth-child(2){display:none!important}
-  .grid-top>.panel:nth-child(3),.analyzer{min-height:129px!important;height:129px!important;max-height:129px!important}
+  .grid-top>.panel:nth-child(3),.analyzer{min-height:148px!important;height:148px!important;max-height:148px!important}
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}.analyzer canvas{width:calc(100% - 14px)!important;margin:0 7px!important}.bands-label{font-size:6px!important}
   .grid-middle{grid-template-columns:1fr!important;gap:7px!important;overflow:visible!important}
   .filters{min-height:129px!important;height:129px!important;max-height:129px!important;padding-bottom:0!important;overflow:hidden!important}
@@ -55,10 +55,10 @@ const SKIN = `
   .genre{display:none!important;height:auto!important;min-height:0!important;font-size:7px!important;padding:0 2px!important}.genre:nth-child(-n+8){display:block!important}
   .playbox{min-height:235px!important;margin-top:0!important;height:auto!important}.playbody{padding:0 8px 8px!important}.randomrow{gap:5px!important}.controls{gap:5px!important}
   .eqpanel{min-height:160px!important;height:160px!important;max-height:160px!important;overflow:hidden!important;padding:0 6px 5px!important;grid-template-rows:27px minmax(0,1fr)!important}.eqhead{padding:0 2px!important;align-items:center!important}.eqtitle{font-size:9px!important;white-space:nowrap!important}.preset{margin-left:auto!important;gap:4px!important;font-size:7px!important}.preset select{width:96px!important;min-width:96px!important;height:21px!important}
-  .eqgrid{min-width:0!important;width:100%!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:3px!important;padding:2px 4px 0 25px!important;overflow:hidden!important;align-items:stretch!important}
+  .eqgrid{min-width:0!important;width:100%!important;grid-template-columns:repeat(6,30px)!important;gap:9px!important;padding:2px 0 0 25px!important;overflow:hidden!important;align-items:stretch!important;justify-content:center!important}
   .eqgrid .band{display:none!important;grid-template-rows:11px minmax(0,1fr) 12px!important;font-size:6px!important}.eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(15),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(24){display:grid!important}
   .band input[type=range]{width:72px!important;height:14px!important}.band input::-webkit-slider-thumb{width:13px!important;height:13px!important}.sliderwrap:before{height:84%!important}.eqgroups{display:none!important}.eqpanel:before{left:6px!important;top:42px!important;bottom:18px!important;font-size:6px!important}.db-scale{left:4px!important;top:43px!important;bottom:18px!important;font-size:6px!important}
-  .playbox .panel-title{justify-content:flex-start!important;text-align:left!important}.playbox .play-title-left{margin:0!important;justify-content:flex-start!important}.playbox .play-meta{display:none!important}
+  #shell .playbox .panel-title{justify-content:flex-start!important;text-align:left!important;gap:6px!important}#shell .playbox .play-title-left{margin:0!important;justify-content:flex-start!important;display:inline-flex!important;align-items:center!important;gap:6px!important}#shell .playbox .play-meta{display:none!important}
   .footer{display:none!important}
 }
 `;
@@ -75,6 +75,7 @@ function isMobileRadio(el){
 function applySkin(el){
   const root = el?.shadowRoot;
   if(!root) return;
+  bindSingleEngine(el);
   let style = root.getElementById('pb-v548-reference-skin');
   if(!style){
     style = document.createElement('style');
@@ -117,6 +118,56 @@ function applySkin(el){
   requestAnimationFrame(()=>{ try{ el.resizeCanvas?.(); el.drawIdleAnalyzer?.(); }catch(_){} });
 }
 
+function bindSingleEngine(el){
+  const engine=window.PelegoRadioPersistent;
+  if(!el || !engine?.audio) return false;
+  try{
+    if(el.localAudio && el.localAudio!==engine.audio){
+      if(!el.localAudio.paused) el.localAudio.pause();
+      if(el.localAudio.getAttribute?.('src')){ el.localAudio.removeAttribute('src'); el.localAudio.load?.(); }
+    }
+  }catch(_){}
+  const changed=el.persistentRadio!==engine || el.audio!==engine.audio;
+  el.persistentRadio=engine;
+  el.audio=engine.audio;
+  try{
+    const snap=engine.snapshot?.();
+    if(engine.currentStation) el.currentStation={...engine.currentStation};
+    if(snap?.audioCtx) el.audioCtx=snap.audioCtx;
+    if(snap?.analyser) el.analyser=snap.analyser;
+    el.filters=snap?.filters||el.filters||[];
+    if(snap?.gainNode) el.gainNode=snap.gainNode;
+    if(snap?.playing && !snap?.analyser && typeof engine.ensureGraph==='function' && !el.__pbEnsuringGraph){
+      el.__pbEnsuringGraph=true;
+      Promise.resolve(engine.ensureGraph()).then(()=>{el.__pbEnsuringGraph=false;bindSingleEngine(el);try{el.drawAnalyzer?.();}catch(_){}}).catch(()=>{el.__pbEnsuringGraph=false;});
+    }
+    if(snap?.playing){
+      el.$?.('play') && (el.$('play').textContent='❚❚ PAUSAR');
+      if(el.status) el.status.textContent='Tocando: '+(engine.currentStation?.name||'PELEGO RADIO');
+      if(el.analyser) el.drawAnalyzer?.();
+    }else if(el.$?.('play')) el.$('play').textContent='▶ TOCAR';
+    el.updatePlayMeta?.();
+  }catch(_){}
+  if(!el.__pbEngineStateHandler){
+    el.__pbEngineStateHandler=()=>{if(el.isConnected)bindSingleEngine(el);};
+    window.addEventListener('pelego-radio-state',el.__pbEngineStateHandler);
+  }
+  if(changed && !el.__pbInitialEngineSync){
+    el.__pbInitialEngineSync=true;
+    queueMicrotask(()=>{try{el.syncPersistentState?.();}catch(_){}});
+  }
+  return true;
+}
+
+async function waitSingleEngine(el,timeout=2500){
+  const end=Date.now()+timeout;
+  do{
+    if(bindSingleEngine(el)) return true;
+    await new Promise(r=>setTimeout(r,50));
+  }while(Date.now()<end);
+  return false;
+}
+
 function patchAnalyzer(Klass){
   if(!Klass || Klass.prototype.__pbReferencePatched) return;
   const p = Klass.prototype;
@@ -141,7 +192,7 @@ function patchAnalyzer(Klass){
     if(!this.ctx2d || !this.canvas) return;
     const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;
     if(w<2||h<2) return;
-    const mobile=window.matchMedia('(max-width:640px)').matches,count=mobile?6:24;
+    const mobile=isMobileRadio(this),count=mobile?6:24;
     this.drawAnalyzerGrid(c,w,h);
     const left=mobile?27:34,right=mobile?6:9,top=mobile?8:14,bottom=mobile?19:30,usableW=w-left-right,usableH=h-top-bottom,bw=usableW/count,segs=mobile?8:12,gap=mobile?1:2,segH=Math.max(1,(usableH-(segs-1)*gap)/segs);
     for(let i=0;i<count;i++){
@@ -182,9 +233,25 @@ function patchAnalyzer(Klass){
     loop();
   };
 
+  const originalPlay = p.play;
+  p.play = async function(...args){
+    if(!(await waitSingleEngine(this))){ if(this.status)this.status.textContent='Motor da Rádio carregando. Tente novamente.'; return false; }
+    return originalPlay?.apply(this,args);
+  };
+  const originalNext = p.nextStation;
+  p.nextStation = async function(...args){
+    if(!(await waitSingleEngine(this))){ if(this.status)this.status.textContent='Motor da Rádio carregando. Tente novamente.'; return false; }
+    return originalNext?.apply(this,args);
+  };
+  const originalStop = p.stop;
+  p.stop = function(...args){ bindSingleEngine(this); return originalStop?.apply(this,args); };
+  const originalSync = p.syncPersistentState;
+  p.syncPersistentState = function(...args){ bindSingleEngine(this); if(!this.persistentRadio)return; return originalSync?.apply(this,args); };
+
   const originalConnected = p.connectedCallback;
   p.connectedCallback = function(){
     originalConnected?.call(this);
+    bindSingleEngine(this);
     applySkin(this);
   };
 }

@@ -414,6 +414,19 @@ const SKIN = `
     content:none!important;display:none!important
   }
   /* END_MOBILE_V25_REAL_TITLES_FIX */
+
+  /* MOBILE_V26_ANALYZER_160_FIX */
+  .grid-top{
+    min-height:160px!important;height:160px!important;max-height:160px!important;
+    overflow:hidden!important;margin:0!important
+  }
+  .grid-top>.panel:nth-child(3),.analyzer{
+    min-height:160px!important;height:160px!important;max-height:160px!important;
+    overflow:hidden!important;margin:0!important
+  }
+  .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
+  .analyzer canvas{height:auto!important;min-height:0!important;align-self:stretch!important}
+  /* END_MOBILE_V26_ANALYZER_160_FIX */
   .footer{display:none!important}
 }
 `;
@@ -437,14 +450,14 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v25' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v26' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){
     if(mobile){
-      analyzerPanel.style.setProperty('min-height','270px','important');
-      analyzerPanel.style.setProperty('height','270px','important');
-      analyzerPanel.style.setProperty('max-height','270px','important');
+      analyzerPanel.style.setProperty('min-height','160px','important');
+      analyzerPanel.style.setProperty('height','160px','important');
+      analyzerPanel.style.setProperty('max-height','160px','important');
     }else{
       analyzerPanel.style.removeProperty('min-height');
       analyzerPanel.style.removeProperty('height');

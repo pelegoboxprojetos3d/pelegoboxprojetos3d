@@ -1,0 +1,46 @@
+name: Radio mobile final v8
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix-radio-mobile-eq-spacing-title-v3.cjs'
+      - '.github/workflows/radio-mobile-final-v8.yml'
+permissions:
+  contents: write
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar pacote final
+        run: node scripts/fix-radio-mobile-eq-spacing-title-v3.cjs
+      - name: Validar ajustes
+        run: |
+          grep -q "mobile-final-v8" src/public/custom-elements/pelego-radio.js
+          grep -q "applySelectionForNext" src/public/custom-elements/pelego-radio-core.js
+          grep -q "pbScopeGuardV6" src/public/custom-elements/pelego-radio-core.js
+          grep -q "pbAdFreeNationalV7" src/public/custom-elements/pelego-radio-core.js
+      - name: Commitar código final
+        run: |
+          git config user.name "pelegoboxprojetos3d"
+          git config user.email "actions@github.com"
+          git add src/public/custom-elements/pelego-radio.js src/public/custom-elements/pelego-radio-core.js
+          if ! git diff --cached --quiet; then
+            git commit -m "Finalizar seleções e layout mobile da Rádio Pelego"
+            git push origin main
+          fi
+      - name: Aguardar sincronização Wix
+        run: sleep 90
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi

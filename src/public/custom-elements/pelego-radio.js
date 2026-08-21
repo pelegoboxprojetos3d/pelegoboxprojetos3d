@@ -647,6 +647,54 @@ const MOBILE_CLEAN_SKIN = `
 #shell .playbox .play-title-left{flex:0 0 auto!important}
 #shell .playbox .play-meta{margin-left:auto!important;text-align:right!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 /* END_MOBILE_V30_FINAL_LOCK */
+
+/* MOBILE_V31_FLEX_STACK_FIX */
+/* Quatro blocos em fluxo vertical real. Sem linha fantasma/espaco morto do grid. */
+.shell{
+  display:flex!important;flex-direction:column!important;align-items:stretch!important;justify-content:flex-start!important;
+  width:310px!important;min-width:310px!important;max-width:310px!important;
+  height:700px!important;min-height:700px!important;max-height:700px!important;
+  padding:5px!important;gap:6px!important;overflow:hidden!important
+}
+.grid-top,.grid-middle{display:contents!important}
+.grid-top>.panel:nth-child(1),.grid-top>.panel:nth-child(2){display:none!important}
+.grid-top>.panel:nth-child(3),.analyzer{flex:0 0 160px!important;height:160px!important;min-height:160px!important;max-height:160px!important}
+.filters{flex:0 0 132px!important;height:132px!important;min-height:132px!important;max-height:132px!important;margin:0!important}
+.playbox{flex:0 0 220px!important;height:220px!important;min-height:220px!important;max-height:220px!important;margin:0!important}
+.eqpanel{flex:0 0 160px!important;height:160px!important;min-height:160px!important;max-height:160px!important;margin:0!important}
+
+/* Titulos: usar somente o texto real escrito pelo JS. Nada de pseudo-titulo duplicado. */
+.grid-top>.panel:nth-child(3) .panel-title{font-size:11px!important;visibility:visible!important;opacity:1!important}
+.grid-top>.panel:nth-child(3) .panel-title::before,
+.grid-top>.panel:nth-child(3) .panel-title::after{content:none!important;display:none!important}
+.eqtitle{font-size:8.6px!important;visibility:visible!important;opacity:1!important}
+.eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
+
+/* TOCANDO: respirar verticalmente sem esconder ou amontoar controles. */
+.playbody{
+  height:195px!important;min-height:195px!important;max-height:195px!important;
+  padding:5px 8px 6px!important;overflow:hidden!important;
+  display:grid!important;grid-template-rows:11px 28px 23px 43px 36px!important;
+  row-gap:0!important;align-content:space-between!important
+}
+.randomrow,.controls{
+  display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:6px!important;width:100%!important;min-width:0!important;margin:0!important
+}
+.randomrow label,.randomrow select,.controls button{
+  width:100%!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;margin:0!important
+}
+.controls{position:static!important;top:auto!important;transform:none!important;overflow:visible!important}
+.controls button{height:36px!important;min-height:36px!important;padding:0 2px!important}
+
+/* O filtro fica preso aos 132px sem criar sobra externa nem cortar a ultima linha. */
+.filterbody{height:107px!important;min-height:107px!important;max-height:107px!important;padding:0 6px 6px!important;overflow:hidden!important}
+.genres{height:101px!important;min-height:101px!important;max-height:101px!important;grid-template-rows:repeat(4,minmax(0,1fr))!important;align-content:stretch!important}
+
+/* Mantem a faixa atual na direita do TOCANDO. */
+#shell .playbox .panel-title{display:flex!important;align-items:center!important;justify-content:space-between!important}
+#shell .playbox .play-meta{margin-left:auto!important;text-align:right!important;max-width:145px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+/* END_MOBILE_V31_FLEX_STACK_FIX */
 .toast{z-index:50!important}
 `;
 /* END_MOBILE_V28_CLEAN_FOUR_STACK */
@@ -670,7 +718,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? MOBILE_CLEAN_SKIN : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v30' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v31' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){

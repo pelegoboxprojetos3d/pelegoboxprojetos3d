@@ -111,6 +111,54 @@ const SKIN = `
   .eqgrid .band{display:none!important;justify-items:center!important;align-items:center!important;grid-template-rows:10px minmax(0,1fr) 12px!important;font-size:5.7px!important}
   .eqgrid .band:nth-child(1),.eqgrid .band:nth-child(5),.eqgrid .band:nth-child(9),.eqgrid .band:nth-child(13),.eqgrid .band:nth-child(17),.eqgrid .band:nth-child(21),.eqgrid .band:nth-child(23),.eqgrid .band:nth-child(24){display:grid!important}
   .db-scale{left:4px!important;width:26px!important;top:42px!important;bottom:25px!important}
+
+  /* MOBILE_V13_8X8_CLEAN */
+  .eqpanel{
+    min-height:154px!important;height:154px!important;max-height:154px!important;
+    padding:0 6px 7px!important;grid-template-rows:25px minmax(0,1fr)!important;
+    overflow:hidden!important
+  }
+  .eqhead{height:25px!important;min-height:25px!important;padding:0 2px!important;gap:5px!important}
+  .eqtitle{font-size:8.6px!important;letter-spacing:0!important}
+  .preset{gap:3px!important;font-size:6.5px!important}
+  .preset select{width:86px!important;min-width:86px!important;height:20px!important;font-size:7px!important;padding:0 2px!important}
+
+  .eqgrid{
+    display:grid!important;
+    width:calc(100% - 30px)!important;height:100%!important;
+    margin:0 0 0 30px!important;padding:0!important;
+    grid-template-columns:repeat(8,minmax(0,1fr))!important;
+    grid-template-rows:minmax(0,1fr)!important;
+    grid-auto-flow:column!important;grid-auto-rows:minmax(0,1fr)!important;
+    column-gap:1px!important;row-gap:0!important;
+    align-items:stretch!important;justify-items:stretch!important;
+    overflow:hidden!important
+  }
+  .eqgrid .band{
+    display:none!important;min-width:0!important;width:auto!important;height:100%!important;
+    justify-items:center!important;align-items:center!important;
+    grid-template-rows:11px minmax(0,1fr) 13px!important;
+    font-size:5.8px!important;overflow:visible!important
+  }
+  .eqgrid .band:nth-child(1){display:grid!important;grid-column:1!important;grid-row:1!important}
+  .eqgrid .band:nth-child(5){display:grid!important;grid-column:2!important;grid-row:1!important}
+  .eqgrid .band:nth-child(9){display:grid!important;grid-column:3!important;grid-row:1!important}
+  .eqgrid .band:nth-child(13){display:grid!important;grid-column:4!important;grid-row:1!important}
+  .eqgrid .band:nth-child(17){display:grid!important;grid-column:5!important;grid-row:1!important}
+  .eqgrid .band:nth-child(21){display:grid!important;grid-column:6!important;grid-row:1!important}
+  .eqgrid .band:nth-child(23){display:grid!important;grid-column:7!important;grid-row:1!important}
+  .eqgrid .band:nth-child(24){display:grid!important;grid-column:8!important;grid-row:1!important}
+  .eqgrid .band .db,.eqgrid .band .freq{
+    width:100%!important;min-width:0!important;text-align:center!important;
+    margin:0!important;padding:0!important;line-height:1!important;
+    white-space:nowrap!important;overflow:visible!important
+  }
+  .sliderwrap{width:100%!important;min-width:0!important;overflow:visible!important}
+  .band input[type=range]{width:80px!important;height:13px!important;margin:0!important}
+  .band input::-webkit-slider-thumb{width:13px!important;height:13px!important}
+  .sliderwrap:before{width:3px!important;height:84%!important}
+  .db-scale{left:4px!important;width:25px!important;top:43px!important;bottom:25px!important;font-size:6px!important}
+  /* END_MOBILE_V13_8X8_CLEAN */
   .footer{display:none!important}
 }
 `;
@@ -137,7 +185,7 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = mobile ? SKIN.replace('@media(max-width:640px){','@media(max-width:100000px){') : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v12' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v13' : '20260821-desktop-preservado-v2';
 
   if(!el.__pbMobileResizeObserver && typeof ResizeObserver !== 'undefined'){
     el.__pbMobileResizeObserver = new ResizeObserver(()=>{ try{ applySkin(el); }catch(_){} });
@@ -237,7 +285,7 @@ function patchAnalyzer(Klass){
   p.drawAnalyzerGrid = function(c,w,h){
     c.fillStyle='#020707'; c.fillRect(0,0,w,h);
     const mobile=isMobileRadio(this);
-    const labels=mobile?['40','100','250','1K','4K','16K']:['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
+    const labels=mobile?['40','100','250','630','1.6K','4K','10K','16K']:['40','50','63','80','100','125','160','200','250','315','400','500','630','800','1K','1.25K','1.6K','2K','2.5K','3.15K','4K','6.3K','10K','16K'];
     const count=labels.length,left=mobile?27:34,right=mobile?6:9,top=mobile?8:14,bottom=mobile?18:29;
     c.strokeStyle='rgba(69,103,90,.50)'; c.lineWidth=1;
     for(let i=0;i<=count;i++){ const x=left+(w-left-right)*(i/count); c.beginPath(); c.moveTo(x,top); c.lineTo(x,h-bottom); c.stroke(); }
@@ -253,7 +301,7 @@ function patchAnalyzer(Klass){
     if(!this.ctx2d || !this.canvas) return;
     const r=this.canvas.getBoundingClientRect(),w=r.width,h=r.height,c=this.ctx2d;
     if(w<2||h<2) return;
-    const mobile=isMobileRadio(this),count=mobile?6:24;
+    const mobile=isMobileRadio(this),count=mobile?8:24;
     this.drawAnalyzerGrid(c,w,h);
     const left=mobile?27:34,right=mobile?6:9,top=mobile?8:14,bottom=mobile?19:30,usableW=w-left-right,usableH=h-top-bottom,bw=usableW/count,segs=mobile?8:12,gap=mobile?1:2,segH=Math.max(1,(usableH-(segs-1)*gap)/segs);
     for(let i=0;i<count;i++){
@@ -267,7 +315,7 @@ function patchAnalyzer(Klass){
   };
 
   p.drawIdleAnalyzer = function(){
-    const count=isMobileRadio(this)?6:24;
+    const count=isMobileRadio(this)?8:24;
     const vals=Array.from({length:count},(_,i)=>.25+.45*(.55+.45*Math.sin(i*.55+1.2)));
     this.__pbDrawSegments(vals);
   };
@@ -276,7 +324,7 @@ function patchAnalyzer(Klass){
     cancelAnimationFrame(this.visualFrame);
     const loop=()=>{
       const mobile=isMobileRadio(this);
-      const freqs=mobile?[40,100,250,1000,4000,16000]:[40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];
+      const freqs=mobile?[40,100,250,630,1600,4000,10000,16000]:[40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,6300,10000,16000];
       const values=Array(freqs.length).fill(.05);
       if(this.analyser && this.audioCtx){
         const bins=new Uint8Array(this.analyser.frequencyBinCount);

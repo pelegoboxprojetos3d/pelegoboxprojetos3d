@@ -40,12 +40,29 @@ const newNat="this.national.onclick=async()=>{if(this.config.allowNational&&!thi
 if(c.includes(oldNat)) c=c.replace(oldNat,newNat);
 else need(c.includes(newNat),'handler Nacional protegido');
 
+// Marca e prioriza redes brasileiras declaradamente sem propaganda.
+if(!c.includes('pbAdFreeNationalV7')){
+  const old=".filter(x=>String(x.url||'').toLowerCase().startsWith('https://')).slice(0,80)";
+  const neu=".filter(x=>String(x.url||'').toLowerCase().startsWith('https://')).map(x=>({...x,adFree:/VAGALUME\\.?FM|BRASIL HITS/i.test(String(x.name||''))})).sort((a,b)=>Number(b.adFree)-Number(a.adFree)).slice(0,80)/* pbAdFreeNationalV7 */";
+  need(c.includes(old),'filtro de radios brasileiras');
+  c=c.replace(old,neu);
+}
+
 // No mobile, somente os 8 botoes visiveis mandam no pool. Nacional/Internacional apenas definem a origem.
 const oldPool="  persistentPool(){const selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];let pool=[];if(this.config.allowInternational)pool.push(...STATIONS.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(this.config.allowNational)pool.push(...this.brStations.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(!pool.length&&this.config.allowNational&&this.brStations.length)pool.push(...this.brStations);if(!pool.length&&this.config.allowInternational)pool.push(...STATIONS);return pool;}";
-const newPool="  persistentPool(){const mobile=Number(this.getBoundingClientRect?.().width||0)<=640;const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];let selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];if(mobile)selected=selected.filter(x=>mobileGenres.includes(x));if(!selected.length)selected=['ROCK'];let pool=[];if(this.config.allowInternational)pool.push(...STATIONS.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(this.config.allowNational)pool.push(...this.brStations.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(!pool.length&&this.config.allowNational&&this.brStations.length)pool.push(...this.brStations);if(!pool.length&&this.config.allowInternational)pool.push(...STATIONS);return pool;}";
+const newPool="  persistentPool(){const mobile=Number(this.getBoundingClientRect?.().width||0)<=640;const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];let selected=this.config.selectedGenres?.length?this.config.selectedGenres:['ROCK','POP','JAZZ','SERTANEJO'];if(mobile)selected=selected.filter(x=>mobileGenres.includes(x));if(!selected.length)selected=['ROCK'];let pool=[];if(this.config.allowInternational)pool.push(...STATIONS.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag))));if(this.config.allowNational){const clean=this.brStations.filter(st=>st.adFree);const byStyle=clean.filter(st=>this.stationTags(st).some(tag=>selected.includes(tag)));pool.push(...(byStyle.length?byStyle:clean));}if(!pool.length&&this.config.allowInternational)pool.push(...STATIONS);return pool;}";
 if(c.includes(oldPool)) c=c.replace(oldPool,newPool);
-else need(c.includes("const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];"),'pool mobile ja ajustado');
+else if(c.includes("const mobileGenres=['ROCK','SERTANEJO','COUNTRY','REGGAE','POP','DANCE','JAZZ','BLUES'];")){
+  c=c.replace(/  persistentPool\(\)\{[^\n]+\}/,newPool.trim());
+}else need(false,'pool mobile');
+
+// Se o stream realmente terminar, troca imediatamente de estacao.
+if(!c.includes('pbEndedNextV7')){
+  const marker="this.audio.addEventListener('error',()=>{if(!this.persistentRadio)this.handleStreamError();});";
+  need(c.includes(marker),'listener de erro do audio');
+  c=c.replace(marker,marker+"this.audio.addEventListener('ended',()=>{if(this.persistentRadio)this.persistentRadio.next?.();else this.nextStation?.();});/* pbEndedNextV7 */");
+}
 
 fs.writeFileSync(skinPath,s);
 fs.writeFileSync(corePath,c);
-console.log('OK: equalizador harmonico, TOCANDO a esquerda e Nacional/Internacional comandando os 8 estilos sem estado ambos desligados');
+console.log('OK: visual mobile, escopos Nacional/Internacional, fontes nacionais sem propaganda e troca automatica ao fim do stream');

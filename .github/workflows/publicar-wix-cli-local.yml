@@ -5,7 +5,17 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/publicar-wix-cli-local.yml"
+      - "package.json"
+      - "src/public/custom-elements/pelego-radio.js"
+      - "src/public/custom-elements/pelego-radio-core.js"
+      - "src/pages/Rádio Pelego Box.ypxc8.js"
+      - "src/public/radioPelegoPersistente.js"
+      - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
+
+concurrency:
+  group: wix-cli-production-radio
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -13,11 +23,16 @@ permissions:
 jobs:
   publicar:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
       - name: Instalar dependências
         run: npm ci --ignore-scripts
       - name: Autenticar Wix CLI
@@ -28,5 +43,10 @@ jobs:
           test -n "$WIX_API_KEY"
           npx wix login --api-key "$WIX_API_KEY"
           npx wix whoami
-      - name: Publicar exatamente o código deste commit
+      - name: Confirmar V23 no código que será publicado
+        run: |
+          set -euo pipefail
+          grep -q "20260821-mobile-final-v23" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V23_ANALYZER_CLIP_FIX" src/public/custom-elements/pelego-radio.js
+      - name: Publicar exatamente o código do main via Wix CLI for Sites
         run: npx wix publish --source local -y

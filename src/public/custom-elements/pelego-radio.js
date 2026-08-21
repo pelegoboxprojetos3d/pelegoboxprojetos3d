@@ -149,7 +149,7 @@ const SKIN = `
   /* primeiro retângulo: analisador com altura realmente travada */
   .grid-top>.panel:nth-child(3),.analyzer{
     width:100%!important;max-width:100%!important;
-    min-height:239px!important;height:239px!important;max-height:239px!important
+    min-height:270px!important;height:270px!important;max-height:270px!important
   }
   .analyzer{grid-template-rows:25px minmax(0,1fr) 18px!important}
   .analyzer canvas{
@@ -189,7 +189,7 @@ const SKIN = `
   /* END_MOBILE_V21_STABLE */
   /* MOBILE_V22_WRAPPER_GUARD */
   :host,.shell{width:310px!important;min-width:310px!important;max-width:310px!important;margin-left:auto!important;margin-right:auto!important}
-  .grid-top>.panel:nth-child(3),.analyzer{min-height:239px!important;height:239px!important;max-height:239px!important}
+  .grid-top>.panel:nth-child(3),.analyzer{min-height:270px!important;height:270px!important;max-height:270px!important}
   .eqtitle{font-size:8.6px!important;white-space:nowrap!important}
   .eqtitle::before,.eqtitle::after{content:none!important;display:none!important}
   /* END_MOBILE_V22_WRAPPER_GUARD */
@@ -297,11 +297,11 @@ const SKIN = `
     color:inherit!important
   }
 
-  /* V23.3 - bloco do analisador fecha em 239px e não invade o próximo painel */
+  /* V23.3 - bloco do analisador fecha em 270px e não invade o próximo painel */
   .grid-top{
     display:block!important;
     width:100%!important;
-    min-height:239px!important;height:239px!important;max-height:239px!important;
+    min-height:270px!important;height:270px!important;max-height:270px!important;
     overflow:hidden!important;
     position:relative!important;
     margin:0!important
@@ -309,7 +309,7 @@ const SKIN = `
   .grid-top>.panel:nth-child(3),.analyzer{
     display:grid!important;
     width:100%!important;max-width:100%!important;
-    min-height:239px!important;height:239px!important;max-height:239px!important;
+    min-height:270px!important;height:270px!important;max-height:270px!important;
     overflow:hidden!important;
     position:relative!important;
     margin:0!important
@@ -358,11 +358,41 @@ const SKIN = `
   /* END_MOBILE_V17_FOUR_FIXES */
 
   /* MOBILE_V23_ANALYZER_CLIP_FIX */
-  .grid-top{height:239px!important;max-height:239px!important;overflow:hidden!important}
-  .analyzer{height:239px!important;max-height:239px!important;overflow:hidden!important}
+  .grid-top{height:270px!important;max-height:270px!important;overflow:hidden!important}
+  .analyzer{height:270px!important;max-height:270px!important;overflow:hidden!important}
   .analyzer canvas{height:auto!important;min-height:0!important;align-self:stretch!important}
   .grid-middle{position:relative!important;z-index:1!important;margin-top:0!important}
   /* END_MOBILE_V23_ANALYZER_CLIP_FIX */
+
+  /* MOBILE_V24_HEIGHT_EQ8_FIX */
+  :host{
+    height:900px!important;min-height:900px!important;max-height:none!important;
+    overflow:visible!important
+  }
+  .shell{
+    height:900px!important;min-height:900px!important;max-height:none!important;
+    overflow:hidden!important;align-content:start!important
+  }
+  .grid-top{
+    min-height:270px!important;height:270px!important;max-height:270px!important;
+    overflow:hidden!important;margin:0!important
+  }
+  .grid-top>.panel:nth-child(3),.analyzer{
+    min-height:270px!important;height:270px!important;max-height:270px!important;
+    overflow:hidden!important;margin:0!important
+  }
+  .grid-middle{
+    position:relative!important;z-index:1!important;
+    margin-top:7px!important;overflow:visible!important
+  }
+  .eqtitle{font-size:0!important;white-space:nowrap!important}
+  .eqtitle::before{content:none!important;display:none!important}
+  .eqtitle::after{
+    content:'⚙ EQUALIZADOR 8 BANDAS'!important;display:inline!important;
+    font-size:8.6px!important;font-weight:700!important;letter-spacing:0!important;
+    color:inherit!important
+  }
+  /* END_MOBILE_V24_HEIGHT_EQ8_FIX */
   .footer{display:none!important}
 }
 `;
@@ -386,14 +416,14 @@ function applySkin(el){
   const mobile = isMobileRadio(el);
   const skinForThisView = SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
-  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v23' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v24' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){
     if(mobile){
-      analyzerPanel.style.setProperty('min-height','239px','important');
-      analyzerPanel.style.setProperty('height','239px','important');
-      analyzerPanel.style.setProperty('max-height','239px','important');
+      analyzerPanel.style.setProperty('min-height','270px','important');
+      analyzerPanel.style.setProperty('height','270px','important');
+      analyzerPanel.style.setProperty('max-height','270px','important');
     }else{
       analyzerPanel.style.removeProperty('min-height');
       analyzerPanel.style.removeProperty('height');

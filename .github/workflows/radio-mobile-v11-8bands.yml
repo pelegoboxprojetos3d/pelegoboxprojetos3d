@@ -1,9 +1,9 @@
-name: Radio mobile V11 8 bands
+name: Radio mobile V13 8x8 clean
 on:
   push:
     branches: [main]
     paths:
-      - 'scripts/fix-radio-mobile-v11-8bands-layout.cjs'
+      - 'scripts/fix-radio-mobile-v13-8x8-clean.cjs'
       - '.github/workflows/radio-mobile-v11-8bands.yml'
 permissions:
   contents: write
@@ -18,21 +18,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Aplicar V11 mobile
-        run: node scripts/fix-radio-mobile-v11-8bands-layout.cjs
-      - name: Validar
+      - name: Aplicar V13 mobile 8x8
+        run: node scripts/fix-radio-mobile-v13-8x8-clean.cjs
+      - name: Validar 8x8
         run: |
-          grep -q "mobile-final-v11" src/public/custom-elements/pelego-radio.js
-          grep -q "repeat(8" src/public/custom-elements/pelego-radio.js
-          grep -q "mobile?8:24" src/public/custom-elements/pelego-radio-core.js
+          grep -q "mobile-final-v13" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V13_8X8_CLEAN" src/public/custom-elements/pelego-radio.js
+          grep -q "count=mobile?8:24" src/public/custom-elements/pelego-radio.js
+          grep -q "40','100','250','630','1.6K','4K','10K','16K" src/public/custom-elements/pelego-radio.js
+          grep -q "grid-column:8" src/public/custom-elements/pelego-radio.js
       - name: Commit e push
         run: |
-          if git diff --quiet -- src/public/custom-elements/pelego-radio.js src/public/custom-elements/pelego-radio-core.js; then
+          if git diff --quiet -- src/public/custom-elements/pelego-radio.js; then
             echo "Sem alterações"
             exit 0
           fi
           git config user.name "pelegoboxprojetos3d"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
-          git add src/public/custom-elements/pelego-radio.js src/public/custom-elements/pelego-radio-core.js
-          git commit -m "Corrigir layout mobile e ampliar rádio para 8 bandas"
+          git add src/public/custom-elements/pelego-radio.js
+          git commit -m "Corrigir rádio mobile para 8x8 real e alinhado"
           git push origin main

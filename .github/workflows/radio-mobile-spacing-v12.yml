@@ -1,0 +1,66 @@
+name: Radio mobile spacing V12
+
+on:
+  push:
+    paths:
+      - '.github/workflows/radio-mobile-spacing-v12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Aplicar ajuste mobile
+        run: node scripts/patch-radio-mobile-spacing-v12.cjs
+
+      - name: Validar ajuste
+        run: |
+          set -euo pipefail
+          grep -q "MOBILE_V12_TOCANDO_SPACING" src/public/custom-elements/pelego-radio.js
+          grep -q "mobile-final-v12" src/public/custom-elements/pelego-radio.js
+          grep -q "\.randomrow{gap:8px" src/public/custom-elements/pelego-radio.js
+          grep -q "\.controls{gap:8px" src/public/custom-elements/pelego-radio.js
+          grep -q "\.playbox{min-height:208px" src/public/custom-elements/pelego-radio.js
+
+      - name: Commit e push
+        run: |
+          set -euo pipefail
+          git config user.name "pelegoboxprojetos3d"
+          git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
+          git add src/public/custom-elements/pelego-radio.js
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+          else
+            git commit -m "Ajustar espaçamento do painel Tocando no mobile"
+            git push origin main
+          fi
+
+      - name: Aguardar sincronização Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi

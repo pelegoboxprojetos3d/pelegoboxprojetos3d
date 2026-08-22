@@ -1,0 +1,102 @@
+name: Forçar site inteiro na mesma aba
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'automation-triggers/forcar-mesma-aba-site-inteiro-2026-08-22.trigger'
+      - '.github/workflows/forcar-mesma-aba-site-inteiro-2026-08-22.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: forcar-mesma-aba-site-inteiro
+  cancel-in-progress: true
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trocar qualquer abertura em nova aba por mesma aba
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('src')
+          extensoes = {'.js', '.jsw', '.ts', '.tsx', '.jsx', '.html', '.htm'}
+          alterados = []
+
+          for path in root.rglob('*'):
+              if not path.is_file() or path.suffix.lower() not in extensoes:
+                  continue
+              try:
+                  original = path.read_text(encoding='utf-8')
+              except Exception:
+                  continue
+
+              texto = original.replace('_blank', '_self')
+              texto = re.sub(r'target\s*=\s*([\"\'])blank\1', 'target="_self"', texto, flags=re.I)
+              texto = re.sub(r'\.target\s*=\s*([\"\'])blank\1', '.target = "_self"', texto, flags=re.I)
+
+              if texto != original:
+                  path.write_text(texto, encoding='utf-8')
+                  alterados.append(str(path))
+
+          print('Arquivos ajustados:')
+          for item in alterados:
+              print('-', item)
+          print('Total:', len(alterados))
+          PY
+
+      - name: Validar que não restou _blank no código do site
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RIn --include='*.js' --include='*.jsw' --include='*.ts' --include='*.tsx' --include='*.jsx' --include='*.html' --include='*.htm' '_blank' src; then
+            echo 'Ainda existem ocorrências de _blank em src.'
+            exit 1
+          fi
+
+      - name: Gravar ajuste no main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Nenhuma abertura em nova aba encontrada no código.'
+          else
+            git config user.name 'PELEGO BOX Automacao'
+            git config user.email 'pelegobox82@gmail.com'
+            git add src
+            git commit -m 'Forçar navegação do site inteiro na mesma aba'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/wix.json --write-out '%{http_code}' \
+            --request POST 'https://www.wixapis.com/site-publisher/v1/site/publish' \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header 'Content-Type: application/json' \
+            --data '{}')"
+          cat /tmp/wix.json || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

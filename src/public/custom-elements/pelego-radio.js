@@ -447,7 +447,6 @@ const SKIN = `
 const MOBILE_CLEAN_SKIN = `
 :host{
   display:block!important;
-  visibility:visible!important;opacity:1!important;
   width:310px!important;min-width:310px!important;max-width:310px!important;
   height:auto!important;min-height:0!important;max-height:none!important;
   margin:0 auto!important;overflow:visible!important;

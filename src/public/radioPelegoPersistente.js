@@ -191,6 +191,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   let playlist = [];
   let state = {currentStation:null,server:5,volume:32,eqGains:Array(24).fill(0),randomMode:'TEMPO',randomTimeMinutes:30,crossfadeSeconds:2,sessionStarted:false};
   let audioCtx=null,sourceNode=null,filters=[],gainNode=null,analyser=null,randomTimer=null,tickTimer=null;
+  let mediaHistory=[];let mediaMetaStationId='';let mediaPlaybackState='';let lastNonZeroVolume=32;
 
   const clamp=(n,min,max)=>Math.max(min,Math.min(max,Number(n)||0));
   const streamUrl=(station,server=5)=>'https://ice'+server+'.somafm.com/'+station.id+'-128-mp3';
@@ -198,25 +199,81 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
 
   function safeStore(payload){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(payload));}catch(_){}}
   function publicState(error=''){return {currentStation:state.currentStation?{...state.currentStation}:null,playing:!audio.paused&&!!audio.src,paused:audio.paused,currentTime:Number(audio.currentTime||0),volume:Number(state.volume||0),server:Number(state.server||5),sessionStarted:!!state.sessionStarted,heartbeat:Date.now(),sampleRate:Number(audioCtx?.sampleRate||44100),error};}
-  function render(){ui.name.textContent=state.currentStation?.name||'PELEGO RADIO';ui.genre.textContent=state.currentStation?.genre||'Rádio pronta para tocar';ui.toggle.textContent=audio.paused?'▶ TOCAR':'❚❚ PAUSAR';ui.volume.value=String(state.volume);ui.volText.textContent=state.volume+'%';document.title=(audio.paused?'':'▶ ')+(state.currentStation?.name||'PELEGO RADIO');}
+  function render(){ui.name.textContent=state.currentStation?.name||'PELEGO RADIO';ui.genre.textContent=state.currentStation?.genre||'Rádio pronta para tocar';ui.toggle.textContent=audio.paused?'▶ TOCAR':'❚❚ PAUSAR';ui.volume.value=String(state.volume);ui.volText.textContent=state.volume+'%';document.title=(audio.paused?'':'▶ ')+(state.currentStation?.name||'PELEGO RADIO');syncMediaSession();}
   function broadcast(error=''){const s=publicState(error);safeStore(s);render();let spectrum=null;if(analyser&&!audio.paused){spectrum=new Uint8Array(analyser.frequencyBinCount);analyser.getByteFrequencyData(spectrum);}try{channel?.postMessage({source:'player',type:'STATE',state:s,spectrum});}catch(_){}}
 
   async function ensureGraph(){if(audioCtx)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC){audio.volume=state.volume/100;return;}audioCtx=new AC();sourceNode=audioCtx.createMediaElementSource(audio);let prev=sourceNode;filters=EQ_FREQS.map((freq,i)=>{const f=audioCtx.createBiquadFilter();f.type='peaking';f.frequency.value=freq;f.Q.value=1.05;f.gain.value=Number(state.eqGains[i]||0);prev.connect(f);prev=f;return f;});gainNode=audioCtx.createGain();gainNode.gain.value=state.volume/100;prev.connect(gainNode);analyser=audioCtx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.72;gainNode.connect(analyser);analyser.connect(audioCtx.destination);}
   async function fadeTo(target,seconds=0){const value=clamp(target,0,1);if(!gainNode||!audioCtx){audio.volume=value;return;}const now=audioCtx.currentTime;gainNode.gain.cancelScheduledValues(now);gainNode.gain.setValueAtTime(gainNode.gain.value,now);gainNode.gain.linearRampToValueAtTime(Math.max(.0001,value),now+Math.max(.01,Number(seconds)||0));await new Promise(r=>setTimeout(r,Math.max(10,(Number(seconds)||0)*1000)));}
   function scheduleRandom(){clearTimeout(randomTimer);if(audio.paused||state.randomMode!=='TEMPO')return;const min=Math.max(1,Number(state.randomTimeMinutes||30));randomTimer=setTimeout(()=>next(),min*60000);}
-  async function playStation(station,server=5){if(!station?.id)return false;try{await ensureGraph();if(audioCtx?.state==='suspended')await audioCtx.resume();await fadeTo(0,.01);state.currentStation={...station};state.server=server;state.sessionStarted=true;audio.src=streamUrl(state.currentStation,state.server);audio.load();broadcast();await audio.play();await fadeTo(state.volume/100,Math.max(.15,Number(state.crossfadeSeconds||0)));scheduleRandom();broadcast();return true;}catch(err){broadcast(String(err?.message||'Não foi possível iniciar a rádio.'));return false;}}
+  async function playStation(station,server=5,options={}){if(!options.skipHistory&&state.currentStation?.id&&state.currentStation.id!==station?.id){mediaHistory.push({...state.currentStation});if(mediaHistory.length>30)mediaHistory.shift();}if(!station?.id)return false;try{await ensureGraph();if(audioCtx?.state==='suspended')await audioCtx.resume();await fadeTo(0,.01);state.currentStation={...station};state.server=server;state.sessionStarted=true;audio.src=streamUrl(state.currentStation,state.server);audio.load();broadcast();await audio.play();await fadeTo(state.volume/100,Math.max(.15,Number(state.crossfadeSeconds||0)));scheduleRandom();broadcast();return true;}catch(err){broadcast(String(err?.message||'Não foi possível iniciar a rádio.'));return false;}}
   async function toggle(){if(!audio.paused){audio.pause();broadcast();return true;}if(audio.src&&state.currentStation){try{await ensureGraph();if(audioCtx?.state==='suspended')await audioCtx.resume();await audio.play();scheduleRandom();broadcast();return true;}catch(err){broadcast(String(err?.message||'Reprodução bloqueada.'));return false;}}const st=pickNext();return st?playStation(st,5):false;}
   async function next(){const st=pickNext();if(!st)return false;const sec=Math.max(0,Number(state.crossfadeSeconds||0));await fadeTo(0,sec/2);return playStation(st,5);}
+  async function previous(){const st=mediaHistory.pop();if(!st)return false;const sec=Math.max(0,Number(state.crossfadeSeconds||0));await fadeTo(0,sec/2);return playStation(st,5,{skipHistory:true});}
   function stop(){clearTimeout(randomTimer);audio.pause();audio.removeAttribute('src');audio.load();state.currentStation=null;state.sessionStarted=false;broadcast();}
-  function setVolume(value){state.volume=clamp(value,0,50);if(gainNode)gainNode.gain.value=state.volume/100;else audio.volume=state.volume/100;broadcast();}
+  function setVolume(value){state.volume=clamp(value,0,50);if(state.volume>0)lastNonZeroVolume=state.volume;if(gainNode)gainNode.gain.value=state.volume/100;else audio.volume=state.volume/100;broadcast();}
+  /* PB_MEDIA_KEYS_V37 */
+  function syncMediaSession(){
+    if(!('mediaSession' in navigator))return;
+    const station=state.currentStation;
+    const stationId=station?.id||'';
+    if(stationId!==mediaMetaStationId){
+      mediaMetaStationId=stationId;
+      try{
+        if(typeof MediaMetadata==='function'){
+          navigator.mediaSession.metadata=new MediaMetadata({
+            title:station?.name||'PELEGO RADIO',
+            artist:'PELEGO BOX',
+            album:station?.genre||'Rádio Pelego Box'
+          });
+        }
+      }catch(_){}
+    }
+    const playback=audio.paused?'paused':'playing';
+    if(playback!==mediaPlaybackState){
+      mediaPlaybackState=playback;
+      try{navigator.mediaSession.playbackState=playback;}catch(_){}
+    }
+  }
+
+  function installMediaSessionControls(){
+    if(!('mediaSession' in navigator))return;
+    const handlers={
+      play:()=>{if(audio.paused)toggle();},
+      pause:()=>{if(!audio.paused){audio.pause();broadcast();}},
+      stop:()=>stop(),
+      nexttrack:()=>next(),
+      previoustrack:()=>previous(),
+      seekforward:()=>next(),
+      seekbackward:()=>previous()
+    };
+    Object.entries(handlers).forEach(([action,handler])=>{try{navigator.mediaSession.setActionHandler(action,handler);}catch(_){}});
+    syncMediaSession();
+  }
+
+  function installHardwareKeyFallback(){
+    window.addEventListener('keydown',event=>{
+      const key=String(event.key||event.code||'');
+      const hasMediaSession='mediaSession' in navigator;
+      if(!hasMediaSession&&key==='MediaPlayPause'){event.preventDefault();toggle();return;}
+      if(!hasMediaSession&&key==='MediaTrackNext'){event.preventDefault();next();return;}
+      if(!hasMediaSession&&key==='MediaTrackPrevious'){event.preventDefault();previous();return;}
+      if(!hasMediaSession&&key==='MediaStop'){event.preventDefault();stop();return;}
+      if(key==='AudioVolumeUp'){event.preventDefault();setVolume(Number(state.volume||0)+5);return;}
+      if(key==='AudioVolumeDown'){event.preventDefault();setVolume(Number(state.volume||0)-5);return;}
+      if(key==='AudioVolumeMute'){event.preventDefault();if(Number(state.volume||0)>0){lastNonZeroVolume=Number(state.volume||32);setVolume(0);}else setVolume(lastNonZeroVolume||32);}
+    },true);
+  }
+
   function setEqGains(values){if(!Array.isArray(values)||values.length!==24)return;state.eqGains=values.map(v=>clamp(v,-12,12));filters.forEach((f,i)=>{f.gain.value=state.eqGains[i];});}
   function setEqBand(index,value){if(index<0||index>=24)return;state.eqGains[index]=clamp(value,-12,12);if(filters[index])filters[index].gain.value=state.eqGains[index];}
   async function setOutputDevice(id){try{if(audioCtx&&typeof audioCtx.setSinkId==='function')await audioCtx.setSinkId(id||'');else if(typeof audio.setSinkId==='function')await audio.setSinkId(id||'');}catch(_){}}
   async function recover(){if(!state.currentStation)return;if(state.server===5)return playStation(state.currentStation,6);if(state.server===6)return playStation(state.currentStation,2);return next();}
 
-  window.pelegoRadioCommand = function(cmd={}){switch(cmd.type){case 'INIT':stations=Array.isArray(cmd.stations)?cmd.stations.map(x=>({...x})):stations;playlist=Array.isArray(cmd.playlist)?cmd.playlist.map(x=>({...x})):playlist;if(cmd.config)applyConfig(cmd.config);broadcast();break;case 'REQUEST_STATE':broadcast();break;case 'SET_STATIONS':stations=Array.isArray(cmd.stations)?cmd.stations.map(x=>({...x})):[];break;case 'SET_PLAYLIST':playlist=Array.isArray(cmd.playlist)?cmd.playlist.map(x=>({...x})):[];break;case 'SET_CONFIG':applyConfig(cmd.config||{});break;case 'PLAY_STATION':playStation(cmd.station,cmd.server||5);break;case 'TOGGLE':toggle();break;case 'PAUSE':audio.pause();broadcast();break;case 'NEXT':next();break;case 'STOP':stop();break;case 'SET_VOLUME':setVolume(cmd.value);break;case 'SET_EQ_GAINS':setEqGains(cmd.values);break;case 'SET_EQ_BAND':setEqBand(Number(cmd.index),cmd.value);break;case 'SET_OUTPUT_DEVICE':setOutputDevice(cmd.id);break;}}
+  window.pelegoRadioCommand = function(cmd={}){switch(cmd.type){case 'INIT':stations=Array.isArray(cmd.stations)?cmd.stations.map(x=>({...x})):stations;playlist=Array.isArray(cmd.playlist)?cmd.playlist.map(x=>({...x})):playlist;if(cmd.config)applyConfig(cmd.config);broadcast();break;case 'REQUEST_STATE':broadcast();break;case 'SET_STATIONS':stations=Array.isArray(cmd.stations)?cmd.stations.map(x=>({...x})):[];break;case 'SET_PLAYLIST':playlist=Array.isArray(cmd.playlist)?cmd.playlist.map(x=>({...x})):[];break;case 'SET_CONFIG':applyConfig(cmd.config||{});break;case 'PLAY_STATION':playStation(cmd.station,cmd.server||5);break;case 'TOGGLE':toggle();break;case 'PAUSE':audio.pause();broadcast();break;case 'NEXT':next();break;case 'PREVIOUS':previous();break;case 'STOP':stop();break;case 'SET_VOLUME':setVolume(cmd.value);break;case 'SET_EQ_GAINS':setEqGains(cmd.values);break;case 'SET_EQ_BAND':setEqBand(Number(cmd.index),cmd.value);break;case 'SET_OUTPUT_DEVICE':setOutputDevice(cmd.id);break;}}
   function applyConfig(cfg={}){if(Number.isFinite(Number(cfg.volume)))setVolume(cfg.volume);if(Array.isArray(cfg.eqGains)&&cfg.eqGains.length===24)setEqGains(cfg.eqGains);if(cfg.randomMode)state.randomMode=cfg.randomMode;if(Number.isFinite(Number(cfg.randomTimeMinutes)))state.randomTimeMinutes=Number(cfg.randomTimeMinutes);if(Number.isFinite(Number(cfg.crossfadeSeconds)))state.crossfadeSeconds=Number(cfg.crossfadeSeconds);scheduleRandom();}
 
+  installMediaSessionControls();
+  installHardwareKeyFallback();
   channel?.addEventListener('message',event=>{const data=event.data||{};if(data.source==='controller')window.pelegoRadioCommand(data);});
   audio.addEventListener('playing',()=>{state.sessionStarted=true;scheduleRandom();broadcast();});
   audio.addEventListener('pause',broadcast);
@@ -369,6 +426,12 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
     return Promise.resolve(true);
   }
 
+  function previous() {
+    if (!preparePlayer()) return Promise.resolve(false);
+    sendCommand({ type: 'PREVIOUS' });
+    return Promise.resolve(true);
+  }
+
   function stop() {
     sendCommand({ type: 'STOP' });
     applyRemote({ currentStation: null, playing: false, paused: true, sessionStarted: false, currentTime: 0, heartbeat: Date.now() });
@@ -423,6 +486,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
     playStation,
     toggle,
     next,
+    previous,
     stop,
     get currentStation() { return remote.currentStation ? { ...remote.currentStation } : null; },
     get audioCtx() { return audioCtxProxy; },

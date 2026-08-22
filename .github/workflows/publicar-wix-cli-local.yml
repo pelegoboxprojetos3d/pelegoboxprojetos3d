@@ -16,6 +16,7 @@ on:
       - "scripts/estabilizar-primeiro-paint-mobile-v36-2026-08-22.cjs"
       - "scripts/habilitar-teclas-multimidia-v37-2026-08-22.cjs"
       - "scripts/reforcar-teclas-multimidia-v38-2026-08-22.cjs"
+      - "scripts/estabilizar-responsividade-e-teclas-v39-2026-08-22.cjs"
       - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
@@ -74,6 +75,11 @@ jobs:
           set -euo pipefail
           node scripts/reforcar-teclas-multimidia-v38-2026-08-22.cjs
 
+      - name: Estabilizar responsividade e teclas legadas V39
+        run: |
+          set -euo pipefail
+          node scripts/estabilizar-responsividade-e-teclas-v39-2026-08-22.cjs
+
       - name: Validar layout e controles antes de publicar
         run: |
           set -euo pipefail
@@ -81,6 +87,9 @@ jobs:
           grep -q "MOBILE_V34_TITLE_LOCK" src/public/custom-elements/pelego-radio.js
           grep -q "MOBILE_V35_FINISH" src/public/custom-elements/pelego-radio.js
           grep -q "PB_V36_READY_FIRST_PAINT" src/public/custom-elements/pelego-radio.js
+          grep -q "PB_RESPONSIVE_HOST_V39" src/public/custom-elements/pelego-radio.js
+          grep -q "__pbResponsiveSkinObserver" src/public/custom-elements/pelego-radio.js
+          grep -q "hostWidth <= 640" src/public/custom-elements/pelego-radio.js
           grep -q "PB_CORE_V36_HIDE_UNTIL_SKIN" src/public/custom-elements/pelego-radio-core.js
           grep -q "PB_CORE_V34_TITLE_8_BANDAS" src/public/custom-elements/pelego-radio-core.js
           grep -q "display:flex!important;flex-direction:column!important" src/public/custom-elements/pelego-radio.js
@@ -96,16 +105,16 @@ jobs:
           grep -q "grid-template-columns:repeat(3,minmax(0,1fr))!important" src/public/custom-elements/pelego-radio.js
           grep -q "el.style.setProperty('visibility','visible','important')" src/public/custom-elements/pelego-radio.js
           grep -q "applyAllSkins();" src/public/custom-elements/pelego-radio.js
-          grep -q "requestAnimationFrame(()=>requestAnimationFrame" src/public/custom-elements/pelego-radio.js
           grep -q "PB_MEDIA_KEYS_V37" src/public/radioPelegoPersistente.js
           grep -q "PB_MEDIA_KEYS_V38" src/public/radioPelegoPersistente.js
+          grep -q "PB_MEDIA_KEYS_V39_LEGACY" src/public/radioPelegoPersistente.js
           grep -q "navigator.mediaSession.setActionHandler" src/public/radioPelegoPersistente.js
           grep -q "nexttrack:()=>next()" src/public/radioPelegoPersistente.js
           grep -q "previoustrack:()=>previous()" src/public/radioPelegoPersistente.js
-          grep -q "MediaTrackNext" src/public/radioPelegoPersistente.js
-          grep -q "BrowserForward" src/public/radioPelegoPersistente.js
-          grep -q "BrowserBack" src/public/radioPelegoPersistente.js
-          grep -q "VolumeMute" src/public/radioPelegoPersistente.js
+          grep -q "keyCode===176" src/public/radioPelegoPersistente.js
+          grep -q "keyCode===177" src/public/radioPelegoPersistente.js
+          grep -q "keyCode===179" src/public/radioPelegoPersistente.js
+          grep -q "keyCode===173" src/public/radioPelegoPersistente.js
           ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio.js
           ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio.js
           ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
@@ -132,7 +141,7 @@ jobs:
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add .deploy/wix-cli-radio-last-success.txt src/public/custom-elements/pelego-radio.js src/public/custom-elements/pelego-radio-core.js src/public/radioPelegoPersistente.js
-          git commit -m "Consolidar Rádio V38 com layout V36 blindado [skip ci]" || exit 0
+          git commit -m "Consolidar Rádio V39 responsiva e multimídia [skip ci]" || exit 0
           git push origin HEAD:main
 
       - name: Registrar falha do Wix CLI

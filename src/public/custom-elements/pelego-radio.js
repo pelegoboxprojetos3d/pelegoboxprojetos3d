@@ -607,14 +607,13 @@ function applySkin(el){
     root.appendChild(style);
   }
   const mobile = isMobileRadio(el);
-  /* PB_V42_CORE_ONLY_MOBILE: no mobile, o core é o único dono do layout. */
-  const skinForThisView = mobile ? '' : SKIN;
+  const skinForThisView = mobile ? MOBILE_CLEAN_SKIN : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
   if(root.lastElementChild !== style) root.appendChild(style);
   // PB_V36_READY_FIRST_PAINT: libera o host somente depois da skin final existir.
   el.style.setProperty('visibility','visible','important');
   el.style.setProperty('opacity','1','important');
-  style.dataset.pelegoSkinRev = mobile ? '20260822-mobile-core-only-v42' : '20260821-desktop-preservado-v2';
+  style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v33' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
   if(analyzerPanel){

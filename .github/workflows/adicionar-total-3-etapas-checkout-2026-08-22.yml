@@ -1,4 +1,4 @@
-name: Somar 3 etapas no botão total do checkout
+name: Ajustar texto do botão total do checkout
 
 on:
   push:
@@ -25,74 +25,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Aplicar total e manter ranking na mesma aba
+      - name: Ajustar texto do botão total
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          checkout = Path('src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js')
-          s = checkout.read_text(encoding='utf-8')
+          p = Path('src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js')
+          s = p.read_text(encoding='utf-8')
 
-          if 'PB_TOTAL_3_ETAPAS_V2' not in s:
-              ids_old = '''  valorProjeto:\n    "#txtValor3",\n\n  avisoMedidas:'''
-              ids_new = '''  valorProjeto:\n    "#txtValor3",\n\n  total:\n    "#total",\n\n  avisoMedidas:'''
-              if ids_old not in s:
-                  raise SystemExit('Ponto do IDS.total não encontrado')
-              s = s.replace(ids_old, ids_new, 1)
+          antigo = '    botao.label = formatMoney(valorTotalProjeto(projeto));'
+          novo = '    botao.label = "TOTAL " + formatMoney(valorTotalProjeto(projeto));'
 
-              anchor = '''function valorDaEtapa(\n  tipoProduto\n) {'''
-              bloco = '''// PB_TOTAL_3_ETAPAS_V2\nfunction valorTotalProjeto(item = projeto) {\n  return (\n    valorMedidas(item) +\n    valorGraficos(item) +\n    valorProjeto(item)\n  );\n}\n\nfunction atualizarTotalProjeto() {\n  try {\n    const botao = $w(IDS.total);\n    botao.label = formatMoney(valorTotalProjeto(projeto));\n    try {\n      botao.link = "";\n      botao.target = "_self";\n    } catch (_) {}\n  } catch (error) {\n    console.warn(\n      "Não foi possível atualizar o total das três etapas:",\n      error?.message || error\n    );\n  }\n}\n\n\nfunction valorDaEtapa(\n  tipoProduto\n) {'''
-              if anchor not in s:
-                  raise SystemExit('Ponto de valorDaEtapa não encontrado')
-              s = s.replace(anchor, bloco, 1)
-
-              func = 'async function mostrarProjetoCompleto() {'
-              pos = s.find(func)
-              if pos < 0:
-                  raise SystemExit('mostrarProjetoCompleto não encontrado')
-              trecho = s[pos:]
-              imagem = '''  const imagem =\n    mediaUrl(\n      projeto?.thumbnail\n    );\n'''
-              if imagem not in trecho:
-                  raise SystemExit('Ponto da imagem não encontrado')
-              trecho = trecho.replace(imagem, imagem + '\n  atualizarTotalProjeto();\n', 1)
-              s = s[:pos] + trecho
-
-              valores = 'async function mostrarValoresEAcessos() {\n'
-              if valores not in s:
-                  raise SystemExit('mostrarValoresEAcessos não encontrado')
-              s = s.replace(valores, valores + '  atualizarTotalProjeto();\n\n', 1)
-
-              checkout.write_text(s, encoding='utf-8')
-
-          ranking = Path('src/pages/PROJETOS PRONTOS.kgnhq.js')
-          r = ranking.read_text(encoding='utf-8')
-          r = r.replace('''        $item("#btnProjetos").target =\n            "_blank";''', '''        $item("#btnProjetos").target =\n            "_self";''')
-          ranking.write_text(r, encoding='utf-8')
+          if novo not in s:
+              if antigo not in s:
+                  raise SystemExit('Linha do botão total não encontrada')
+              s = s.replace(antigo, novo, 1)
+              p.write_text(s, encoding='utf-8')
           PY
 
       - name: Validar código
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'PB_TOTAL_3_ETAPAS_V2' 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
-          grep -q '"#total"' 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
-          grep -q 'function valorTotalProjeto' 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
-          grep -q 'atualizarTotalProjeto();' 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
+          grep -Fq 'botao.label = "TOTAL " + formatMoney(valorTotalProjeto(projeto));' 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
           node --check 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
-          node --check 'src/pages/PROJETOS PRONTOS.kgnhq.js'
 
-      - name: Gravar alteração no main sem perder commits paralelos
+      - name: Gravar alteração no main
         shell: bash
         run: |
           set -euo pipefail
           if git diff --quiet; then
-            echo 'Ajustes já aplicados.'
+            echo 'Texto já ajustado.'
           else
             git config user.name 'PELEGO BOX Automacao'
             git config user.email 'pelegobox82@gmail.com'
-            git add 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js' 'src/pages/PROJETOS PRONTOS.kgnhq.js'
-            git commit -m 'Corrigir total do checkout e navegação do ranking'
+            git add 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
+            git commit -m 'Mostrar TOTAL e soma das 3 etapas no botão'
             git pull --rebase origin main
             git push origin HEAD:main
           fi

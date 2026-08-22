@@ -285,7 +285,7 @@ $w.onReady(async()=>{
       if(itemData.pdfUrl){
 
         $item('#btnPdf').link = itemData.pdfUrl;
-        $item('#btnPdf').target="_blank";
+        $item('#btnPdf').target="_self";
         $item('#btnPdf').show();
 
         $item('#btnPdf').onClick(()=>{
@@ -306,7 +306,7 @@ $w.onReady(async()=>{
       if(itemData.ytUrl){
 
         $item('#btnVideo').link = itemData.ytUrl;
-        $item('#btnVideo').target="_blank";
+        $item('#btnVideo').target="_self";
         $item('#btnVideo').show();
 
         $item('#btnVideo').onClick(()=>{

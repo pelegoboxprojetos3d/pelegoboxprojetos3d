@@ -1990,7 +1990,7 @@ async function prepararBotaoVideo() {
       O endereço é configurado diretamente
       como link do botão.
 
-      _blank mantém a página da entrega aberta
+      _self mantém a página da entrega aberta
       e abre o YouTube em uma nova aba.
     */
 
@@ -1998,7 +1998,7 @@ async function prepararBotaoVideo() {
       videoUrl;
 
     botao.target =
-      "_blank";
+      "_self";
 
     await botao.enable();
     await botao.show();
@@ -2785,7 +2785,7 @@ async function prepararVideoItem($item, dados) {
   const botao = $item(IDS.video);
   botao.label = "VÍDEO";
   botao.link = url;
-  botao.target = "_blank";
+  botao.target = "_self";
   await botao.enable();
   await mostrarItem($item, IDS.video);
 }

@@ -445,7 +445,7 @@ function configureRepeater() {
       $item("#btnProjetos").show();
       $item("#btnProjetos").enable();
       $item("#btnProjetos").link = videoUrl;
-      $item("#btnProjetos").target = "_blank";
+      $item("#btnProjetos").target = "_self";
 
       $item("#btnProjetos").onClick(() => {
         $item("#checkVideo").show("fade");

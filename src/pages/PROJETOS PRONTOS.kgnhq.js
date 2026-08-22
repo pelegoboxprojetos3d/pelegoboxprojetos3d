@@ -31,7 +31,7 @@ function configurarProjetos() {
                 site;
 
             $item("#btnMarca").target =
-                "_blank";
+                "_self";
 
         }
 

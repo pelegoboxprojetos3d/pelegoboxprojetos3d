@@ -75,8 +75,9 @@ function configurarProjetos() {
         $item("#btnProjetos").link =
             url;
 
+        // Navegação interna permanece na mesma aba/página.
         $item("#btnProjetos").target =
-            "_blank";
+            "_self";
 
         $item("#btnProjetos").onClick(async () => {
 

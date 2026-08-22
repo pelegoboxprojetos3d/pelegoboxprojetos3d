@@ -10,6 +10,7 @@ on:
       - "src/public/custom-elements/pelego-radio-core.js"
       - "src/pages/Rádio Pelego Box.ypxc8.js"
       - "src/public/radioPelegoPersistente.js"
+      - "scripts/reforcar-media-session-v40-2026-08-22.cjs"
       - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
@@ -38,6 +39,11 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
+      - name: Reforçar Media Session V40
+        run: |
+          set -euo pipefail
+          node scripts/reforcar-media-session-v40-2026-08-22.cjs
+
       - name: Validar versão consolidada da Rádio
         run: |
           set -euo pipefail
@@ -63,9 +69,14 @@ jobs:
           grep -q "PB_MEDIA_KEYS_V37" src/public/radioPelegoPersistente.js
           grep -q "PB_MEDIA_KEYS_V38" src/public/radioPelegoPersistente.js
           grep -q "PB_MEDIA_KEYS_V39_LEGACY" src/public/radioPelegoPersistente.js
+          grep -q "PB_MEDIA_KEYS_V40_SESSION_BRIDGE" src/public/radioPelegoPersistente.js
           grep -q "navigator.mediaSession.setActionHandler" src/public/radioPelegoPersistente.js
-          grep -q "nexttrack:()=>next()" src/public/radioPelegoPersistente.js
-          grep -q "previoustrack:()=>previous()" src/public/radioPelegoPersistente.js
+          grep -q "nexttrack:goNext" src/public/radioPelegoPersistente.js
+          grep -q "previoustrack:goPrevious" src/public/radioPelegoPersistente.js
+          grep -q "seekforward:goNext" src/public/radioPelegoPersistente.js
+          grep -q "seekbackward:goPrevious" src/public/radioPelegoPersistente.js
+          grep -q "setPositionState({duration:3600" src/public/radioPelegoPersistente.js
+          grep -q "installControllerMediaSession();" src/public/radioPelegoPersistente.js
           grep -q "keyCode===176" src/public/radioPelegoPersistente.js
           grep -q "keyCode===177" src/public/radioPelegoPersistente.js
           grep -q "keyCode===179" src/public/radioPelegoPersistente.js
@@ -95,8 +106,8 @@ jobs:
           printf 'STATUS=SUCESSO\nRUN_ID=%s\nSOURCE_SHA=%s\nPUBLISHED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-success.txt
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
-          git add .deploy/wix-cli-radio-last-success.txt
-          git commit -m "Registrar publicação consolidada da Rádio [skip ci]" || exit 0
+          git add .deploy/wix-cli-radio-last-success.txt src/public/radioPelegoPersistente.js
+          git commit -m "Consolidar Rádio V40 multimídia [skip ci]" || exit 0
           git push origin HEAD:main
 
       - name: Registrar falha do Wix CLI

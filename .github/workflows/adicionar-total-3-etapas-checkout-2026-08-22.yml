@@ -2,13 +2,18 @@ name: Somar 3 etapas no botão total do checkout
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - .github/workflows/adicionar-total-3-etapas-checkout-2026-08-22.yml
+      - 'automation-triggers/total-3-etapas-checkout-2026-08-22.trigger'
+      - '.github/workflows/adicionar-total-3-etapas-checkout-2026-08-22.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: total-3-etapas-checkout
+  cancel-in-progress: true
 
 jobs:
   aplicar-total:

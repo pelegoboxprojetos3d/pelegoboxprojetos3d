@@ -210,10 +210,16 @@ form.addEventListener('submit',async(ev)=>{
           f='src/backend/http-functions.js'
           if git diff --quiet -- "$f"; then
             echo 'O layout profissional já estava aplicado.'
-          else
-            git config user.name 'PELEGO BOX Automação'
-            git config user.email 'pelegobox82@gmail.com'
-            git add "$f"
-            git commit -m 'Aplicar layout profissional no descadastro'
-            git push origin HEAD:main
+            exit 0
           fi
+
+          git config user.name 'PELEGO BOX Automação'
+          git config user.email 'pelegobox82@gmail.com'
+          git add "$f"
+          git commit -m 'Aplicar layout profissional no descadastro'
+
+          # Main pode receber outro commit enquanto esta automação roda.
+          # Rebase antes do push evita perder mudanças paralelas em outros arquivos.
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main

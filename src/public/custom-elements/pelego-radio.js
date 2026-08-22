@@ -588,6 +588,11 @@ const MOBILE_CLEAN_SKIN = `
 function title(el, html){ if(el) el.innerHTML = html; }
 
 function isMobileRadio(el){
+  /* PB_RESPONSIVE_HOST_V39 */
+  const hostWidth = Number(el?.getBoundingClientRect?.().width || 0);
+  const viewportWidth = Number(window.visualViewport?.width || document.documentElement?.clientWidth || window.innerWidth || 0);
+  if(hostWidth > 0) return hostWidth <= 640;
+  if(viewportWidth > 0) return viewportWidth <= 640;
   return !!window.matchMedia?.('(max-width:640px)')?.matches;
 }
 
@@ -817,7 +822,34 @@ function patchAnalyzer(Klass){
     originalConnected?.call(this);
     bindSingleEngine(this);
     applySkin(this);
+    if(!this.__pbResponsiveSkinObserver && typeof ResizeObserver === 'function'){
+      let lastWidth = -1;
+      let lastMobile = null;
+      let resizeFrame = 0;
+      this.__pbResponsiveSkinObserver = new ResizeObserver(()=>{
+        if(!this.isConnected) return;
+        const width = Math.round(Number(this.getBoundingClientRect?.().width || 0));
+        const mobile = isMobileRadio(this);
+        if(width === lastWidth && mobile === lastMobile) return;
+        lastWidth = width;
+        lastMobile = mobile;
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(()=>{
+          if(!this.isConnected) return;
+          applySkin(this);
+          try{ this.resizeCanvas?.(); this.drawIdleAnalyzer?.(); }catch(_){}
+        });
+      });
+      this.__pbResponsiveSkinObserver.observe(this);
+    }
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(this.isConnected) applySkin(this); }));
+  };
+
+  const originalDisconnected = p.disconnectedCallback;
+  p.disconnectedCallback = function(){
+    try{ this.__pbResponsiveSkinObserver?.disconnect?.(); }catch(_){}
+    this.__pbResponsiveSkinObserver = null;
+    return originalDisconnected?.call(this);
   };
 }
 
@@ -857,6 +889,8 @@ if(!window.__PELEGO_RADIO_SKIN_OBSERVER__){
   window.__PELEGO_RADIO_SKIN_OBSERVER__.observe(document.documentElement,{childList:true,subtree:true});
   window.addEventListener('pageshow',scheduleSkinSweep);
   window.addEventListener('popstate',scheduleSkinSweep);
+  window.addEventListener('resize',scheduleSkinSweep,{passive:true});
+  try{ window.visualViewport?.addEventListener('resize',scheduleSkinSweep,{passive:true}); }catch(_){} 
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState === 'visible') scheduleSkinSweep();
   });

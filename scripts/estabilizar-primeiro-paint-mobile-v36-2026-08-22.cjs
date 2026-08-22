@@ -18,13 +18,18 @@ if (!core.includes('PB_CORE_V36_HIDE_UNTIL_SKIN')) {
   core = core.slice(0, idx) + guard + core.slice(idx);
 }
 
-// 2) A skin canônica final revela o elemento. Não mexe em width/height/gaps.
-if (!radio.includes('PB_V36_READY_FIRST_PAINT')) {
-  const hostNeedle = `:host{\n  display:block!important;`;
-  const hostPatch = `:host{\n  display:block!important;\n  visibility:visible!important;opacity:1!important;`;
-  if (!radio.includes(hostNeedle)) throw new Error('V36: início do :host mobile canônico não encontrado.');
-  radio = radio.replace(hostNeedle, hostPatch);
+// 2) A skin canônica final SEMPRE precisa revelar o elemento.
+// O V33 reconstrói o bloco mobile em todo deploy; por isso esta checagem não pode
+// depender apenas do marcador PB_V36_READY_FIRST_PAINT.
+const hostBase = `:host{\n  display:block!important;`;
+const hostReady = `:host{\n  display:block!important;\n  visibility:visible!important;opacity:1!important;`;
+if (!radio.includes(hostReady)) {
+  if (!radio.includes(hostBase)) throw new Error('V36: início do :host mobile canônico não encontrado.');
+  radio = radio.replace(hostBase, hostReady);
+}
 
+// 3) Os demais patches são instalados uma única vez.
+if (!radio.includes('PB_V36_READY_FIRST_PAINT')) {
   const appendNeedle = `  if(root.lastElementChild !== style) root.appendChild(style);`;
   const appendPatch = `${appendNeedle}\n  // PB_V36_READY_FIRST_PAINT: libera o host somente depois da skin final existir.\n  el.style.setProperty('visibility','visible','important');\n  el.style.setProperty('opacity','1','important');`;
   if (!radio.includes(appendNeedle)) throw new Error('V36: ponto de montagem da skin não encontrado.');
@@ -41,7 +46,7 @@ if (!radio.includes('PB_V36_READY_FIRST_PAINT')) {
   radio = radio.replace(sweepNeedle, sweepPatch);
 }
 
-// 3) Segurança: as medidas aprovadas da V35 precisam continuar exatamente presentes.
+// 4) Segurança: as medidas aprovadas da V35 precisam continuar exatamente presentes.
 const frozenLayout = [
   '.grid-top>.panel:nth-child(3),.analyzer{height:160px!important;min-height:160px!important;max-height:160px!important}',
   '.filters{height:140px!important;min-height:140px!important;max-height:140px!important}',
@@ -60,6 +65,7 @@ fs.writeFileSync(radioFile, radio, 'utf8');
 fs.writeFileSync(coreFile, core, 'utf8');
 
 const required = [
+  'visibility:visible!important;opacity:1!important',
   'PB_V36_READY_FIRST_PAINT',
   "el.style.setProperty('visibility','visible','important')",
   'applyAllSkins();\nscheduleSkinSweep();'
@@ -67,4 +73,4 @@ const required = [
 for (const token of required) if (!radio.includes(token)) throw new Error('V36 falhou no radio: ' + token);
 if (!core.includes('PB_CORE_V36_HIDE_UNTIL_SKIN')) throw new Error('V36 falhou no core.');
 
-console.log('V36 aplicada: V35 preservada; mobile oculto durante o estado-base e revelado já com skin/canvas finais.');
+console.log('V36 aplicada de forma idempotente: V35 preservada e host final sempre revelado após reconstrução da skin.');

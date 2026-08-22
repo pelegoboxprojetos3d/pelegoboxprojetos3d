@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Descadastrar e-mails | PELEGO BOX</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f3f5;color:#171d22;font-family:Arial,Helvetica,sans-serif}.wrap{max-width:620px;margin:0 auto;padding:24px 14px 48px}.card{background:#fff;border:1px solid #dfe3e7;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.06)}.logo{padding:24px 24px 8px;text-align:center}.logo img{display:block;width:min(100%,360px);height:auto;margin:auto}.body{padding:18px 28px 30px}h1{font-size:27px;line-height:1.18;margin:0 0 10px}p{color:#626d78;line-height:1.55}.who{background:#f7f8f9;border-radius:12px;padding:14px 16px;margin:18px 0}.who b{display:block;color:#171d22;margin-bottom:4px}.who span{overflow-wrap:anywhere}label{display:block;font-weight:800;font-size:13px;margin:17px 0 7px}select,textarea{width:100%;border:1px solid #cfd5da;border-radius:10px;padding:13px;font:inherit;background:#fff}textarea{min-height:105px;resize:vertical}.btn{width:100%;border:0;border-radius:11px;background:#111;color:#fff;font-weight:900;font-size:15px;padding:16px 14px;margin-top:20px;cursor:pointer}.btn:hover{background:#292929}.note{font-size:12px;color:#7a858f;text-align:center;margin:12px 0 0}.error{display:none;background:#fff1f1;color:#9f1d1d;border:1px solid #f1bcbc;border-radius:10px;padding:12px;margin-top:14px}@media(max-width:520px){.wrap{padding:10px}.body{padding:16px 18px 24px}h1{font-size:23px}.logo{padding:20px 18px 5px}}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+<div class="logo"><img src="https://raw.githubusercontent.com/pelegoboxprojetos3d/pelegoboxprojetos3d/main/assets/email/logo-pelego-box-email.png" alt="PELEGO BOX Projetos 3D"></div>
+<div class="body">
+<h1>Quer parar de receber nossos e-mails?</h1>
+<p>Sem labirinto e sem pegadinha. Confirme abaixo e este e-mail entra na lista de bloqueio do remarketing.</p>
+<div class="who"><b id="nome">Cliente</b><span id="email">E-mail não informado</span></div>
+<form id="form" method="post">
+<input type="hidden" name="email" id="emailInput"><input type="hidden" name="member_id" id="memberInput"><input type="hidden" name="nome" id="nomeInput"><input type="hidden" name="origem" value="pagina_descadastro_remarketing">
+<label for="motivo">Por que você quer sair?</label>
+<select name="motivo" id="motivo" required><option value="">Selecione um motivo</option><option>Não tenho mais interesse</option><option>Já comprei o que precisava</option><option>Estou recebendo e-mails demais</option><option>O conteúdo não é relevante para mim</option><option>Outro motivo</option></select>
+<label for="detalhe">Quer deixar algum comentário? <span style="font-weight:400">(opcional)</span></label>
+<textarea name="detalhe" id="detalhe" placeholder="Escreva aqui, se quiser."></textarea>
+<button class="btn" type="submit">CONFIRMAR DESCADASTRAMENTO</button>
+<p class="note">A confirmação é imediata e vale para este fluxo de remarketing.</p><div class="error" id="erro"></div>
+</form>
+</div></div></div>
+<script>
+const q=new URLSearchParams(location.search);const email=q.get('email')||'';const member=q.get('member_id')||'';const nome=q.get('nome')||'Cliente';const hook=q.get('hook')||'';
+document.getElementById('email').textContent=email||'E-mail não informado';document.getElementById('nome').textContent=nome;document.getElementById('emailInput').value=email;document.getElementById('memberInput').value=member;document.getElementById('nomeInput').value=nome;
+const f=document.getElementById('form');const e=document.getElementById('erro');if(hook){f.action=hook}else{f.addEventListener('submit',ev=>{ev.preventDefault();e.style.display='block';e.textContent='O link de descadastro ainda não foi configurado. Não foi feita nenhuma alteração.'})}
+</script>
+</body></html>

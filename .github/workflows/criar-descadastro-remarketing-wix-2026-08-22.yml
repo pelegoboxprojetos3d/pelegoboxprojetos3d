@@ -1,0 +1,317 @@
+name: Criar página Wix de descadastro do remarketing
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/criar-descadastro-remarketing-wix-2026-08-22.yml
+
+permissions:
+  contents: write
+
+jobs:
+  criar-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Criar rota e layout de descadastro
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/backend/http-functions.js')
+          s = path.read_text(encoding='utf-8')
+
+          marker = '// REMARKETING_DESCADASTRO_WIX_V1'
+          if marker in s:
+              print('Rota de descadastro já existe.')
+              raise SystemExit(0)
+
+          block = r'''
+
+// ======================================================
+// REMARKETING_DESCADASTRO_WIX_V1
+// Página pública + envio seguro para webhook Make
+// GET/POST /_functions/descadastrarRemarketing
+// ======================================================
+
+function remarketingEscapeHtml(value) {
+  return safe(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function remarketingHookValido(value) {
+  return /^https:\/\/hook\.us2\.make\.com\/[A-Za-z0-9_-]+$/i.test(
+    safe(value)
+  );
+}
+
+export async function get_descadastrarRemarketing(request) {
+  const email = normalizeEmail(request?.query?.email);
+  const memberId = safe(request?.query?.member_id);
+  const nome = safe(request?.query?.nome);
+  const hook = safe(request?.query?.hook);
+
+  const nomeHtml = remarketingEscapeHtml(nome || "Cliente PELEGO BOX");
+  const emailHtml = remarketingEscapeHtml(email || "E-mail não informado");
+  const emailJs = JSON.stringify(email);
+  const memberIdJs = JSON.stringify(memberId);
+  const nomeJs = JSON.stringify(nome);
+  const hookJs = JSON.stringify(hook);
+
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Descadastrar e-mails | PELEGO BOX</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#171d22;font-family:Arial,Helvetica,sans-serif}.wrap{width:100%;max-width:760px;margin:0 auto;padding:28px 14px 44px}.card{background:#fff;border:1px solid #dde2e6;border-radius:20px;overflow:hidden;box-shadow:0 12px 36px rgba(17,24,39,.08)}.top{padding:26px 28px 18px;text-align:center;border-bottom:1px solid #eef1f3}.logo{display:block;width:100%;max-width:360px;height:auto;margin:0 auto}.body{padding:30px}.eyebrow{font-size:12px;font-weight:900;letter-spacing:.8px;color:#68737d;text-transform:uppercase}.title{margin:8px 0 10px;font-size:30px;line-height:37px;color:#111820}.lead{margin:0;color:#626d78;font-size:15px;line-height:24px}.person{margin:22px 0;background:#f7f8f9;border:1px solid #e0e5e9;border-radius:14px;padding:16px 18px}.row{display:flex;gap:10px;align-items:flex-start;padding:4px 0;font-size:14px;line-height:21px}.key{min-width:62px;font-weight:900;color:#303941}.value{color:#59636c;word-break:break-word}.label{display:block;margin:24px 0 10px;font-size:14px;font-weight:900}.options{display:grid;gap:9px}.option{display:flex;align-items:center;gap:10px;border:1px solid #dce2e6;border-radius:12px;padding:13px 14px;cursor:pointer;background:#fff}.option:hover{background:#fafbfc;border-color:#aeb8c1}.option input{accent-color:#111820;transform:scale(1.12)}.option span{font-size:14px;font-weight:700;color:#36404a}.msg{width:100%;min-height:110px;resize:vertical;border:1px solid #d5dce1;border-radius:12px;padding:13px 14px;font:14px/21px Arial,Helvetica,sans-serif;outline:none}.msg:focus{border-color:#111820}.btn{width:100%;border:0;border-radius:12px;background:#111820;color:#fff;margin-top:20px;padding:16px 18px;font-size:14px;font-weight:900;cursor:pointer}.btn:disabled{opacity:.6;cursor:wait}.note{margin:10px 0 0;text-align:center;font-size:11px;line-height:18px;color:#7b858e}.status{display:none;margin-top:16px;border-radius:12px;padding:14px 15px;font-size:13px;line-height:20px;font-weight:800}.ok{background:#edf9f1;border:1px solid #b9e1c7;color:#176538}.err{background:#fff2f2;border:1px solid #f0c7c7;color:#8d2626}.footer{padding:18px 28px 22px;background:#edf0f2;text-align:center;font-size:11px;line-height:18px;color:#727d86}.back{display:inline-block;margin-top:8px;color:#111820;font-weight:900;text-decoration:none}@media(max-width:560px){.wrap{padding:12px 10px 28px}.top{padding:20px 18px 14px}.body{padding:22px 18px}.title{font-size:25px;line-height:31px}.person{margin-top:18px}.row{display:block}.key{display:block;margin-bottom:2px}.footer{padding:16px 18px 20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="top">
+      <img class="logo" src="https://static.wixstatic.com/media/354683_9ff215ccea8743c694cd947f8ab0c73e~mv2.png" alt="PELEGO BOX Projetos 3D">
+    </div>
+    <div class="body">
+      <div class="eyebrow">Preferências de e-mail</div>
+      <h1 class="title">Quer parar de receber nossos e-mails?</h1>
+      <p class="lead">Sem problema. Confirme abaixo e este endereço entra na nossa lista de bloqueio do remarketing.</p>
+
+      <div class="person">
+        <div class="row"><div class="key">Nome:</div><div class="value">${nomeHtml}</div></div>
+        <div class="row"><div class="key">E-mail:</div><div class="value">${emailHtml}</div></div>
+      </div>
+
+      <form id="unsubscribeForm">
+        <span class="label">Qual é o principal motivo?</span>
+        <div class="options">
+          <label class="option"><input type="radio" name="motivo" value="Não tenho mais interesse" required><span>Não tenho mais interesse</span></label>
+          <label class="option"><input type="radio" name="motivo" value="Já comprei o que precisava"><span>Já comprei o que precisava</span></label>
+          <label class="option"><input type="radio" name="motivo" value="Estou recebendo e-mails demais"><span>Estou recebendo e-mails demais</span></label>
+          <label class="option"><input type="radio" name="motivo" value="O conteúdo não é mais relevante para mim"><span>O conteúdo não é mais relevante para mim</span></label>
+          <label class="option"><input type="radio" name="motivo" value="Outro motivo"><span>Outro motivo</span></label>
+        </div>
+
+        <label class="label" for="detalhe">Quer deixar uma mensagem? <span style="font-weight:400;color:#7b858e">Opcional</span></label>
+        <textarea class="msg" id="detalhe" maxlength="1200" placeholder="Se quiser, conte o que poderíamos melhorar."></textarea>
+
+        <button class="btn" id="submitBtn" type="submit">DESCADASTRAR MEU E-MAIL</button>
+        <p class="note">A confirmação vale para os e-mails de remarketing da PELEGO BOX.</p>
+      </form>
+
+      <div id="success" class="status ok">Pronto. Seu e-mail foi descadastrado e entrou na lista de bloqueio.</div>
+      <div id="error" class="status err"></div>
+    </div>
+    <div class="footer">PELEGO BOX PROJETOS 3D<br><a class="back" href="https://www.pelegobox.com.br/">VOLTAR AO SITE</a></div>
+  </div>
+</div>
+<script>
+const email = ${emailJs};
+const memberId = ${memberIdJs};
+const nome = ${nomeJs};
+const hook = ${hookJs};
+const form = document.getElementById('unsubscribeForm');
+const btn = document.getElementById('submitBtn');
+const success = document.getElementById('success');
+const errorBox = document.getElementById('error');
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  success.style.display = 'none';
+  errorBox.style.display = 'none';
+
+  const selected = form.querySelector('input[name="motivo"]:checked');
+  const motivo = selected ? selected.value : '';
+  const detalhe = document.getElementById('detalhe').value.trim();
+
+  if (!email) {
+    errorBox.textContent = 'Este link não contém um e-mail válido. Abra novamente pelo botão recebido no e-mail.';
+    errorBox.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'PROCESSANDO...';
+
+  try {
+    const response = await fetch('/_functions/descadastrarRemarketing', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        email,
+        member_id: memberId,
+        nome,
+        motivo,
+        detalhe,
+        hook,
+        origem: 'pagina_descadastro_remarketing'
+      })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || 'Não foi possível concluir o descadastro agora.');
+    }
+
+    form.style.display = 'none';
+    success.style.display = 'block';
+  } catch (error) {
+    const code = String(error && error.message || '');
+    errorBox.textContent = code === 'webhook_descadastro_nao_configurado'
+      ? 'A página está pronta, mas o webhook de descadastro ainda não foi conectado.'
+      : 'Não foi possível concluir agora. Tente novamente em instantes.';
+    errorBox.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'DESCADASTRAR MEU E-MAIL';
+  }
+});
+</script>
+</body>
+</html>`;
+
+  return ok({
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store, max-age=0"
+    },
+    body: html
+  });
+}
+
+export async function post_descadastrarRemarketing(request) {
+  try {
+    const body = await readJsonBody(request);
+    const email = normalizeEmail(body?.email);
+    const memberId = safe(body?.member_id);
+    const nome = safe(body?.nome);
+    const motivo = safe(body?.motivo);
+    const detalhe = safe(body?.detalhe).slice(0, 1200);
+
+    if (!email || !email.includes("@") || !motivo) {
+      return badRequest({
+        headers: {"Content-Type": "application/json"},
+        body: {ok: false, error: "dados_descadastro_invalidos"}
+      });
+    }
+
+    let hook = safe(body?.hook);
+
+    if (!remarketingHookValido(hook)) {
+      try {
+        hook = safe(await getSecret("REMARKETING_DESCADASTRO_WEBHOOK"));
+      } catch (_) {
+        hook = "";
+      }
+    }
+
+    if (!remarketingHookValido(hook)) {
+      return serverError({
+        headers: {"Content-Type": "application/json"},
+        body: {ok: false, error: "webhook_descadastro_nao_configurado"}
+      });
+    }
+
+    const payload = {
+      email,
+      member_id: memberId,
+      nome,
+      motivo,
+      detalhe,
+      origem: safe(body?.origem) || "pagina_descadastro_remarketing",
+      confirmado_em: new Date().toISOString()
+    };
+
+    const response = await fetch(hook, {
+      method: "post",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      console.error("DESCADASTRO REMARKETING WEBHOOK ERROR:", response.status, responseText);
+      return serverError({
+        headers: {"Content-Type": "application/json"},
+        body: {ok: false, error: "webhook_descadastro_falhou"}
+      });
+    }
+
+    return ok({
+      headers: {"Content-Type": "application/json"},
+      body: {ok: true, email}
+    });
+  } catch (error) {
+    console.error("DESCADASTRO REMARKETING ERROR:", error?.message || error, error);
+    return serverError({
+      headers: {"Content-Type": "application/json"},
+      body: {ok: false, error: "descadastro_remarketing_error"}
+    });
+  }
+}
+'''
+
+          s += block
+          path.write_text(s, encoding='utf-8')
+          print('Página e endpoint de descadastro adicionados.')
+          PY
+
+      - name: Validar implementação
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="src/backend/http-functions.js"
+          grep -q 'REMARKETING_DESCADASTRO_WIX_V1' "$f"
+          grep -q 'export async function get_descadastrarRemarketing' "$f"
+          grep -q 'export async function post_descadastrarRemarketing' "$f"
+          grep -q 'REMARKETING_DESCADASTRO_WEBHOOK' "$f"
+          grep -q 'DESCADASTRAR MEU E-MAIL' "$f"
+          echo 'Descadastro Wix validado.'
+
+      - name: Gravar alteração no main
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="src/backend/http-functions.js"
+          if git diff --quiet -- "$f"; then
+            echo 'Código já estava aplicado.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$f"
+            git commit -m 'Criar página Wix de descadastro do remarketing'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 90
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

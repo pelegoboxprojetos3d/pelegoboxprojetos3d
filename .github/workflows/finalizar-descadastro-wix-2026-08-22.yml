@@ -1,0 +1,64 @@
+name: Finalizar descadastro Wix remarketing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'automation-triggers/finalizar-descadastro-wix-2026-08-22.py'
+      - '.github/workflows/finalizar-descadastro-wix-2026-08-22.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalizar-descadastro-wix
+  cancel-in-progress: true
+
+jobs:
+  aplicar-e-publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aplicar patch final
+        run: python automation-triggers/finalizar-descadastro-wix-2026-08-22.py
+
+      - name: Validar sintaxe
+        run: node --check src/backend/http-functions.js
+
+      - name: Gravar alteração
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'Sem alteração pendente.'
+          else
+            git config user.name 'PELEGO BOX Automacao'
+            git config user.email 'pelegobox82@gmail.com'
+            git add src/backend/http-functions.js
+            git commit -m 'Finalizar descadastro com webhook privado no Wix'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização GitHub para Wix
+        run: sleep 60
+
+      - name: Publicar no Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/wix.json --write-out '%{http_code}' \
+            --request POST 'https://www.wixapis.com/site-publisher/v1/site/publish' \
+            --header "Authorization: $WIX_API_KEY" \
+            --header "wix-site-id: $WIX_SITE_ID" \
+            --header 'Content-Type: application/json' \
+            --data '{}')"
+          cat /tmp/wix.json || true
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

@@ -217,9 +217,6 @@ form.addEventListener('submit',async(ev)=>{
           git config user.email 'pelegobox82@gmail.com'
           git add "$f"
           git commit -m 'Aplicar layout profissional no descadastro'
-
-          # Main pode receber outro commit enquanto esta automação roda.
-          # Rebase antes do push evita perder mudanças paralelas em outros arquivos.
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main

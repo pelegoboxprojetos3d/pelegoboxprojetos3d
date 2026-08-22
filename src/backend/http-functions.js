@@ -3386,7 +3386,6 @@ export async function get_descadastrarRemarketing(request) {
   const email = normalizeEmail(request?.query?.email);
   const memberId = safe(request?.query?.member_id);
   const nome = safe(request?.query?.nome) || "Cliente";
-  const hook = safe(request?.query?.hook);
 
   const emailHtml = escapeHtmlRemarketing(email || "E-mail não informado");
   const nomeHtml = escapeHtmlRemarketing(nome);
@@ -3432,7 +3431,6 @@ export async function get_descadastrarRemarketing(request) {
 const email=${JSON.stringify(email)};
 const memberId=${JSON.stringify(memberId)};
 const nome=${JSON.stringify(nome)};
-const hook=${JSON.stringify(hook)};
 const form=document.getElementById('form');
 const btn=document.getElementById('btn');
 const okBox=document.getElementById('ok');
@@ -3444,7 +3442,7 @@ form.addEventListener('submit',async(ev)=>{
   if(!email||!motivo){errBox.textContent='Faltou o e-mail ou o motivo.';errBox.style.display='block';return;}
   btn.disabled=true;btn.textContent='PROCESSANDO...';
   try{
-    const r=await fetch('/_functions/descadastrarRemarketingSubmit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,member_id:memberId,nome,motivo,detalhe,hook,origem:'remarketing_projetos_prontos'})});
+    const r=await fetch('/_functions/descadastrarRemarketingSubmit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,member_id:memberId,nome,motivo,detalhe,origem:'remarketing_projetos_prontos'})});
     const data=await r.json();
     if(!r.ok||!data.ok) throw new Error(data.error||'Falha ao descadastrar');
     form.querySelector('select').disabled=true;form.querySelector('textarea').disabled=true;btn.style.display='none';okBox.style.display='block';
@@ -3467,7 +3465,7 @@ export async function post_descadastrarRemarketingSubmit(request) {
     const data = await readJsonBody(request);
     const email = normalizeEmail(data?.email);
     const motivo = safe(data?.motivo);
-    const hook = safe(data?.hook);
+    const hook = safe(await getSecret("REMARKETING_DESCADASTRO_WEBHOOK"));
 
     if (!email || !motivo) {
       return badRequest({

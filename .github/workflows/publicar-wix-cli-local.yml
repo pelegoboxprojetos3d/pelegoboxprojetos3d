@@ -10,7 +10,6 @@ on:
       - "src/public/custom-elements/pelego-radio-core.js"
       - "src/pages/Rádio Pelego Box.ypxc8.js"
       - "src/public/radioPelegoPersistente.js"
-      - "scripts/consolidar-core-e-media-session-v41-2026-08-22.cjs"
       - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
@@ -39,12 +38,7 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Consolidar V41 uma única vez
-        run: |
-          set -euo pipefail
-          node scripts/consolidar-core-e-media-session-v41-2026-08-22.cjs
-
-      - name: Validar versão consolidada da Rádio
+      - name: Validar V41 consolidada sem modificar arquivos
         run: |
           set -euo pipefail
           grep -q "PB_CORE_CANONICAL_MOBILE_V41" src/public/custom-elements/pelego-radio-core.js
@@ -63,6 +57,7 @@ jobs:
           ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio.js
           ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
           ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
+          test -z "$(git status --porcelain)"
 
       - name: Autenticar Wix CLI
         env:
@@ -73,7 +68,7 @@ jobs:
           npx wix login --api-key "$WIX_API_KEY"
           npx wix whoami
 
-      - name: Publicar exatamente o código consolidado via Wix CLI
+      - name: Publicar exatamente a V41 consolidada via Wix CLI
         run: npx wix publish --source local -y
 
       - name: Registrar publicação Wix CLI confirmada
@@ -84,8 +79,8 @@ jobs:
           printf 'STATUS=SUCESSO\nRUN_ID=%s\nSOURCE_SHA=%s\nPUBLISHED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-success.txt
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
-          git add .deploy/wix-cli-radio-last-success.txt src/public/custom-elements/pelego-radio-core.js src/public/radioPelegoPersistente.js
-          git commit -m "Consolidar Rádio V41 no core e Media Session única [skip ci]" || exit 0
+          git add .deploy/wix-cli-radio-last-success.txt
+          git commit -m "Registrar publicação V41 congelada [skip ci]" || exit 0
           git pull --rebase origin main
           git push origin HEAD:main
 

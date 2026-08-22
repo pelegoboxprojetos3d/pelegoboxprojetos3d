@@ -82,7 +82,7 @@ jobs:
           node --check 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js'
           node --check 'src/pages/PROJETOS PRONTOS.kgnhq.js'
 
-      - name: Gravar alteração no main
+      - name: Gravar alteração no main sem perder commits paralelos
         shell: bash
         run: |
           set -euo pipefail
@@ -93,6 +93,7 @@ jobs:
             git config user.email 'pelegobox82@gmail.com'
             git add 'src/pages/CHECKOUT PROJETOS PRONTOS.p5onq.js' 'src/pages/PROJETOS PRONTOS.kgnhq.js'
             git commit -m 'Corrigir total do checkout e navegação do ranking'
+            git pull --rebase origin main
             git push origin HEAD:main
           fi
 

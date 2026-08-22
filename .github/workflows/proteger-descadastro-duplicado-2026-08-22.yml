@@ -1,0 +1,71 @@
+name: Proteger rota de descadastro contra duplicação
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - src/backend/http-functions.js
+
+permissions:
+  contents: write
+
+jobs:
+  proteger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remover segunda implementação se houver duplicação
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/backend/http-functions.js')
+          s=p.read_text(encoding='utf-8')
+          old='// REMARKETING_UNSUBSCRIBE_PAGE_V1'
+          new='// REMARKETING_DESCADASTRO_WIX_V1'
+          if old in s and new in s:
+              i=s.find('// ======================================================', s.find(new)-80)
+              if i < 0:
+                  i=s.find(new)
+              s=s[:i].rstrip()+"\n"
+              p.write_text(s,encoding='utf-8')
+              print('Implementação duplicada removida; rota antiga preservada.')
+          else:
+              print('Nenhuma duplicação encontrada.')
+          PY
+
+      - name: Commitar proteção
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="src/backend/http-functions.js"
+          if git diff --quiet -- "$f"; then
+            echo 'Nada a corrigir.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$f"
+            git commit -m 'Evitar duplicação da rota de descadastro'
+            git push origin HEAD:main
+          fi
+
+      - name: Aguardar sincronização
+        run: sleep 45
+
+      - name: Publicar Wix
+        env:
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: d1022df4-d4fd-4561-8909-a59d876691b3
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" --request POST "https://www.wixapis.com/site-publisher/v1/site/publish" --header "Authorization: $WIX_API_KEY" --header "wix-site-id: $WIX_SITE_ID" --header "Content-Type: application/json" --data '{}')"
+          echo "Wix Site Publisher HTTP $status"
+          cat "$response_file"
+          echo
+          test "$status" -ge 200 -a "$status" -lt 300

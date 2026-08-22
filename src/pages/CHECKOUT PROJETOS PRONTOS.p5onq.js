@@ -101,6 +101,9 @@ const IDS = {
   valorProjeto:
     "#txtValor3",
 
+  total:
+    "#total",
+
   avisoMedidas:
     "#box1",
 
@@ -535,6 +538,32 @@ function valorProjeto(item) {
     item?.valor_etapa_3
   );
 }
+
+// PB_TOTAL_3_ETAPAS_V2
+function valorTotalProjeto(item = projeto) {
+  return (
+    valorMedidas(item) +
+    valorGraficos(item) +
+    valorProjeto(item)
+  );
+}
+
+function atualizarTotalProjeto() {
+  try {
+    const botao = $w(IDS.total);
+    botao.label = formatMoney(valorTotalProjeto(projeto));
+    try {
+      botao.link = "";
+      botao.target = "_self";
+    } catch (_) {}
+  } catch (error) {
+    console.warn(
+      "Não foi possível atualizar o total das três etapas:",
+      error?.message || error
+    );
+  }
+}
+
 
 function valorDaEtapa(
   tipoProduto
@@ -1771,6 +1800,8 @@ async function mostrarProjetoCompleto() {
       projeto?.thumbnail
     );
 
+  atualizarTotalProjeto();
+
   if (titulo) {
     $w(
       IDS.titulo
@@ -2000,6 +2031,8 @@ async function aplicarRegraVisualAvisosPaginaPrincipal() {
 }
 
 async function mostrarValoresEAcessos() {
+  atualizarTotalProjeto();
+
   $w(
     IDS.valorMedidas
   ).text =

@@ -551,7 +551,7 @@ function valorTotalProjeto(item = projeto) {
 function atualizarTotalProjeto() {
   try {
     const botao = $w(IDS.total);
-    botao.label = formatMoney(valorTotalProjeto(projeto));
+    botao.label = "TOTAL " + formatMoney(valorTotalProjeto(projeto));
     try {
       botao.link = "";
       botao.target = "_self";

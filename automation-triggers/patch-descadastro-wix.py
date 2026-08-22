@@ -2,15 +2,19 @@ from pathlib import Path
 
 path = Path('src/backend/http-functions.js')
 text = path.read_text(encoding='utf-8')
-marker = 'REMARKETING_UNSUBSCRIBE_PAGE_V1'
-if marker in text:
-    print('Página já existe')
+
+start = '// ======================================================\n// REMARKETING_UNSUBSCRIBE_PAGE_V1'
+end = 'export async function post_descadastrarRemarketingSubmit(request) {'
+
+if 'REMARKETING_UNSUBSCRIBE_PAGE_V2' in text:
+    print('Layout V2 já aplicado')
     raise SystemExit(0)
 
-block = r'''
+if start not in text or end not in text:
+    raise SystemExit('Bloco atual de descadastro não encontrado')
 
-// ======================================================
-// REMARKETING_UNSUBSCRIBE_PAGE_V1
+block = r'''// ======================================================
+// REMARKETING_UNSUBSCRIBE_PAGE_V2
 // Página pública: /_functions/descadastrarRemarketing
 // ======================================================
 
@@ -27,7 +31,6 @@ export async function get_descadastrarRemarketing(request) {
   const email = normalizeEmail(request?.query?.email);
   const memberId = safe(request?.query?.member_id);
   const nome = safe(request?.query?.nome) || "Cliente";
-  const hook = safe(request?.query?.hook);
 
   const emailHtml = escapeHtmlRemarketing(email || "E-mail não informado");
   const nomeHtml = escapeHtmlRemarketing(nome);
@@ -36,63 +39,133 @@ export async function get_descadastrarRemarketing(request) {
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Descadastrar e-mails | PELEGO BOX</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#15191e">
+<title>Preferências de e-mail | PELEGO BOX</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#171d22;font-family:Arial,Helvetica,sans-serif}.wrap{max-width:640px;margin:0 auto;padding:24px 14px 50px}.card{background:#fff;border:1px solid #e1e5e9;border-radius:18px;overflow:hidden;box-shadow:0 10px 35px rgba(0,0,0,.07)}.logo{padding:28px 26px 12px;text-align:center}.logo img{display:block;width:250px;max-width:100%;height:auto;margin:0 auto}.line{height:1px;background:#e8ebef;margin:4px 28px 0}.body{padding:24px 30px 32px}h1{margin:0 0 10px;font-size:27px;line-height:1.18;color:#111820}p{margin:0 0 16px;color:#626d78;line-height:1.55}.who{background:#f7f8f9;border:1px solid #e5e8eb;border-radius:12px;padding:15px 16px;margin:18px 0}.who b{display:block;margin-bottom:4px;color:#171d22}.who span{overflow-wrap:anywhere;color:#596273}label{display:block;font-weight:800;font-size:13px;margin:18px 0 7px;color:#252b31}select,textarea{width:100%;border:1px solid #ccd2d8;border-radius:10px;padding:13px;font:inherit;background:#fff;color:#222}textarea{min-height:110px;resize:vertical}.btn{width:100%;border:0;border-radius:11px;background:#111;color:#fff;font-weight:900;font-size:15px;padding:16px 14px;margin-top:20px;cursor:pointer}.btn:disabled{opacity:.55;cursor:not-allowed}.note{font-size:12px;color:#7b858f;text-align:center;margin:12px 0 0}.msg{display:none;margin-top:16px;border-radius:11px;padding:14px;font-weight:700;line-height:1.45}.ok{background:#edf8f1;color:#176a39;border:1px solid #bde0c9}.err{background:#fff1f1;color:#9f1d1d;border:1px solid #efbcbc}@media(max-width:520px){.wrap{padding:10px}.body{padding:20px 18px 26px}.logo{padding:22px 18px 10px}h1{font-size:23px}}
+:root{--ink:#171b20;--muted:#69737d;--line:#e4e8ec;--soft:#f6f7f9;--brand:#bd333d;--brand2:#9f252e;--green:#167a46;--greenbg:#edf8f2}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{font-family:Arial,Helvetica,sans-serif;color:var(--ink);background:radial-gradient(circle at 12% 8%,rgba(189,51,61,.09),transparent 30%),linear-gradient(180deg,#fbfbfc 0%,#f1f3f5 100%);-webkit-font-smoothing:antialiased}
+.shell{min-height:100vh;display:grid;place-items:center;padding:28px 16px}
+.card{width:min(100%,680px);background:#fff;border:1px solid rgba(15,23,42,.08);border-radius:24px;box-shadow:0 26px 75px rgba(20,25,32,.13);overflow:hidden}
+.top{padding:27px 30px 21px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:20px}
+.logo{display:block;width:205px;max-width:50%;height:auto}
+.dots{display:flex;align-items:center;gap:7px}.dot{width:9px;height:9px;border-radius:50%;background:#d8dde2}.dot.active{width:27px;border-radius:99px;background:var(--brand)}
+.content{padding:30px}
+.kicker{margin-bottom:8px;color:var(--brand);font-size:12px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}
+h1{margin:0 0 10px;font-size:30px;line-height:1.14;letter-spacing:-.025em;color:#15191e}
+.lead{margin:0;color:var(--muted);font-size:15px;line-height:1.58}
+.person{margin:23px 0;padding:16px 17px;background:var(--soft);border:1px solid var(--line);border-radius:15px}.person small{display:block;margin-bottom:4px;color:#8b949d;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.person strong{display:block;font-size:16px}.person span{display:block;margin-top:3px;color:#68727c;font-size:14px;overflow-wrap:anywhere}
+.title{margin:0 0 11px;font-size:14px;font-weight:900}.reasons{display:grid;gap:9px}.reason{position:relative}.reason input{position:absolute;opacity:0;pointer-events:none}.reason label{display:flex;align-items:center;gap:12px;padding:14px 15px;border:1.5px solid #dfe3e8;border-radius:13px;background:#fff;color:#3b4249;font-size:14px;font-weight:700;cursor:pointer;transition:.16s ease}.circle{width:20px;height:20px;flex:0 0 auto;border:2px solid #bcc4cc;border-radius:50%;display:grid;place-items:center}.circle:after{content:"";width:10px;height:10px;border-radius:50%;background:var(--brand);transform:scale(0);transition:.14s}.reason input:checked+label{border-color:rgba(189,51,61,.55);background:#fff8f8;box-shadow:0 0 0 3px rgba(189,51,61,.07)}.reason input:checked+label .circle{border-color:var(--brand)}.reason input:checked+label .circle:after{transform:scale(1)}
+.field{margin-top:21px}.field label{display:block;margin-bottom:8px;font-size:14px;font-weight:900}.field em{font-style:normal;color:#929aa2;font-weight:500}textarea{width:100%;min-height:112px;resize:vertical;border:1.5px solid #dfe3e8;border-radius:13px;padding:14px 15px;background:#fff;color:#242a30;font:inherit;outline:none;transition:.16s}textarea:focus{border-color:#9da7b0;box-shadow:0 0 0 3px rgba(17,24,39,.05)}
+.error{display:none;margin-top:16px;padding:14px 15px;border:1px solid #efc1c1;border-radius:12px;background:#fff2f2;color:#9f2626;font-size:13px;font-weight:800;line-height:1.45}
+.actions{display:flex;align-items:center;gap:10px;margin-top:22px}.back{padding:12px;color:#6b747d;font-size:13px;font-weight:800;text-decoration:none}.btn{flex:1;min-height:50px;border:0;border-radius:13px;padding:15px 19px;background:linear-gradient(180deg,var(--brand),var(--brand2));box-shadow:0 8px 20px rgba(189,51,61,.23);color:#fff;font-size:14px;font-weight:900;letter-spacing:.02em;cursor:pointer;transition:.16s}.btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(189,51,61,.28)}.btn:disabled{opacity:.6;cursor:wait;transform:none}
+.privacy{margin:15px 0 0;text-align:center;color:#969ea6;font-size:11px;line-height:1.5}
+.success{display:none;text-align:center;padding:11px 0 3px}.check{width:58px;height:58px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;background:var(--greenbg);color:var(--green);font-size:30px;font-weight:900}.success h2{margin:0 0 8px;font-size:25px}.success p{margin:0;color:var(--muted);font-size:15px;line-height:1.55}.success .btn{display:block;margin-top:24px;text-decoration:none}
+@media(max-width:560px){.shell{padding:10px}.card{border-radius:18px}.top{padding:20px 18px 17px}.logo{width:175px;max-width:60%}.content{padding:23px 18px 25px}h1{font-size:26px}.reason label{padding:13px}.actions{flex-direction:column}.btn,.back{width:100%;text-align:center}.dots{gap:5px}.dot{width:8px;height:8px}.dot.active{width:22px}}
 </style>
 </head>
 <body>
-<div class="wrap"><div class="card">
-  <div class="logo"><img src="https://static.wixstatic.com/media/354683_9ff215ccea8743c694cd947f8ab0c73e~mv2.png" alt="PELEGO BOX"></div>
-  <div class="line"></div>
-  <div class="body">
-    <h1>Quer parar de receber nossos e-mails?</h1>
-    <p>Sem labirinto. Confirme abaixo e seu e-mail entra na lista de bloqueio do remarketing.</p>
-    <div class="who"><b>${nomeHtml}</b><span>${emailHtml}</span></div>
-    <form id="form">
-      <label for="motivo">Por que você quer sair?</label>
-      <select id="motivo" required>
-        <option value="">Selecione um motivo</option>
-        <option>Não tenho mais interesse</option>
-        <option>Já comprei o que precisava</option>
-        <option>Estou recebendo e-mails demais</option>
-        <option>O conteúdo não é relevante para mim</option>
-        <option>Outro motivo</option>
-      </select>
-      <label for="detalhe">Quer deixar algum comentário? <span style="font-weight:400">(opcional)</span></label>
-      <textarea id="detalhe" placeholder="Escreva aqui, se quiser."></textarea>
-      <button id="btn" class="btn" type="submit">CONFIRMAR DESCADASTRAMENTO</button>
-      <p class="note">A confirmação vale para este fluxo de remarketing da PELEGO BOX.</p>
-      <div id="ok" class="msg ok">Pronto. Seu e-mail foi descadastrado.</div>
-      <div id="err" class="msg err"></div>
-    </form>
-  </div>
-</div></div>
+<div class="shell">
+  <main class="card">
+    <header class="top">
+      <img class="logo" src="https://static.wixstatic.com/media/354683_9ff215ccea8743c694cd947f8ab0c73e~mv2.png" alt="PELEGO BOX">
+      <div class="dots" aria-label="Preferências"><span class="dot active"></span><span class="dot"></span><span class="dot"></span></div>
+    </header>
+
+    <section class="content">
+      <div id="formArea">
+        <div class="kicker">Preferências de comunicação</div>
+        <h1>Quer parar de receber estes e-mails?</h1>
+        <p class="lead">Escolha um motivo abaixo e confirme. Seu endereço será incluído na lista de bloqueio deste remarketing.</p>
+
+        <div class="person">
+          <small>Solicitação para</small>
+          <strong>${nomeHtml}</strong>
+          <span>${emailHtml}</span>
+        </div>
+
+        <form id="form">
+          <p class="title">Qual o principal motivo?</p>
+          <div class="reasons">
+            <div class="reason"><input type="radio" name="motivo" id="m1" value="Não tenho mais interesse"><label for="m1"><span class="circle"></span><span>Não tenho mais interesse</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m2" value="Já comprei o que precisava"><label for="m2"><span class="circle"></span><span>Já comprei o que precisava</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m3" value="Estou recebendo e-mails demais"><label for="m3"><span class="circle"></span><span>Estou recebendo e-mails demais</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m4" value="O conteúdo não é relevante para mim"><label for="m4"><span class="circle"></span><span>O conteúdo não é relevante para mim</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m5" value="Outro motivo"><label for="m5"><span class="circle"></span><span>Outro motivo</span></label></div>
+          </div>
+
+          <div class="field">
+            <label for="detalhe">Quer deixar uma mensagem? <em>(opcional)</em></label>
+            <textarea id="detalhe" maxlength="700" placeholder="Digite sua mensagem aqui..."></textarea>
+          </div>
+
+          <div id="err" class="error"></div>
+          <div class="actions">
+            <a class="back" href="https://www.pelegobox.com.br/">VOLTAR AO SITE</a>
+            <button id="btn" class="btn" type="submit">ENVIAR E DESCADASTRAR</button>
+          </div>
+          <p class="privacy">Seu e-mail será usado apenas para registrar esta preferência e impedir novos envios deste remarketing.</p>
+        </form>
+      </div>
+
+      <div id="success" class="success">
+        <div class="check">✓</div>
+        <h2>Descadastro confirmado</h2>
+        <p>Pronto. <strong>${emailHtml}</strong> foi colocado na lista de bloqueio deste remarketing.</p>
+        <a class="btn" href="https://www.pelegobox.com.br/">VOLTAR AO SITE</a>
+      </div>
+    </section>
+  </main>
+</div>
 <script>
 const email=${JSON.stringify(email)};
 const memberId=${JSON.stringify(memberId)};
 const nome=${JSON.stringify(nome)};
-const hook=${JSON.stringify(hook)};
 const form=document.getElementById('form');
 const btn=document.getElementById('btn');
-const okBox=document.getElementById('ok');
 const errBox=document.getElementById('err');
+const formArea=document.getElementById('formArea');
+const success=document.getElementById('success');
+
 form.addEventListener('submit',async(ev)=>{
-  ev.preventDefault();okBox.style.display='none';errBox.style.display='none';
-  const motivo=document.getElementById('motivo').value.trim();
+  ev.preventDefault();
+  errBox.style.display='none';
+  const selected=document.querySelector('input[name="motivo"]:checked');
+  const motivo=selected?selected.value:'';
   const detalhe=document.getElementById('detalhe').value.trim();
-  if(!email||!motivo){errBox.textContent='Faltou o e-mail ou o motivo.';errBox.style.display='block';return;}
-  btn.disabled=true;btn.textContent='PROCESSANDO...';
+
+  if(!email){errBox.textContent='Não encontramos o e-mail desta solicitação.';errBox.style.display='block';return;}
+  if(!motivo){errBox.textContent='Escolha um motivo antes de enviar.';errBox.style.display='block';return;}
+
+  btn.disabled=true;
+  btn.textContent='ENVIANDO...';
+
   try{
-    const r=await fetch('/_functions/descadastrarRemarketingSubmit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,member_id:memberId,nome,motivo,detalhe,hook,origem:'remarketing_projetos_prontos'})});
-    const data=await r.json();
-    if(!r.ok||!data.ok) throw new Error(data.error||'Falha ao descadastrar');
-    form.querySelector('select').disabled=true;form.querySelector('textarea').disabled=true;btn.style.display='none';okBox.style.display='block';
-  }catch(e){errBox.textContent=e.message||'Não foi possível concluir agora.';errBox.style.display='block';btn.disabled=false;btn.textContent='CONFIRMAR DESCADASTRAMENTO';}
+    const r=await fetch('/_functions/descadastrarRemarketingSubmit',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,member_id:memberId,nome,motivo,detalhe,origem:'remarketing_projetos_prontos'})
+    });
+
+    let data={};
+    try{data=await r.json();}catch(_e){}
+    if(!r.ok||!data.ok)throw new Error(data.error||'Não foi possível concluir o descadastro.');
+
+    formArea.style.display='none';
+    success.style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){
+    errBox.textContent=e.message||'Não foi possível concluir agora.';
+    errBox.style.display='block';
+    btn.disabled=false;
+    btn.textContent='ENVIAR E DESCADASTRAR';
+  }
 });
 </script>
-</body></html>`;
+</body>
+</html>`;
 
   return ok({
     headers: {
@@ -103,50 +176,10 @@ form.addEventListener('submit',async(ev)=>{
   });
 }
 
-export async function post_descadastrarRemarketingSubmit(request) {
-  try {
-    const data = await readJsonBody(request);
-    const email = normalizeEmail(data?.email);
-    const motivo = safe(data?.motivo);
-    const hook = safe(data?.hook);
-
-    if (!email || !motivo) {
-      return badRequest({
-        headers: { "Content-Type": "application/json" },
-        body: { ok: false, error: "E-mail e motivo são obrigatórios." }
-      });
-    }
-
-    if (!/^https:\/\/hook\.(?:us\d+\.)?make\.com\//i.test(hook)) {
-      return badRequest({
-        headers: { "Content-Type": "application/json" },
-        body: { ok: false, error: "Descadastro ainda não configurado." }
-      });
-    }
-
-    const response = await fetch(hook, {
-      method: "post",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        member_id: safe(data?.member_id),
-        nome: safe(data?.nome),
-        motivo,
-        detalhe: safe(data?.detalhe),
-        origem: safe(data?.origem) || "remarketing_projetos_prontos"
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Webhook respondeu ${response.status}`);
-    }
-
-    return ok({headers:{"Content-Type":"application/json"},body:{ok:true}});
-  } catch (error) {
-    return serverError({headers:{"Content-Type":"application/json"},body:{ok:false,error:safe(error?.message)||"descadastro_error"}});
-  }
-}
 '''
 
-path.write_text(text.rstrip() + block + '\n', encoding='utf-8')
-print('Página adicionada ao http-functions.js')
+before, tail = text.split(start, 1)
+_, after = tail.split(end, 1)
+updated = before + block + end + after
+path.write_text(updated, encoding='utf-8')
+print('Layout profissional V2 aplicado ao http-functions.js')

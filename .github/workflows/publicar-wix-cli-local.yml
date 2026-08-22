@@ -1,16 +1,10 @@
-name: Publicar Wix via CLI local
+name: Restaurar visual estável V39 e publicar Wix
 
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/publicar-wix-cli-local.yml"
-      - "package.json"
-      - "src/public/custom-elements/pelego-radio.js"
-      - "src/public/custom-elements/pelego-radio-core.js"
-      - "src/pages/Rádio Pelego Box.ypxc8.js"
-      - "src/public/radioPelegoPersistente.js"
-      - ".github/triggers/wix-cli-radio-deploy.txt"
   workflow_dispatch:
 
 concurrency:
@@ -38,23 +32,28 @@ jobs:
       - name: Instalar dependências
         run: npm ci --ignore-scripts
 
-      - name: Validar V42 consolidada sem modificar arquivos
+      - name: Restaurar somente visual estável V39
         run: |
           set -euo pipefail
-          grep -q "PB_V42_CORE_ONLY_MOBILE" src/public/custom-elements/pelego-radio.js
-          grep -q "mobile ? '' : SKIN" src/public/custom-elements/pelego-radio.js
-          grep -q "PB_CORE_CANONICAL_MOBILE_V41" src/public/custom-elements/pelego-radio-core.js
-          grep -q "MOBILE_V34_TITLE_LOCK" src/public/custom-elements/pelego-radio-core.js
-          grep -q "MOBILE_V35_FINISH" src/public/custom-elements/pelego-radio-core.js
+          git checkout 27646f2cb993bf3d402f4a39948bdd0cea40cc90 -- \
+            src/public/custom-elements/pelego-radio.js \
+            src/public/custom-elements/pelego-radio-core.js
+
+      - name: Validar visual V39 e preservar motor atual
+        run: |
+          set -euo pipefail
+          grep -q "PB_RESPONSIVE_HOST_V39" src/public/custom-elements/pelego-radio.js
+          grep -q "__pbResponsiveSkinObserver" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V33_CANONICAL_FLOW" src/public/custom-elements/pelego-radio.js
+          grep -q "PB_V36_READY_FIRST_PAINT" src/public/custom-elements/pelego-radio.js
+          grep -q "MOBILE_V35_FINISH" src/public/custom-elements/pelego-radio.js
+          grep -q "PB_CORE_V36_HIDE_UNTIL_SKIN" src/public/custom-elements/pelego-radio-core.js
+          ! grep -q "PB_CORE_CANONICAL_MOBILE_V41" src/public/custom-elements/pelego-radio-core.js
+          ! grep -q "PB_V42_CORE_ONLY_MOBILE" src/public/custom-elements/pelego-radio.js
           grep -q "PB_MEDIA_SESSION_SINGLE_OWNER_V41" src/public/radioPelegoPersistente.js
           grep -q "nexttrack:goNext" src/public/radioPelegoPersistente.js
           grep -q "previoustrack:goPrevious" src/public/radioPelegoPersistente.js
           grep -q "PELEGO_RADIO_LAST_MEDIA_KEY" src/public/radioPelegoPersistente.js
-          ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio.js
-          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio.js
-          ! grep -q "ANALISADOR - 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
-          ! grep -q "EQUALIZADOR 6 BANDAS" src/public/custom-elements/pelego-radio-core.js
-          test -z "$(git status --porcelain)"
 
       - name: Autenticar Wix CLI
         env:
@@ -65,10 +64,10 @@ jobs:
           npx wix login --api-key "$WIX_API_KEY"
           npx wix whoami
 
-      - name: Publicar exatamente a V42 consolidada via Wix CLI
+      - name: Publicar visual V39 com motor atual
         run: npx wix publish --source local -y
 
-      - name: Registrar publicação Wix CLI confirmada
+      - name: Registrar publicação e consolidar visual
         if: success()
         run: |
           set -euo pipefail
@@ -76,12 +75,14 @@ jobs:
           printf 'STATUS=SUCESSO\nRUN_ID=%s\nSOURCE_SHA=%s\nPUBLISHED_AT=%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/wix-cli-radio-last-success.txt
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
-          git add .deploy/wix-cli-radio-last-success.txt
-          git commit -m "Registrar publicação V42 congelada [skip ci]" || exit 0
+          git add .deploy/wix-cli-radio-last-success.txt \
+            src/public/custom-elements/pelego-radio.js \
+            src/public/custom-elements/pelego-radio-core.js
+          git commit -m "Restaurar visual estável V39 mantendo motor atual [skip ci]" || exit 0
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Registrar falha do Wix CLI
+      - name: Registrar falha
         if: failure()
         run: |
           set -euo pipefail
@@ -90,6 +91,6 @@ jobs:
           git config user.name "PELEGO BOX Wix CLI"
           git config user.email "pelegoboxprojetos3d@users.noreply.github.com"
           git add .deploy/wix-cli-radio-last-failure.txt
-          git commit -m "Registrar falha da publicação da Rádio [skip ci]" || exit 0
+          git commit -m "Registrar falha ao restaurar visual V39 [skip ci]" || exit 0
           git pull --rebase origin main || true
           git push origin HEAD:main || true

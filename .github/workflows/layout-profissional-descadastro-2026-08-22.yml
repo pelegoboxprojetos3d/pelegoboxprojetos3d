@@ -1,0 +1,195 @@
+name: Layout profissional descadastro
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar-layout:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aplicar página profissional de descadastro
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/backend/http-functions.js')
+          text = path.read_text(encoding='utf-8')
+
+          start = '// ======================================================\n// REMARKETING_UNSUBSCRIBE_PAGE_V1'
+          end = 'export async function post_descadastrarRemarketingSubmit(request) {'
+
+          if start not in text or end not in text:
+              raise SystemExit('Bloco de descadastro não encontrado')
+
+          new_block = r'''// ======================================================
+// REMARKETING_UNSUBSCRIBE_PAGE_V2
+// Página pública: /_functions/descadastrarRemarketing
+// ======================================================
+
+function escapeHtmlRemarketing(value) {
+  return safe(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export async function get_descadastrarRemarketing(request) {
+  const email = normalizeEmail(request?.query?.email);
+  const memberId = safe(request?.query?.member_id);
+  const nome = safe(request?.query?.nome) || "Cliente";
+
+  const emailHtml = escapeHtmlRemarketing(email || "E-mail não informado");
+  const nomeHtml = escapeHtmlRemarketing(nome);
+
+  const page = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111318">
+<title>Preferências de e-mail | PELEGO BOX</title>
+<style>
+:root{--ink:#15191e;--muted:#6c7680;--line:#e7eaee;--soft:#f6f7f9;--red:#c3343d;--red2:#a92730;--green:#167a46;--greenbg:#edf8f2}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0}
+body{font-family:Inter,Arial,Helvetica,sans-serif;color:var(--ink);background:radial-gradient(circle at 15% 10%,rgba(195,52,61,.08),transparent 32%),linear-gradient(180deg,#fafbfc 0%,#f1f3f6 100%);-webkit-font-smoothing:antialiased}
+.shell{min-height:100vh;display:grid;place-items:center;padding:28px 16px}
+.card{width:min(100%,680px);background:#fff;border:1px solid rgba(15,23,42,.08);border-radius:24px;box-shadow:0 28px 80px rgba(20,25,32,.12);overflow:hidden}
+.top{padding:28px 30px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:20px}
+.logo{width:205px;max-width:48%;height:auto;display:block}
+.steps{display:flex;align-items:center;gap:7px;flex:0 0 auto}.dot{width:9px;height:9px;border-radius:50%;background:#d9dde2}.dot.active{width:26px;border-radius:99px;background:var(--red)}
+.content{padding:30px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:900;color:var(--red);margin-bottom:8px}
+h1{font-size:30px;line-height:1.12;margin:0 0 10px;letter-spacing:-.025em}
+.lead{margin:0;color:var(--muted);font-size:15px;line-height:1.6}
+.person{margin:24px 0;padding:17px 18px;background:var(--soft);border:1px solid var(--line);border-radius:15px}.person small{display:block;color:#8a939c;font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;margin-bottom:4px}.person strong{display:block;font-size:16px}.person span{display:block;margin-top:3px;color:#68727c;font-size:14px;overflow-wrap:anywhere}
+.section-title{font-size:14px;font-weight:900;margin:0 0 11px}.reasons{display:grid;gap:9px}.reason{position:relative}.reason input{position:absolute;opacity:0;pointer-events:none}.reason label{display:flex;align-items:center;gap:12px;padding:14px 15px;border:1.5px solid #dfe3e8;border-radius:13px;cursor:pointer;transition:.18s ease;background:#fff;font-size:14px;font-weight:700;color:#3b4249}.radio{width:20px;height:20px;border:2px solid #bcc4cc;border-radius:50%;display:grid;place-items:center;flex:0 0 auto}.radio:after{content:"";width:10px;height:10px;border-radius:50%;background:var(--red);transform:scale(0);transition:.15s}.reason input:checked+label{border-color:rgba(195,52,61,.55);background:#fff8f8;box-shadow:0 0 0 3px rgba(195,52,61,.07)}.reason input:checked+label .radio{border-color:var(--red)}.reason input:checked+label .radio:after{transform:scale(1)}
+.field{margin-top:21px}.field label{display:block;font-size:14px;font-weight:900;margin-bottom:8px}.field em{font-style:normal;font-weight:500;color:#9199a1}textarea{width:100%;min-height:112px;resize:vertical;border:1.5px solid #dfe3e8;border-radius:13px;padding:14px 15px;font:inherit;color:#242a30;outline:none;transition:.18s;background:#fff}textarea:focus{border-color:#9da7b0;box-shadow:0 0 0 3px rgba(17,24,39,.05)}
+.actions{margin-top:22px;display:flex;gap:10px;align-items:center}.btn{appearance:none;border:0;border-radius:13px;background:linear-gradient(180deg,var(--red),var(--red2));color:#fff;font-size:14px;font-weight:900;letter-spacing:.02em;padding:15px 19px;min-height:50px;cursor:pointer;box-shadow:0 8px 20px rgba(195,52,61,.23);transition:.18s;flex:1}.btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(195,52,61,.28)}.btn:disabled{opacity:.6;cursor:wait;transform:none}.back{color:#6b747d;text-decoration:none;font-size:13px;font-weight:800;padding:12px}
+.privacy{margin:15px 0 0;text-align:center;font-size:11px;line-height:1.5;color:#969ea6}.msg{display:none;margin-top:18px;padding:15px 16px;border-radius:13px;font-size:14px;font-weight:800;line-height:1.45}.msg.ok{background:var(--greenbg);color:var(--green);border:1px solid #bee4ce}.msg.err{background:#fff2f2;color:#a02727;border:1px solid #f0c5c5}
+.success{display:none;text-align:center;padding:12px 0 4px}.check{width:58px;height:58px;margin:0 auto 14px;border-radius:50%;background:var(--greenbg);color:var(--green);display:grid;place-items:center;font-size:30px;font-weight:900}.success h2{font-size:24px;margin:0 0 8px}.success p{margin:0;color:var(--muted);line-height:1.55}
+@media(max-width:560px){.shell{padding:10px}.card{border-radius:18px}.top{padding:20px 18px 17px}.logo{width:175px;max-width:58%}.content{padding:23px 18px 25px}h1{font-size:26px}.actions{flex-direction:column}.btn,.back{width:100%;text-align:center}.reason label{padding:13px}.steps{gap:5px}.dot{width:8px;height:8px}.dot.active{width:22px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="card">
+    <header class="top">
+      <img class="logo" src="https://static.wixstatic.com/media/354683_9ff215ccea8743c694cd947f8ab0c73e~mv2.png" alt="PELEGO BOX">
+      <div class="steps" aria-label="Etapa de preferências"><span class="dot active"></span><span class="dot"></span><span class="dot"></span></div>
+    </header>
+    <section class="content">
+      <div id="formArea">
+        <div class="eyebrow">Preferências de comunicação</div>
+        <h1>Quer parar de receber estes e-mails?</h1>
+        <p class="lead">Sem pegadinha e sem vinte telas. Escolha um motivo abaixo e confirme. Seu endereço será bloqueado deste fluxo de remarketing.</p>
+
+        <div class="person">
+          <small>Solicitação para</small>
+          <strong>${nomeHtml}</strong>
+          <span>${emailHtml}</span>
+        </div>
+
+        <form id="form">
+          <p class="section-title">Qual o principal motivo?</p>
+          <div class="reasons">
+            <div class="reason"><input type="radio" name="motivo" id="m1" value="Não tenho mais interesse"><label for="m1"><span class="radio"></span><span>Não tenho mais interesse</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m2" value="Já comprei o que precisava"><label for="m2"><span class="radio"></span><span>Já comprei o que precisava</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m3" value="Estou recebendo e-mails demais"><label for="m3"><span class="radio"></span><span>Estou recebendo e-mails demais</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m4" value="O conteúdo não é relevante para mim"><label for="m4"><span class="radio"></span><span>O conteúdo não é relevante para mim</span></label></div>
+            <div class="reason"><input type="radio" name="motivo" id="m5" value="Outro motivo"><label for="m5"><span class="radio"></span><span>Outro motivo</span></label></div>
+          </div>
+
+          <div class="field">
+            <label for="detalhe">Quer deixar uma mensagem? <em>(opcional)</em></label>
+            <textarea id="detalhe" maxlength="700" placeholder="Pode escrever aqui. A gente lê de verdade."></textarea>
+          </div>
+
+          <div id="err" class="msg err"></div>
+          <div class="actions">
+            <a class="back" href="https://www.pelegobox.com.br/">VOLTAR AO SITE</a>
+            <button id="btn" class="btn" type="submit">ENVIAR E DESCADASTRAR</button>
+          </div>
+          <p class="privacy">Seu e-mail será usado apenas para registrar esta preferência e impedir novos envios deste remarketing.</p>
+        </form>
+      </div>
+
+      <div id="success" class="success">
+        <div class="check">✓</div>
+        <h2>Descadastro confirmado</h2>
+        <p>Pronto. <strong>${emailHtml}</strong> foi colocado na lista de bloqueio deste remarketing.</p>
+        <div class="actions" style="margin-top:24px"><a class="btn" style="text-decoration:none" href="https://www.pelegobox.com.br/">VOLTAR AO SITE</a></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+const email=${JSON.stringify(email)};
+const memberId=${JSON.stringify(memberId)};
+const nome=${JSON.stringify(nome)};
+const form=document.getElementById('form');
+const btn=document.getElementById('btn');
+const errBox=document.getElementById('err');
+const formArea=document.getElementById('formArea');
+const success=document.getElementById('success');
+form.addEventListener('submit',async(ev)=>{
+  ev.preventDefault();
+  errBox.style.display='none';
+  const checked=document.querySelector('input[name="motivo"]:checked');
+  const motivo=checked?checked.value:'';
+  const detalhe=document.getElementById('detalhe').value.trim();
+  if(!email){errBox.textContent='Não encontramos o e-mail desta solicitação.';errBox.style.display='block';return;}
+  if(!motivo){errBox.textContent='Escolha um motivo antes de enviar.';errBox.style.display='block';return;}
+  btn.disabled=true;btn.textContent='ENVIANDO...';
+  try{
+    const r=await fetch('/_functions/descadastrarRemarketingSubmit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,member_id:memberId,nome,motivo,detalhe,origem:'remarketing_projetos_prontos'})});
+    let data={};
+    try{data=await r.json();}catch(_e){}
+    if(!r.ok||!data.ok)throw new Error(data.error||'Não foi possível concluir o descadastro.');
+    formArea.style.display='none';success.style.display='block';window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){errBox.textContent=e.message||'Não foi possível concluir agora.';errBox.style.display='block';btn.disabled=false;btn.textContent='ENVIAR E DESCADASTRAR';}
+});
+</script>
+</body>
+</html>`;
+
+  return ok({
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store"
+    },
+    body: page
+  });
+}
+
+'''
+
+          before, tail = text.split(start, 1)
+          _, after = tail.split(end, 1)
+          updated = before + new_block + end + after
+          path.write_text(updated, encoding='utf-8')
+          PY
+
+      - name: Salvar alteração no repositório
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração necessária"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/backend/http-functions.js
+          git commit -m "Aplicar layout profissional no descadastro"
+          git push

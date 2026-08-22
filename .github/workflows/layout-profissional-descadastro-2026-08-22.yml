@@ -3,23 +3,33 @@ name: Layout profissional descadastro
 on:
   push:
     branches: [main]
+    paths:
+      - 'automation-triggers/layout-profissional-descadastro-2026-08-22.trigger'
+      - '.github/workflows/layout-profissional-descadastro-2026-08-22.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: layout-profissional-descadastro
+  cancel-in-progress: true
+
 jobs:
   aplicar-layout:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - name: Baixar código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Aplicar página profissional de descadastro
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('src/backend/http-functions.js')
           text = path.read_text(encoding='utf-8')
@@ -27,6 +37,8 @@ jobs:
           start = '// ======================================================\n// REMARKETING_UNSUBSCRIBE_PAGE_V1'
           end = 'export async function post_descadastrarRemarketingSubmit(request) {'
 
+          if 'REMARKETING_UNSUBSCRIBE_PAGE_V2' in text:
+              raise SystemExit(0)
           if start not in text or end not in text:
               raise SystemExit('Bloco de descadastro não encontrado')
 
@@ -77,7 +89,7 @@ h1{font-size:30px;line-height:1.12;margin:0 0 10px;letter-spacing:-.025em}
 .section-title{font-size:14px;font-weight:900;margin:0 0 11px}.reasons{display:grid;gap:9px}.reason{position:relative}.reason input{position:absolute;opacity:0;pointer-events:none}.reason label{display:flex;align-items:center;gap:12px;padding:14px 15px;border:1.5px solid #dfe3e8;border-radius:13px;cursor:pointer;transition:.18s ease;background:#fff;font-size:14px;font-weight:700;color:#3b4249}.radio{width:20px;height:20px;border:2px solid #bcc4cc;border-radius:50%;display:grid;place-items:center;flex:0 0 auto}.radio:after{content:"";width:10px;height:10px;border-radius:50%;background:var(--red);transform:scale(0);transition:.15s}.reason input:checked+label{border-color:rgba(195,52,61,.55);background:#fff8f8;box-shadow:0 0 0 3px rgba(195,52,61,.07)}.reason input:checked+label .radio{border-color:var(--red)}.reason input:checked+label .radio:after{transform:scale(1)}
 .field{margin-top:21px}.field label{display:block;font-size:14px;font-weight:900;margin-bottom:8px}.field em{font-style:normal;font-weight:500;color:#9199a1}textarea{width:100%;min-height:112px;resize:vertical;border:1.5px solid #dfe3e8;border-radius:13px;padding:14px 15px;font:inherit;color:#242a30;outline:none;transition:.18s;background:#fff}textarea:focus{border-color:#9da7b0;box-shadow:0 0 0 3px rgba(17,24,39,.05)}
 .actions{margin-top:22px;display:flex;gap:10px;align-items:center}.btn{appearance:none;border:0;border-radius:13px;background:linear-gradient(180deg,var(--red),var(--red2));color:#fff;font-size:14px;font-weight:900;letter-spacing:.02em;padding:15px 19px;min-height:50px;cursor:pointer;box-shadow:0 8px 20px rgba(195,52,61,.23);transition:.18s;flex:1}.btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(195,52,61,.28)}.btn:disabled{opacity:.6;cursor:wait;transform:none}.back{color:#6b747d;text-decoration:none;font-size:13px;font-weight:800;padding:12px}
-.privacy{margin:15px 0 0;text-align:center;font-size:11px;line-height:1.5;color:#969ea6}.msg{display:none;margin-top:18px;padding:15px 16px;border-radius:13px;font-size:14px;font-weight:800;line-height:1.45}.msg.ok{background:var(--greenbg);color:var(--green);border:1px solid #bee4ce}.msg.err{background:#fff2f2;color:#a02727;border:1px solid #f0c5c5}
+.privacy{margin:15px 0 0;text-align:center;font-size:11px;line-height:1.5;color:#969ea6}.msg{display:none;margin-top:18px;padding:15px 16px;border-radius:13px;font-size:14px;font-weight:800;line-height:1.45}.msg.err{background:#fff2f2;color:#a02727;border:1px solid #f0c5c5}
 .success{display:none;text-align:center;padding:12px 0 4px}.check{width:58px;height:58px;margin:0 auto 14px;border-radius:50%;background:var(--greenbg);color:var(--green);display:grid;place-items:center;font-size:30px;font-weight:900}.success h2{font-size:24px;margin:0 0 8px}.success p{margin:0;color:var(--muted);line-height:1.55}
 @media(max-width:560px){.shell{padding:10px}.card{border-radius:18px}.top{padding:20px 18px 17px}.logo{width:175px;max-width:58%}.content{padding:23px 18px 25px}h1{font-size:26px}.actions{flex-direction:column}.btn,.back{width:100%;text-align:center}.reason label{padding:13px}.steps{gap:5px}.dot{width:8px;height:8px}.dot.active{width:22px}}
 </style>
@@ -93,7 +105,7 @@ h1{font-size:30px;line-height:1.12;margin:0 0 10px;letter-spacing:-.025em}
       <div id="formArea">
         <div class="eyebrow">Preferências de comunicação</div>
         <h1>Quer parar de receber estes e-mails?</h1>
-        <p class="lead">Sem pegadinha e sem vinte telas. Escolha um motivo abaixo e confirme. Seu endereço será bloqueado deste fluxo de remarketing.</p>
+        <p class="lead">Escolha um motivo abaixo e confirme. Seu endereço será bloqueado deste fluxo de remarketing.</p>
 
         <div class="person">
           <small>Solicitação para</small>
@@ -113,7 +125,7 @@ h1{font-size:30px;line-height:1.12;margin:0 0 10px;letter-spacing:-.025em}
 
           <div class="field">
             <label for="detalhe">Quer deixar uma mensagem? <em>(opcional)</em></label>
-            <textarea id="detalhe" maxlength="700" placeholder="Pode escrever aqui. A gente lê de verdade."></textarea>
+            <textarea id="detalhe" maxlength="700" placeholder="Digite sua mensagem aqui..."></textarea>
           </div>
 
           <div id="err" class="msg err"></div>
@@ -181,15 +193,27 @@ form.addEventListener('submit',async(ev)=>{
           path.write_text(updated, encoding='utf-8')
           PY
 
-      - name: Salvar alteração no repositório
+      - name: Validar alteração
         shell: bash
         run: |
-          if git diff --quiet; then
-            echo "Nenhuma alteração necessária"
-            exit 0
+          set -euo pipefail
+          f='src/backend/http-functions.js'
+          grep -q 'REMARKETING_UNSUBSCRIBE_PAGE_V2' "$f"
+          grep -q 'ENVIAR E DESCADASTRAR' "$f"
+          grep -q 'input type="radio"' "$f"
+          grep -q 'textarea id="detalhe"' "$f"
+
+      - name: Gravar alteração no main
+        shell: bash
+        run: |
+          set -euo pipefail
+          f='src/backend/http-functions.js'
+          if git diff --quiet -- "$f"; then
+            echo 'O layout profissional já estava aplicado.'
+          else
+            git config user.name 'PELEGO BOX Automação'
+            git config user.email 'pelegobox82@gmail.com'
+            git add "$f"
+            git commit -m 'Aplicar layout profissional no descadastro'
+            git push origin HEAD:main
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/backend/http-functions.js
-          git commit -m "Aplicar layout profissional no descadastro"
-          git push

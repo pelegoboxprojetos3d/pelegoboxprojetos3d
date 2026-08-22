@@ -139,6 +139,7 @@
 
     persistRemote();
     renderMini();
+    try{syncControllerMediaSession();}catch(_){}
 
     const newStationId = remote.currentStation?.id || '';
     if (!wasPlaying && remote.playing) audioProxy.dispatchEvent(new Event('playing'));
@@ -212,6 +213,8 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   function stop(){clearTimeout(randomTimer);audio.pause();audio.removeAttribute('src');audio.load();state.currentStation=null;state.sessionStarted=false;broadcast();}
   function setVolume(value){state.volume=clamp(value,0,50);if(state.volume>0)lastNonZeroVolume=state.volume;if(gainNode)gainNode.gain.value=state.volume/100;else audio.volume=state.volume/100;broadcast();}
   /* PB_MEDIA_KEYS_V37 */
+  /* PB_MEDIA_KEYS_V40_SESSION_BRIDGE */
+  let mediaVirtualPosition=1800;
   function syncMediaSession(){
     if(!('mediaSession' in navigator))return;
     const station=state.currentStation;
@@ -233,18 +236,29 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
       mediaPlaybackState=playback;
       try{navigator.mediaSession.playbackState=playback;}catch(_){}
     }
+    try{
+      const position=Math.max(1,Math.min(3599,Number(mediaVirtualPosition)||1800));
+      navigator.mediaSession.setPositionState({duration:3600,playbackRate:1,position});
+    }catch(_){}
   }
 
   function installMediaSessionControls(){
     if(!('mediaSession' in navigator))return;
+    const goNext=()=>{mediaVirtualPosition=Math.min(3599,mediaVirtualPosition+30);next();syncMediaSession();};
+    const goPrevious=()=>{mediaVirtualPosition=Math.max(1,mediaVirtualPosition-30);previous();syncMediaSession();};
     const handlers={
       play:()=>{if(audio.paused)toggle();},
       pause:()=>{if(!audio.paused){audio.pause();broadcast();}},
       stop:()=>stop(),
-      nexttrack:()=>next(),
-      previoustrack:()=>previous(),
-      seekforward:()=>next(),
-      seekbackward:()=>previous()
+      nexttrack:goNext,
+      previoustrack:goPrevious,
+      seekforward:goNext,
+      seekbackward:goPrevious,
+      seekto:details=>{
+        const target=Number(details?.seekTime);
+        if(!Number.isFinite(target))return;
+        if(target>=mediaVirtualPosition)goNext();else goPrevious();
+      }
     };
     Object.entries(handlers).forEach(([action,handler])=>{try{navigator.mediaSession.setActionHandler(action,handler);}catch(_){}});
     syncMediaSession();
@@ -254,7 +268,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   let lastHardwareActionName='';let lastHardwareActionAt=0;
   function runHardwareAction(name,fn){
     const now=Date.now();
-    if(name===lastHardwareActionName&&now-lastHardwareActionAt<180)return;
+    if(name===lastHardwareActionName&&now-lastHardwareActionAt<420)return;
     lastHardwareActionName=name;lastHardwareActionAt=now;
     try{fn();}catch(_){}
   }
@@ -278,6 +292,8 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
     };
     window.addEventListener('keydown',handler,true);
     document.addEventListener('keydown',handler,true);
+    window.addEventListener('keyup',handler,true);
+    document.addEventListener('keyup',handler,true);
   }
 
   function setEqGains(values){if(!Array.isArray(values)||values.length!==24)return;state.eqGains=values.map(v=>clamp(v,-12,12));filters.forEach((f,i)=>{f.gain.value=state.eqGains[i];});}
@@ -471,7 +487,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   let controllerLastNonZeroVolume=Number(remote.volume||32)||32;
   function controllerRunHardware(name,fn){
     const now=Date.now();
-    if(name===controllerLastHardwareAction&&now-controllerLastHardwareAt<180)return;
+    if(name===controllerLastHardwareAction&&now-controllerLastHardwareAt<420)return;
     controllerLastHardwareAction=name;controllerLastHardwareAt=now;
     try{fn();}catch(_){}
   }
@@ -496,8 +512,44 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
     };
     window.addEventListener('keydown',handler,true);
     document.addEventListener('keydown',handler,true);
+    window.addEventListener('keyup',handler,true);
+    document.addEventListener('keyup',handler,true);
   }
   installControllerHardwareKeys();
+
+  let controllerMediaPosition=1800;
+  function syncControllerMediaSession(){
+    if(!('mediaSession' in navigator))return;
+    try{
+      if(typeof MediaMetadata==='function'){
+        navigator.mediaSession.metadata=new MediaMetadata({
+          title:remote.currentStation?.name||'PELEGO RADIO',
+          artist:'PELEGO BOX',
+          album:remote.currentStation?.genre||'Rádio Pelego Box'
+        });
+      }
+    }catch(_){}
+    try{navigator.mediaSession.playbackState=remote.playing?'playing':'paused';}catch(_){}
+    try{navigator.mediaSession.setPositionState({duration:3600,playbackRate:1,position:Math.max(1,Math.min(3599,controllerMediaPosition))});}catch(_){}
+  }
+  function installControllerMediaSession(){
+    if(!('mediaSession' in navigator))return;
+    const goNext=()=>{controllerMediaPosition=Math.min(3599,controllerMediaPosition+30);next();syncControllerMediaSession();};
+    const goPrevious=()=>{controllerMediaPosition=Math.max(1,controllerMediaPosition-30);previous();syncControllerMediaSession();};
+    const handlers={
+      play:()=>toggle(),
+      pause:()=>sendCommand({type:'PAUSE'}),
+      stop:()=>stop(),
+      nexttrack:goNext,
+      previoustrack:goPrevious,
+      seekforward:goNext,
+      seekbackward:goPrevious,
+      seekto:details=>{const target=Number(details?.seekTime);if(!Number.isFinite(target))return;if(target>=controllerMediaPosition)goNext();else goPrevious();}
+    };
+    Object.entries(handlers).forEach(([action,handler])=>{try{navigator.mediaSession.setActionHandler(action,handler);}catch(_){}});
+    syncControllerMediaSession();
+  }
+  installControllerMediaSession();
 
   channel?.addEventListener('message', event => {
     const data = event.data || {};

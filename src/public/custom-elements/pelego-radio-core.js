@@ -167,6 +167,9 @@ const HTML = String.raw`
   .footer{display:none!important}
 }
 /* END_MOBILE_V22_CORE_FINAL */
+
+/* PB_CORE_V36_HIDE_UNTIL_SKIN */
+@media(max-width:640px){:host{visibility:hidden!important;opacity:0!important}}
 </style>
 <div class="shell" id="shell">
   <div class="topbar">

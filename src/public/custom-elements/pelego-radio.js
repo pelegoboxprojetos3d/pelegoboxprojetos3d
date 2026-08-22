@@ -447,6 +447,7 @@ const SKIN = `
 const MOBILE_CLEAN_SKIN = `
 :host{
   display:block!important;
+  visibility:visible!important;opacity:1!important;
   width:310px!important;min-width:310px!important;max-width:310px!important;
   height:auto!important;min-height:0!important;max-height:none!important;
   margin:0 auto!important;overflow:visible!important;
@@ -604,6 +605,9 @@ function applySkin(el){
   const skinForThisView = mobile ? MOBILE_CLEAN_SKIN : SKIN;
   if(style.textContent !== skinForThisView) style.textContent = skinForThisView;
   if(root.lastElementChild !== style) root.appendChild(style);
+  // PB_V36_READY_FIRST_PAINT: libera o host somente depois da skin final existir.
+  el.style.setProperty('visibility','visible','important');
+  el.style.setProperty('opacity','1','important');
   style.dataset.pelegoSkinRev = mobile ? '20260821-mobile-final-v33' : '20260821-desktop-preservado-v2';
 
   const analyzerPanel=root.querySelector('.grid-top>.panel:nth-child(3)');
@@ -673,6 +677,8 @@ function applySkin(el){
   const uninstall = root.getElementById('uninstall');
   if(uninstall) uninstall.innerHTML = `<span class="pb-foot-icon">${TRASH}</span><span>DESINSTALAR APLICATIVO</span>`;
 
+  // Primeiro desenho já usa as dimensões V35 antes do primeiro paint visível.
+  try{ el.resizeCanvas?.(); el.drawIdleAnalyzer?.(); }catch(_){}
   requestAnimationFrame(()=>{ try{ el.resizeCanvas?.(); el.drawIdleAnalyzer?.(); }catch(_){} });
 }
 
@@ -827,6 +833,8 @@ const scheduleSkinSweep = ()=>{
   requestAnimationFrame(()=>applyAllSkins());
 };
 
+// V36: aplica imediatamente para elementos que o core já atualizou antes deste módulo.
+applyAllSkins();
 scheduleSkinSweep();
 
 if(window.__PELEGO_RADIO_SKIN_HEALER__){

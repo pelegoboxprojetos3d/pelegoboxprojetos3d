@@ -139,7 +139,6 @@
 
     persistRemote();
     renderMini();
-    try{syncControllerMediaSession();}catch(_){}
 
     const newStationId = remote.currentStation?.id || '';
     if (!wasPlaying && remote.playing) audioProxy.dispatchEvent(new Event('playing'));
@@ -214,6 +213,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   function setVolume(value){state.volume=clamp(value,0,50);if(state.volume>0)lastNonZeroVolume=state.volume;if(gainNode)gainNode.gain.value=state.volume/100;else audio.volume=state.volume/100;broadcast();}
   /* PB_MEDIA_KEYS_V37 */
   /* PB_MEDIA_KEYS_V40_SESSION_BRIDGE */
+  /* PB_MEDIA_SESSION_SINGLE_OWNER_V41 */
   let mediaVirtualPosition=1800;
   function syncMediaSession(){
     if(!('mediaSession' in navigator))return;
@@ -275,6 +275,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   function installHardwareKeyFallback(){
     const handler=event=>{
       const key=String(event.key||event.code||'');const keyCode=Number(event.keyCode||event.which||0);/* PB_MEDIA_KEYS_V39_LEGACY */
+      try{localStorage.setItem('PELEGO_RADIO_LAST_MEDIA_KEY',JSON.stringify({scope:'popup',key,keyCode,type:event.type,at:Date.now()}));}catch(_){}
       const nextKeys=['MediaTrackNext','MediaNextTrack','NextTrack','BrowserForward','MediaFastForward','FastForward'];
       const prevKeys=['MediaTrackPrevious','MediaPreviousTrack','PreviousTrack','BrowserBack','MediaRewind','Rewind'];
       const playKeys=['MediaPlayPause','MediaPlay','PlayPause'];
@@ -307,7 +308,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   installMediaSessionControls();
   installHardwareKeyFallback();
   channel?.addEventListener('message',event=>{const data=event.data||{};if(data.source==='controller')window.pelegoRadioCommand(data);});
-  audio.addEventListener('playing',()=>{state.sessionStarted=true;scheduleRandom();broadcast();});
+  audio.addEventListener('playing',()=>{state.sessionStarted=true;scheduleRandom();installMediaSessionControls();broadcast();});
   audio.addEventListener('pause',broadcast);
   audio.addEventListener('loadedmetadata',broadcast);
   audio.addEventListener('error',()=>{recover().catch(()=>broadcast('Estação indisponível.'));});
@@ -495,6 +496,7 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
     const handler=event=>{
       if(!remote.sessionStarted&&!remote.currentStation)return;
       const key=String(event.key||event.code||'');const keyCode=Number(event.keyCode||event.which||0);/* PB_MEDIA_KEYS_V39_LEGACY */
+      try{localStorage.setItem('PELEGO_RADIO_LAST_MEDIA_KEY',JSON.stringify({scope:'controller',key,keyCode,type:event.type,at:Date.now()}));}catch(_){}
       const nextKeys=['MediaTrackNext','MediaNextTrack','NextTrack','BrowserForward','MediaFastForward','FastForward'];
       const prevKeys=['MediaTrackPrevious','MediaPreviousTrack','PreviousTrack','BrowserBack','MediaRewind','Rewind'];
       const playKeys=['MediaPlayPause','MediaPlay','PlayPause'];
@@ -517,39 +519,6 @@ html,body{margin:0;width:100%;height:100%;background:#020605;color:#fff;font-fam
   }
   installControllerHardwareKeys();
 
-  let controllerMediaPosition=1800;
-  function syncControllerMediaSession(){
-    if(!('mediaSession' in navigator))return;
-    try{
-      if(typeof MediaMetadata==='function'){
-        navigator.mediaSession.metadata=new MediaMetadata({
-          title:remote.currentStation?.name||'PELEGO RADIO',
-          artist:'PELEGO BOX',
-          album:remote.currentStation?.genre||'Rádio Pelego Box'
-        });
-      }
-    }catch(_){}
-    try{navigator.mediaSession.playbackState=remote.playing?'playing':'paused';}catch(_){}
-    try{navigator.mediaSession.setPositionState({duration:3600,playbackRate:1,position:Math.max(1,Math.min(3599,controllerMediaPosition))});}catch(_){}
-  }
-  function installControllerMediaSession(){
-    if(!('mediaSession' in navigator))return;
-    const goNext=()=>{controllerMediaPosition=Math.min(3599,controllerMediaPosition+30);next();syncControllerMediaSession();};
-    const goPrevious=()=>{controllerMediaPosition=Math.max(1,controllerMediaPosition-30);previous();syncControllerMediaSession();};
-    const handlers={
-      play:()=>toggle(),
-      pause:()=>sendCommand({type:'PAUSE'}),
-      stop:()=>stop(),
-      nexttrack:goNext,
-      previoustrack:goPrevious,
-      seekforward:goNext,
-      seekbackward:goPrevious,
-      seekto:details=>{const target=Number(details?.seekTime);if(!Number.isFinite(target))return;if(target>=controllerMediaPosition)goNext();else goPrevious();}
-    };
-    Object.entries(handlers).forEach(([action,handler])=>{try{navigator.mediaSession.setActionHandler(action,handler);}catch(_){}});
-    syncControllerMediaSession();
-  }
-  installControllerMediaSession();
 
   channel?.addEventListener('message', event => {
     const data = event.data || {};

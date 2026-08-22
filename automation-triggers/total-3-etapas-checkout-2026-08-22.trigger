@@ -1,1 +1,2 @@
-Aplicar soma de valor_medidas + valor_graficos + valor_projeto no botão #total.
+2026-08-22T18:58:00-03:00
+REAPLICAR_TOTAL_V2
